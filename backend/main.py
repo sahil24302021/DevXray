@@ -110,7 +110,7 @@ ALLOWED_ORIGINS = [
 # Add production frontend URL if set
 prod_url = os.environ.get("FRONTEND_URL", "")
 if prod_url:
-    ALLOWED_ORIGINS.append(prod_url)
+    ALLOWED_ORIGINS.append(prod_url.rstrip("/"))
 
 # Add Vercel preview URLs pattern support
 vercel_url = os.environ.get("VERCEL_URL", "")
