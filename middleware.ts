@@ -18,15 +18,8 @@ export default clerkMiddleware(async (auth, req) => {
     if (!key || key.includes("your_") || key === "pk_test_your_key_here") {
       return NextResponse.next();
     }
-    try {
-      await auth.protect();
-    } catch {
-      // If Clerk auth fails (e.g., misconfigured), allow through in dev
-      if (process.env.NODE_ENV === "development") {
-        return NextResponse.next();
-      }
-      throw new Error("Unauthorized");
-    }
+    // Protect the route using Clerk's standard redirect logic
+    await auth.protect();
   }
 });
 
