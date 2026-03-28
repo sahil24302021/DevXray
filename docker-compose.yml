@@ -1,0 +1,61 @@
+# DevXray AI — Docker Compose (Production)
+# Usage:
+#   docker compose up -d        # Start all services
+#   docker compose logs -f      # Watch logs
+#   docker compose down         # Stop everything
+
+services:
+
+  # ── Redis (cache) ──
+  redis:
+    image: redis:7-alpine
+    container_name: devxray-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ── Backend API (FastAPI) ──
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: devxray-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379/0
+      - FRONTEND_URL=http://localhost:3000
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Frontend (Next.js) ──
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: devxray-frontend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

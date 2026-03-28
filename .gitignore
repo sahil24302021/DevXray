@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.next/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+backend/venv/
+backend/.venv/
+.venv/
+venv/
+
+# Environment files (NEVER commit these)
+.env
+.env.local
+backend/.env
+*.env.local
+
+# Build outputs
+.next/
+dist/
+build/
+*.egg-info/
+
+# Cache
+.cache/
+*.pyc
+__pycache__/
+.pytest_cache/
+tsconfig.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+.coverage
+
+# Supabase local
+.supabase/
