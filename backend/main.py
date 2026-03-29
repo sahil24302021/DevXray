@@ -1208,7 +1208,53 @@ async def batch_analyze_resumes_endpoint(
 async def health():
     return {
         "status": "ok",
-        "version": "3.1",
+        "version": "4.0",
         "platform": "Developer Intelligence Platform",
         "today": _get_today_str(),
+        "linkedin_scraper": "10-strategy cascade",
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# KEEP-ALIVE: Self-ping to prevent Render/Railway free tier from sleeping
+# Pings /health every 10 minutes. Zero cost, always warm.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import httpx as _httpx_keepalive
+
+_KEEP_ALIVE_INTERVAL = 600  # 10 minutes
+_keep_alive_task = None
+
+async def _keep_alive_loop():
+    """Background task that pings this server's own /health endpoint every 10 min."""
+    backend_url = os.environ.get("RENDER_EXTERNAL_URL", os.environ.get("BACKEND_URL", ""))
+    if not backend_url:
+        log.info("[KeepAlive] No RENDER_EXTERNAL_URL or BACKEND_URL set — keep-alive disabled")
+        return
+
+    health_url = f"{backend_url.rstrip('/')}/health"
+    log.info(f"[KeepAlive] Started — pinging {health_url} every {_KEEP_ALIVE_INTERVAL}s")
+
+    while True:
+        try:
+            await asyncio.sleep(_KEEP_ALIVE_INTERVAL)
+            async with _httpx_keepalive.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(health_url)
+                log.debug(f"[KeepAlive] Ping OK (status {resp.status_code})")
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            log.warning(f"[KeepAlive] Ping failed: {e}")
+
+@app.on_event("startup")
+async def _start_keep_alive():
+    global _keep_alive_task
+    _keep_alive_task = asyncio.create_task(_keep_alive_loop())
+    log.info("[KeepAlive] Background keep-alive task scheduled")
+
+@app.on_event("shutdown")
+async def _stop_keep_alive():
+    global _keep_alive_task
+    if _keep_alive_task:
+        _keep_alive_task.cancel()
+        log.info("[KeepAlive] Background keep-alive task stopped")

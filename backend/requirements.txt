@@ -31,6 +31,7 @@ tree-sitter-typescript==0.23.2
 
 # ── Scraping / HTML Parsing ──
 beautifulsoup4==4.14.3
+lxml==5.3.0
 
 # ── Google API (for extended fetchers) ──
 google-api-python-client==2.193.0

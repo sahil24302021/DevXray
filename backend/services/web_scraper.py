@@ -1,21 +1,58 @@
 """
 Web Scraper — scrapes portfolio websites and LinkedIn public profiles.
 Extracts structured data for cross-referencing with resume claims.
-Enhanced with deep portfolio verification and tech detection.
+
+LinkedIn Scraping: 6-strategy engine that works WITHOUT any paid API keys.
+Strategies (tried in order):
+  1. Google Search snippets (most reliable — Google always works)
+  2. Bing Search snippets (backup search engine)
+  3. DuckDuckGo HTML search (no rate limits)
+  4. Google Cache of public profile
+  5. Direct public profile scrape with anti-detection headers
+  6. Wayback Machine (Internet Archive) fallback
+
+Portfolio Scraping: Deep tech detection, template identification, project extraction.
 """
 import os
 import httpx
 from bs4 import BeautifulSoup
 import re
 import json
-from typing import Dict, Any, List
+import random
+import asyncio
+import hashlib
+from typing import Dict, Any, List, Optional
+from urllib.parse import quote_plus, urlencode
 
-# Shared HTTP client config
-_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
+# ─── Cache for scraped data ──────────────────────────────────────────────────
+_SCRAPE_CACHE: Dict[str, Dict[str, Any]] = {}
+_CACHE_TTL = 3600  # 1 hour
+
+# ─── User Agent pool ─────────────────────────────────────────────────────────
+_USER_AGENTS = [
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:123.0) Gecko/20100101 Firefox/123.0",
+]
+
+def _random_headers() -> Dict[str, str]:
+    """Generate realistic browser headers with random User-Agent."""
+    return {
+        "User-Agent": random.choice(_USER_AGENTS),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Cache-Control": "no-cache",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Upgrade-Insecure-Requests": "1",
+    }
 
 KNOWN_TEMPLATES = [
     "html5up", "creative-tim", "bootstrapmade",
@@ -24,27 +61,23 @@ KNOWN_TEMPLATES = [
 ]
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# PORTFOLIO SCRAPER
+# ═══════════════════════════════════════════════════════════════════════════════
+
 async def scrape_portfolio(url: str) -> str:
-    """
-    Fetches and extracts readable text from a portfolio website.
-    Aggressive timeout (6s) to keep the pipeline fast.
-    """
+    """Fetches and extracts readable text from a portfolio website."""
     if not url or not url.startswith("http"):
         return ""
-
     try:
         async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
-            response = await client.get(url, headers=_HEADERS)
+            response = await client.get(url, headers=_random_headers())
             response.raise_for_status()
-
             soup = BeautifulSoup(response.text, "html.parser")
             for tag in soup(["script", "style", "noscript", "meta", "link", "svg", "path"]):
                 tag.extract()
-
             text = soup.get_text(separator=" ", strip=True)
-            text = re.sub(r'\s+', ' ', text)
-            return text[:6000]
-
+            return re.sub(r'\s+', ' ', text)[:6000]
     except Exception as e:
         print(f"[Scraper] Portfolio scrape failed for {url}: {e}")
         return ""
@@ -63,30 +96,19 @@ async def scrape_portfolio_deep(url: str) -> Dict[str, Any]:
         "projects_found": [],
         "social_links": [],
     }
-
     if not url or not url.startswith("http"):
         return result
-
     try:
         async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-            resp = await client.get(url, headers=_HEADERS)
+            resp = await client.get(url, headers=_random_headers())
             result["is_live"] = resp.status_code == 200
-
             if not result["is_live"]:
                 return result
-
             result["last_modified"] = resp.headers.get("Last-Modified", "")
-
-            # Tech detection from headers
             powered_by = resp.headers.get("X-Powered-By", "")
-            if "Next.js" in powered_by:
-                result["tech_stack"].append("Next.js")
-            if "Express" in powered_by:
-                result["tech_stack"].append("Express/Node.js")
-
+            if "Next.js" in powered_by: result["tech_stack"].append("Next.js")
+            if "Express" in powered_by: result["tech_stack"].append("Express/Node.js")
             soup = BeautifulSoup(resp.text, "html.parser")
-
-            # Generator meta tag
             generator = soup.find("meta", {"name": "generator"})
             if generator:
                 gen_content = generator.get("content", "")
@@ -95,45 +117,25 @@ async def scrape_portfolio_deep(url: str) -> Dict[str, Any]:
                     if tmpl.lower() in gen_content.lower():
                         result["is_template"] = True
                         result["template_name"] = tmpl
-
-            # Script-based tech detection
             scripts = [s.get("src", "") for s in soup.find_all("script", src=True)]
-            if any("react" in s.lower() for s in scripts):
-                result["tech_stack"].append("React")
-            if any("vue" in s.lower() for s in scripts):
-                result["tech_stack"].append("Vue")
-            if any("angular" in s.lower() for s in scripts):
-                result["tech_stack"].append("Angular")
-            if any("next" in s.lower() for s in scripts):
-                result["tech_stack"].append("Next.js")
-
-            # Template detection from common class names
+            if any("react" in s.lower() for s in scripts): result["tech_stack"].append("React")
+            if any("vue" in s.lower() for s in scripts): result["tech_stack"].append("Vue")
+            if any("angular" in s.lower() for s in scripts): result["tech_stack"].append("Angular")
+            if any("next" in s.lower() for s in scripts): result["tech_stack"].append("Next.js")
             html_text = resp.text.lower()
             for tmpl in KNOWN_TEMPLATES:
                 if tmpl.replace("-", "") in html_text or tmpl in html_text:
                     result["is_template"] = True
                     result["template_name"] = tmpl
-
-            # Extract project names mentioned
             headings = [h.get_text(strip=True) for h in soup.find_all(["h1", "h2", "h3"])]
             result["projects_found"] = headings[:10]
-
-            # Social links
             links = [a.get("href", "") for a in soup.find_all("a", href=True)]
-            social = [
-                l for l in links
-                if any(s in l for s in ["github.com", "linkedin.com", "twitter.com", "leetcode"])
-            ]
+            social = [l for l in links if any(s in l for s in ["github.com", "linkedin.com", "twitter.com", "leetcode"])]
             result["social_links"] = social[:10]
-
-            # Raw text
-            for tag in soup(["script", "style"]):
-                tag.extract()
+            for tag in soup(["script", "style"]): tag.extract()
             result["raw_text"] = soup.get_text(separator=" ", strip=True)[:6000]
-
     except Exception as e:
         result["error"] = str(e)[:120]
-
     return result
 
 
@@ -141,17 +143,11 @@ def score_portfolio(portfolio_data: Dict[str, Any]) -> Dict[str, Any]:
     """Score portfolio website data."""
     if not portfolio_data.get("is_live"):
         return {"portfolio_score": 0, "is_live": False}
-
-    score = 5  # Base for having a live portfolio
-    if portfolio_data.get("tech_stack"):
-        score += min(5, len(portfolio_data["tech_stack"]) * 2)
-    if portfolio_data.get("is_template"):
-        score -= 3  # Penalty for template usage
-    if portfolio_data.get("projects_found"):
-        score += min(3, len(portfolio_data["projects_found"]))
-    if portfolio_data.get("social_links"):
-        score += 2
-
+    score = 5
+    if portfolio_data.get("tech_stack"): score += min(5, len(portfolio_data["tech_stack"]) * 2)
+    if portfolio_data.get("is_template"): score -= 3
+    if portfolio_data.get("projects_found"): score += min(3, len(portfolio_data["projects_found"]))
+    if portfolio_data.get("social_links"): score += 2
     return {
         "portfolio_score": max(0, min(score, 15)),
         "is_live": True,
@@ -160,328 +156,23 @@ def score_portfolio(portfolio_data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def _try_rapidapi_primary(clean_url: str, rapidapi_key: str) -> Dict[str, Any] | None:
-    """Strategy 1: RapidAPI 'Fresh LinkedIn Profile Data' (paid tier)."""
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(
-                "https://fresh-linkedin-profile-data.p.rapidapi.com/get-linkedin-profile",
-                params={
-                    "linkedin_url": clean_url,
-                    "include_skills": "true",
-                    "include_certifications": "true",
-                    "include_education": "true",
-                    "include_experience": "true",
-                },
-                headers={
-                    "X-RapidAPI-Key": rapidapi_key,
-                    "X-RapidAPI-Host": "fresh-linkedin-profile-data.p.rapidapi.com",
-                },
-            )
-            if resp.status_code == 200:
-                return resp.json()
-    except Exception as e:
-        print(f"[LinkedIn] RapidAPI primary failed: {e}")
-    return None
+# ═══════════════════════════════════════════════════════════════════════════════
+# LINKEDIN SCRAPER — 10-Strategy Cascade Engine
+# Upgraded: Voyager API, Authenticated Render, Google CSE, AI-Enhanced,
+#           plus all original search engine strategies with 40+ rotating UAs.
+# Implementation lives in services/linkedin_scraper.py
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from services.linkedin_scraper import (
+    scrape_linkedin,
+    _extract_linkedin_username,
+    _normalize_linkedin_data,
+)
 
 
-async def _try_rapidapi_alt(clean_url: str, rapidapi_key: str) -> Dict[str, Any] | None:
-    """Strategy 2: Alternative RapidAPI LinkedIn endpoints (try multiple)."""
-    alt_apis = [
-        {
-            "url": "https://linkedin-data-api.p.rapidapi.com/get-profile-data-by-url",
-            "host": "linkedin-data-api.p.rapidapi.com",
-            "params": {"url": clean_url},
-        },
-        {
-            "url": "https://linkedin-api8.p.rapidapi.com/get-profile-data-by-url",
-            "host": "linkedin-api8.p.rapidapi.com",
-            "params": {"url": clean_url},
-        },
-        {
-            "url": "https://linkedin-bulk-data-scraper.p.rapidapi.com/profile",
-            "host": "linkedin-bulk-data-scraper.p.rapidapi.com",
-            "params": {"url": clean_url},
-        },
-    ]
-    for api in alt_apis:
-        try:
-            async with httpx.AsyncClient(timeout=12.0) as client:
-                resp = await client.get(
-                    api["url"],
-                    params=api["params"],
-                    headers={
-                        "X-RapidAPI-Key": rapidapi_key,
-                        "X-RapidAPI-Host": api["host"],
-                    },
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    # Normalize: some APIs nest data inside "data" key
-                    if "data" in data and isinstance(data["data"], dict):
-                        data = data["data"]
-                    if data.get("full_name") or data.get("firstName") or data.get("fullName"):
-                        return data
-        except Exception as e:
-            print(f"[LinkedIn] Alt API {api['host']} failed: {e}")
-            continue
-    return None
-
-
-async def _try_google_cache(clean_url: str) -> Dict[str, Any] | None:
-    """Strategy 3: Google's cached version of LinkedIn public profile."""
-    try:
-        # Extract the LinkedIn slug for Google search
-        search_query = clean_url.replace("https://www.", "").replace("http://www.", "")
-        google_url = f"https://webcache.googleusercontent.com/search?q=cache:{search_query}"
-
-        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-            resp = await client.get(google_url, headers={
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml",
-            })
-            if resp.status_code == 200 and len(resp.text) > 500:
-                soup = BeautifulSoup(resp.text, "html.parser")
-                # Extract name from title
-                title = soup.find("title")
-                name = ""
-                headline = ""
-                if title:
-                    t = title.get_text()
-                    if " - " in t:
-                        parts = t.split(" - ")
-                        name = parts[0].strip()
-                        if len(parts) > 1:
-                            headline = parts[1].strip()
-
-                for tag in soup(["script", "style", "noscript"]):
-                    tag.extract()
-                text = soup.get_text(separator=" ", strip=True)
-                text = re.sub(r'\s+', ' ', text)[:4000]
-
-                if name or len(text) > 200:
-                    return {
-                        "full_name": name,
-                        "headline": headline,
-                        "summary": "",
-                        "raw_text": text,
-                        "_source": "google_cache",
-                    }
-    except Exception as e:
-        print(f"[LinkedIn] Google cache failed: {e}")
-    return None
-
-
-async def _try_direct_scrape(clean_url: str) -> Dict[str, Any] | None:
-    """Strategy 4: Direct scrape with enhanced anti-detection headers."""
-    enhanced_headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Sec-Fetch-User": "?1",
-        "Upgrade-Insecure-Requests": "1",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
-            response = await client.get(clean_url, headers=enhanced_headers)
-            if response.status_code in (999, 403, 429):
-                return None  # Blocked
-            if response.status_code != 200:
-                return None
-
-            soup = BeautifulSoup(response.text, "html.parser")
-            result = {}
-
-            og_title = soup.find("meta", property="og:title")
-            if og_title and og_title.get("content"):
-                result["full_name"] = og_title["content"]
-
-            og_desc = soup.find("meta", property="og:description")
-            if og_desc and og_desc.get("content"):
-                result["headline"] = og_desc["content"]
-
-            desc_meta = soup.find("meta", {"name": "description"})
-            if desc_meta and desc_meta.get("content"):
-                result["summary"] = desc_meta["content"]
-
-            for tag in soup(["script", "style", "noscript", "meta", "link", "svg"]):
-                tag.extract()
-            text = soup.get_text(separator=" ", strip=True)
-            result["raw_text"] = re.sub(r'\s+', ' ', text)[:4000]
-            result["_source"] = "direct_scrape"
-
-            if result.get("full_name") or result.get("headline") or len(result.get("raw_text", "")) > 200:
-                return result
-    except Exception as e:
-        print(f"[LinkedIn] Direct scrape failed: {e}")
-    return None
-
-
-def _normalize_linkedin_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalize data from various API formats into a consistent structure."""
-    # Handle different field names from different APIs
-    name = (data.get("full_name") or data.get("fullName") or
-            f"{data.get('firstName', '')} {data.get('lastName', '')}").strip()
-
-    experiences = data.get("experiences") or data.get("experience") or data.get("position") or []
-    if not isinstance(experiences, list):
-        experiences = []
-
-    exp_text_parts = []
-    for e in experiences:
-        title = e.get("title") or e.get("position") or ""
-        company = e.get("company") or e.get("companyName") or e.get("company_name") or ""
-        start = e.get("starts_at") or e.get("start") or {}
-        end = e.get("ends_at") or e.get("end") or {}
-        start_yr = start.get("year", "?") if isinstance(start, dict) else "?"
-        end_yr = end.get("year", "present") if isinstance(end, dict) and end else "present"
-        exp_text_parts.append(f"{title} at {company} ({start_yr}-{end_yr})")
-
-    skills_raw = data.get("skills") or []
-    skills = []
-    for s in skills_raw:
-        if isinstance(s, dict):
-            skills.append(s.get("name", ""))
-        elif isinstance(s, str):
-            skills.append(s)
-
-    education = data.get("education") or data.get("educations") or []
-    edu_parts = []
-    for e in education:
-        if isinstance(e, dict):
-            degree = e.get("degree_name") or e.get("degree") or e.get("degreeName") or ""
-            school = e.get("school") or e.get("schoolName") or e.get("school_name") or ""
-            edu_parts.append(f"{degree} at {school}")
-
-    headline = data.get("headline") or data.get("title") or ""
-    about = data.get("summary") or data.get("about") or ""
-
-    raw_text = (
-        f"{headline}\n{about}\n\n"
-        f"Experience:\n" + "\n".join(exp_text_parts) +
-        f"\n\nSkills: {', '.join(skills[:20])}" +
-        f"\n\nEducation:\n" + "\n".join(edu_parts)
-    )[:4000]
-
-    # Use raw_text from scrape if API didn't provide structured data
-    if len(raw_text.strip()) < 50 and data.get("raw_text"):
-        raw_text = data["raw_text"]
-
-    return {
-        "name": name,
-        "headline": headline,
-        "about": about,
-        "experiences": experiences,
-        "skills": skills,
-        "education": education,
-        "connections": data.get("connections") or data.get("connectionsCount") or 0,
-        "raw_text": raw_text,
-    }
-
-
-async def scrape_linkedin(url: str) -> Dict[str, Any]:
-    """
-    Multi-strategy LinkedIn profile extraction.
-
-    Tries up to 4 strategies in order:
-    1. RapidAPI 'Fresh LinkedIn Profile Data' (paid — most reliable)
-    2. Alternative RapidAPI LinkedIn endpoints (free tiers available)
-    3. Google's cached version of the public profile page
-    4. Direct scrape with enhanced anti-detection headers
-
-    Falls back to manual review recommendation if all fail.
-    """
-    result = {
-        "url": url,
-        "accessible": False,
-        "name": "",
-        "headline": "",
-        "about": "",
-        "raw_text": "",
-        "note": "",
-        "recommendation": "",
-        "blocked": False,
-    }
-
-    if not url or "linkedin.com" not in url:
-        result["note"] = "No valid LinkedIn URL provided."
-        result["recommendation"] = "Ask the candidate to provide their LinkedIn profile URL."
-        return result
-
-    clean_url = url.rstrip("/")
-    if not clean_url.startswith("http"):
-        clean_url = "https://" + clean_url
-    result["url"] = clean_url
-
-    rapidapi_key = os.environ.get("RAPIDAPI_KEY", "")
-    data = None
-    source = "none"
-
-    # Strategy 1: RapidAPI Primary
-    if rapidapi_key:
-        print("[LinkedIn] Trying Strategy 1: RapidAPI Primary...")
-        data = await _try_rapidapi_primary(clean_url, rapidapi_key)
-        if data:
-            source = "rapidapi_primary"
-
-    # Strategy 2: RapidAPI Alternatives
-    if not data and rapidapi_key:
-        print("[LinkedIn] Trying Strategy 2: RapidAPI Alternatives...")
-        data = await _try_rapidapi_alt(clean_url, rapidapi_key)
-        if data:
-            source = "rapidapi_alt"
-
-    # Strategy 3: Google Cache
-    if not data:
-        print("[LinkedIn] Trying Strategy 3: Google Cache...")
-        data = await _try_google_cache(clean_url)
-        if data:
-            source = "google_cache"
-
-    # Strategy 4: Direct Scrape
-    if not data:
-        print("[LinkedIn] Trying Strategy 4: Direct Scrape...")
-        data = await _try_direct_scrape(clean_url)
-        if data:
-            source = "direct_scrape"
-
-    # ─── Process result ───
-    if data:
-        normalized = _normalize_linkedin_data(data)
-        result["accessible"] = True
-        result["name"] = normalized["name"]
-        result["headline"] = normalized["headline"]
-        result["about"] = normalized["about"]
-        result["raw_text"] = normalized["raw_text"]
-        result["experiences"] = normalized["experiences"]
-        result["skills"] = normalized["skills"]
-        result["education"] = normalized["education"]
-        result["connections"] = normalized["connections"]
-        result["source"] = source
-        result["note"] = f"LinkedIn data extracted via {source.replace('_', ' ')}."
-        result["recommendation"] = "Profile data available for cross-reference with resume."
-        print(f"[LinkedIn] SUCCESS via {source}: {normalized['name']}")
-    else:
-        result["blocked"] = True
-        result["note"] = (
-            "LinkedIn automated access unavailable (all 4 strategies failed). "
-            "Use the 'Paste LinkedIn' feature in the frontend to manually provide profile text."
-        )
-        result["recommendation"] = (
-            "Visit the LinkedIn URL directly and use the 'Paste LinkedIn text' feature. "
-            "Check: work history dates, endorsements, connections count, and activity level."
-        )
-        result["source"] = "none"
-        print(f"[LinkedIn] All strategies failed for {clean_url}")
-
-    return result
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# CROSS-REFERENCE ENGINE
+# ═══════════════════════════════════════════════════════════════════════════════
 
 def cross_reference_linkedin(linkedin_data: Dict, resume_data: Dict, github_data: Dict = None) -> Dict[str, Any]:
     """Cross-reference LinkedIn data with resume and GitHub for consistency checks."""
@@ -494,7 +185,6 @@ def cross_reference_linkedin(linkedin_data: Dict, resume_data: Dict, github_data
     li_name = (linkedin_data.get("name") or "").lower().strip()
     resume_name = (resume_data.get("name") or "").lower().strip()
     if li_name and resume_name and li_name != resume_name:
-        # Fuzzy check — at least first/last name should overlap
         li_parts = set(li_name.split())
         resume_parts = set(resume_name.split())
         overlap = li_parts & resume_parts
@@ -526,10 +216,7 @@ def cross_reference_linkedin(linkedin_data: Dict, resume_data: Dict, github_data
     resume_exp = resume_data.get("experience", [])
     resume_titles = [e.get("title", "").lower() for e in resume_exp if e.get("title")]
     if li_titles and resume_titles:
-        any_overlap = any(
-            lt in rt or rt in lt
-            for lt in li_titles for rt in resume_titles
-        )
+        any_overlap = any(lt in rt or rt in lt for lt in li_titles for rt in resume_titles)
         if not any_overlap:
             flags.append({"type": "JOB_TITLE_MISMATCH", "severity": "MEDIUM",
                           "detail": "No overlapping job titles between LinkedIn and resume"})
@@ -568,27 +255,23 @@ def cross_reference_linkedin(linkedin_data: Dict, resume_data: Dict, github_data
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# GENERIC URL SCRAPER
+# ═══════════════════════════════════════════════════════════════════════════════
+
 async def scrape_any_url(url: str) -> str:
-    """
-    Generic URL scraper for any link found in the resume.
-    Quick 5s timeout to keep things fast.
-    """
+    """Generic URL scraper for any link found in the resume."""
     if not url or not url.startswith("http"):
         return ""
-
     try:
         async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
-            response = await client.get(url, headers=_HEADERS)
+            response = await client.get(url, headers=_random_headers())
             if response.status_code != 200:
                 return ""
-
             soup = BeautifulSoup(response.text, "html.parser")
             for tag in soup(["script", "style", "noscript", "meta", "link", "svg"]):
                 tag.extract()
-
             text = soup.get_text(separator=" ", strip=True)
-            text = re.sub(r'\s+', ' ', text)
-            return text[:3000]
-
+            return re.sub(r'\s+', ' ', text)[:3000]
     except Exception:
         return ""
