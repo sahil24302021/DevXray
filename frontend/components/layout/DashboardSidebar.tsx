@@ -1,18 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
+import { getCurrentUser, signOut, onAuthStateChange, type AuthUser } from "@/lib/auth";
 
-function useSafeUser(): { user: any; isLoaded: boolean } {
-  const match = typeof document !== 'undefined' ? document.cookie.match(/(^| )user_name=([^;]+)/) : null;
-  const username = match ? decodeURIComponent(match[2]) : null;
-  
-  if (username) {
-    return { user: { fullName: username }, isLoaded: true };
-  }
-  return { user: null, isLoaded: true };
-}
 
 // ── Icons ──────────────────────────────────
 const Icon = {
@@ -105,10 +97,22 @@ export default function DashboardSidebar({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Clerk user info (graceful fallback)
-  const { user, isLoaded } = useSafeUser();
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    getCurrentUser().then(setUser);
+    const unsub = onAuthStateChange(setUser);
+    return unsub;
+  }, []);
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/");
+  };
+
   const displayName = user?.fullName || user?.firstName || defaultName;
-  const displayEmail = user?.primaryEmailAddress?.emailAddress || defaultEmail;
+  const displayEmail = user?.email || defaultEmail;
 
   // Real scan counter from localStorage
   const [scansUsed, setScansUsed] = useState(propScansUsed ?? 0);
@@ -149,6 +153,17 @@ export default function DashboardSidebar({
 
       {/* Nav items */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+        {!collapsed && (
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-[#555] hover:text-white transition-colors text-xs px-3 mb-4 mt-2 font-[family-name:var(--font-space)] uppercase tracking-wider relative z-50"
+          >
+            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            Back to home
+          </Link>
+        )}
         {!collapsed && (
           <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#333] px-3 pt-3 pb-2">
             Main Menu
@@ -220,23 +235,41 @@ export default function DashboardSidebar({
       )}
 
       {/* User footer */}
-      <div className={`px-4 py-4 border-t border-white/[0.05] flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
-        <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center font-bold text-[11px] text-[#050505]"
-          style={{ background: PLAN_COLORS[plan] || "#cdff00" }}>
-          {displayName.charAt(0).toUpperCase()}
-        </div>
-        {!collapsed && (
-          <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-semibold text-white truncate">{displayName}</p>
-            <p className="text-[10px] text-[#555] truncate">{displayEmail || "devxray.ai"}</p>
+      <div className={`px-4 py-4 border-t border-white/[0.05] flex flex-col gap-3 ${collapsed ? "items-center" : ""}`}>
+        {!collapsed ? (
+          <div className="flex items-center gap-2 px-2 w-full">
+            <div className="w-8 h-8 rounded-full bg-[#cdff00] flex items-center justify-center text-[#050505] font-black text-sm shrink-0">
+              {user?.firstName?.charAt(0)?.toUpperCase() || "?"}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-white truncate">
+                {user?.firstName || "Guest"}
+              </p>
+              <p className="text-[11px] text-[#555] truncate">
+                {user?.email || "devxray.ai"}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="w-8 h-8 rounded-full bg-[#cdff00] flex items-center justify-center text-[#050505] font-black text-sm shrink-0">
+            {user?.firstName?.charAt(0)?.toUpperCase() || "?"}
           </div>
         )}
-        {!collapsed && (
-          <form action="/api/auth/logout" method="POST">
-             <button type="submit" className="text-[#444] hover:text-[#fb7185] transition-colors">
-               <Icon.Logout />
-             </button>
-          </form>
+        
+        {!collapsed ? (
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center justify-center gap-2 px-2 py-2 rounded-lg text-[#555] hover:text-white hover:bg-white/[0.04] transition-colors text-xs font-[family-name:var(--font-space)] uppercase tracking-wider"
+          >
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            Sign Out
+          </button>
+        ) : (
+          <button onClick={handleSignOut} className="text-[#555] hover:text-white transition-colors p-2">
+            <Icon.Logout />
+          </button>
         )}
       </div>
     </div>

@@ -1,29 +1,27 @@
-/**
- * lib/db.ts — Supabase client with graceful localStorage fallback.
- *
- * Usage:
- *   import { supabase, isSupabaseAvailable } from "@/lib/db";
- *
- * If Supabase env vars are missing (local dev without a project) the module
- * sets supabase = null and isSupabaseAvailable = false.  All helpers in
- * candidates-store.ts check this flag and fall back to localStorage.
- */
+// lib/db.ts
+// Supabase client for BOTH auth and database operations.
+// Uses @supabase/ssr for proper Next.js Server/Client separation.
 
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
 export const isSupabaseAvailable = !!(supabaseUrl && supabaseAnonKey);
 
-// Export a properly-typed client or null when env vars are absent.
-export const supabase: SupabaseClient | null = isSupabaseAvailable
-  ? createClient(supabaseUrl, supabaseAnonKey)
+// Browser client (for use in Client Components and auth)
+export const supabase = isSupabaseAvailable
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    })
   : null;
 
-// ─── Database schema (mirrors Supabase table) ───────────────────────────────
+// ─── Database schema ─────────────────────────────────────────
 export interface CandidateRecord {
-  id: string;                  // UUID (generated client-side)
+  id: string;
   username: string;
   name?: string;
   avatar_url?: string;
@@ -34,7 +32,8 @@ export interface CandidateRecord {
   verified_skills?: string[];
   top_languages?: string[];
   confidence_score?: number;
-  scanned_at: string;          // ISO timestamp
-  report_payload?: object;     // Full JSON from backend (optional)
+  scanned_at: string;
+  report_payload?: object;
+  user_id?: string;  // Links to authenticated user (optional for guest scans)
   [key: string]: unknown;
 }

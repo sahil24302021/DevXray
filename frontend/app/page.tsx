@@ -15,6 +15,8 @@ import Dropzone from "@/components/Dropzone";
 import { analyzeResume, JobRequirements } from "@/lib/api";
 import LoadingState from "@/components/LoadingState";
 import NavAuthButtons from "@/components/NavAuthButtons";
+import { hasGuestScansRemaining, incrementGuestScan, getGuestScanCount } from "@/lib/scan-gate";
+import { getCurrentUser } from "@/lib/auth";
 
 /* ═══════════════════════════════════════════════════════════
    GRAIN OVERLAY — Film grain for tactile depth
@@ -350,6 +352,12 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
   const [mode, setMode] = useState<"github" | "resume">("github");
+  const [showSignupGate, setShowSignupGate] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    getCurrentUser().then(u => setIsLoggedIn(!!u));
+  }, []);
   const [showRequirements, setShowRequirements] = useState(false);
   const [jobReqs, setJobReqs] = useState<JobRequirements>({});
   const [jobId, setJobId] = useState("");
@@ -360,10 +368,21 @@ export default function Home() {
     return scrollYProgress.on("change", (v) => setNavSolid(v > 0.02));
   }, [scrollYProgress]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const username = extractUsername(input);
     if (!username || username === "unknown") return;
+
+    const user = await getCurrentUser();
+    if (!user && !hasGuestScansRemaining()) {
+      setShowSignupGate(true);
+      return;
+    }
+
+    if (!user) {
+      incrementGuestScan();
+    }
+
     setLoading(true);
     router.push(`/report/${username}`);
   };
@@ -373,6 +392,12 @@ export default function Home() {
   };
 
   const handleFileDrop = async (file: File) => {
+    const user = await getCurrentUser();
+    if (!user && !hasGuestScansRemaining()) {
+      setShowSignupGate(true);
+      return;
+    }
+
     setLoading(true);
     const newJobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     setJobId(newJobId);
@@ -385,6 +410,11 @@ export default function Home() {
         ...(hasReqs ? { jobTitle: jobReqs.job_title, requiredSkills: jobReqs.required_skills, jobDescription: jobReqs.job_description } : {}),
       });
       sessionStorage.setItem("resume_report_data", JSON.stringify(result));
+      
+      if (!user) {
+        incrementGuestScan();
+      }
+
       router.push("/report/resume");
     } catch (e: any) {
       alert(e.message || "Failed to analyze resume");
@@ -1206,6 +1236,46 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* Signup gate modal */}
+      {showSignupGate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#0a0a0a] border border-[#222] rounded-2xl p-8 max-w-sm w-full mx-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-[#cdff00]/10 border border-[#cdff00]/20 flex items-center justify-center mx-auto mb-5">
+              <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="#cdff00" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2 font-[family-name:var(--font-syne)]">
+              You&apos;ve used your free scan
+            </h3>
+            <p className="text-[#666] text-sm mb-6">
+              Create a free account to analyze unlimited GitHub profiles and resumes.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Link
+                href="/signup"
+                className="w-full bg-[#cdff00] text-[#050505] font-bold rounded-xl px-4 py-3 hover:bg-[#b0e600] transition-colors font-[family-name:var(--font-space)]"
+              >
+                Create Free Account
+              </Link>
+              <Link
+                href="/signin"
+                className="w-full bg-white/[0.04] border border-[#333] text-white rounded-xl px-4 py-3 hover:bg-white/[0.08] transition-colors text-sm"
+              >
+                I already have an account
+              </Link>
+              <button
+                onClick={() => setShowSignupGate(false)}
+                className="text-[#555] text-sm hover:text-white transition-colors"
+              >
+                Maybe later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

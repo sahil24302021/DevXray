@@ -1,32 +1,20 @@
+// app/actions/auth.ts
+// These server actions are kept for compatibility but the real auth
+// is handled by Supabase client-side in the signin/signup pages.
+
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-export async function loginUser(formData: FormData) {
-  const email = formData.get("email") as string;
-  const name = email ? email.split("@")[0] : "Developer";
-  
-  const cookieStore = await cookies();
-  cookieStore.set("user_session", "true", { path: "/" });
-  cookieStore.set("user_name", name, { path: "/" });
-
-  redirect("/dashboard");
+// These are no longer used — kept to avoid import errors
+export async function loginUser(_formData: FormData) {
+  redirect("/signin");
 }
 
-export async function signupUser(formData: FormData) {
-  const name = formData.get("name") as string || "Developer";
-  
-  const cookieStore = await cookies();
-  cookieStore.set("user_session", "true", { path: "/" });
-  cookieStore.set("user_name", name, { path: "/" });
-
-  redirect("/dashboard");
+export async function signupUser(_formData: FormData) {
+  redirect("/signup");
 }
 
 export async function logoutUser() {
-  const cookieStore = await cookies();
-  cookieStore.delete("user_session");
-  cookieStore.delete("user_name");
   redirect("/");
 }

@@ -2,52 +2,70 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getCurrentUser, signOut, onAuthStateChange, type AuthUser } from "@/lib/auth";
 
 export default function NavAuthButtons() {
-  const [userName, setUserName] = useState<string | null>(null);
-  const [hasSession, setHasSession] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    const matchName = document.cookie.match(/(^| )user_name=([^;]+)/);
-    const matchSession = document.cookie.match(/(^| )user_session=([^;]+)/);
-    
-    if (matchSession && matchSession[2]) {
-      setHasSession(true);
-      setUserName(matchName && matchName[2] ? decodeURIComponent(matchName[2]) : "Developer");
-    }
+    // Check initial auth state
+    getCurrentUser().then((u) => {
+      setUser(u);
+      setLoading(false);
+    });
+
+    // Subscribe to auth changes (handles login/logout from other tabs)
+    const unsubscribe = onAuthStateChange((u) => {
+      setUser(u);
+      setLoading(false);
+    });
+
+    return unsubscribe;
   }, []);
 
-  if (hasSession) {
+  const handleSignOut = async () => {
+    await signOut();
+    setUser(null);
+    router.push("/");
+    router.refresh();
+  };
+
+  if (loading) {
+    return <div className="w-32 h-8 bg-white/[0.04] rounded-full animate-pulse" />;
+  }
+
+  if (user) {
     return (
-      <div className="flex items-center gap-4">
-        <span className="text-sm font-[family-name:var(--font-space)] text-[#888]">
-          Welcome, {userName}
+      <div className="flex items-center gap-3">
+        <span className="text-sm font-[family-name:var(--font-space)] text-[#888] hidden sm:block">
+          Hi, <span className="text-white">{user.firstName}</span>
         </span>
-        <Link 
+        <Link
           href="/dashboard"
-          className="text-[12px] px-4 py-2 rounded-full border border-[rgba(255,255,255,0.06)] bg-white/[0.02] text-white hover:text-[#cdff00] hover:border-[rgba(205,255,0,0.3)] transition-all duration-300 font-[family-name:var(--font-space)] font-medium tracking-widest uppercase"
+          className="text-[12px] px-4 py-2 rounded-full bg-[#cdff00] text-[#050505] hover:bg-[#b0e600] transition-all duration-300 font-[family-name:var(--font-space)] font-bold tracking-widest uppercase"
         >
-          Dashboard
+          Dashboard →
         </Link>
-        <form action="/api/auth/logout" method="POST">
-          <button 
-            type="submit"
-            className="text-[12px] px-4 py-2 rounded-full border border-transparent hover:bg-white/[0.05] text-[#666] hover:text-white transition-all duration-300 font-[family-name:var(--font-space)] font-medium tracking-widest uppercase"
-          >
-            Sign Out
-          </button>
-        </form>
+        <button
+          onClick={handleSignOut}
+          className="text-[12px] px-3 py-2 rounded-full border border-transparent hover:bg-white/[0.05] text-[#555] hover:text-white transition-all duration-300 font-[family-name:var(--font-space)] tracking-widest uppercase"
+        >
+          Sign Out
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-4">
+    <div className="flex items-center gap-3">
       <Link
         href="/signin"
         className="text-[12px] px-4 py-2 rounded-full border border-transparent hover:bg-white/[0.05] text-[#888] hover:text-white transition-colors duration-300 font-[family-name:var(--font-space)] font-medium tracking-widest uppercase"
       >
-        Sign in
+        Sign In
       </Link>
       <Link
         href="/signup"
