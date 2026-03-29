@@ -14,6 +14,7 @@ import { extractUsername } from "@/lib/utils";
 import Dropzone from "@/components/Dropzone";
 import { analyzeResume, JobRequirements } from "@/lib/api";
 import LoadingState from "@/components/LoadingState";
+import NavAuthButtons from "@/components/NavAuthButtons";
 
 /* ═══════════════════════════════════════════════════════════
    GRAIN OVERLAY — Film grain for tactile depth
@@ -525,23 +526,7 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="flex items-center gap-4">
-            <Link
-              href="/signin"
-              className="hidden sm:inline text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-white transition-colors duration-300 no-underline tracking-wide"
-            >
-              Sign in
-            </Link>
-            <a
-              href="/signin"
-              className="btn-primary !py-2.5 !px-5 !text-[11px]"
-            >
-              Get Started
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </a>
-          </div>
+          <NavAuthButtons />
         </motion.div>
       </nav>
 

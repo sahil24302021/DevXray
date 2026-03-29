@@ -6,6 +6,20 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { analyzeGitHub, extractScoring, scoreToTier, scoreToRisk, scoreToRecommendation, healthCheck, AnalysisResult } from "@/lib/api";
 import { saveCandidate } from "@/lib/candidates-store";
 
+// ── Dynamic welcome using real Clerk user ──
+let _useUser: (() => { user: any }) | null = null;
+try { const c = require("@clerk/nextjs"); _useUser = c.useUser; } catch {}
+
+function DashboardWelcome() {
+  let firstName = "there";
+  try { if (_useUser) { const { user } = _useUser(); firstName = user?.firstName || user?.fullName?.split(" ")[0] || "there"; } } catch {}
+  return (
+    <h1 className="text-2xl font-bold text-white" style={{ fontFamily: "var(--font-syne)" }}>
+      Welcome back, <span style={{ color: "#cdff00" }}>{firstName}</span>
+    </h1>
+  );
+}
+
 // ── Types ──
 interface ScanResult {
   username: string;
@@ -81,7 +95,8 @@ export default function DashboardPage() {
     try {
       // SSE progress
       const jobId = `dash-${Date.now()}`;
-      const es = new EventSource(`http://localhost:8000/api/progress/${jobId}`);
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const es = new EventSource(`${API_BASE}/api/progress/${jobId}`);
       es.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data);
@@ -159,9 +174,7 @@ export default function DashboardPage() {
           <p className="text-[#444] text-xs mb-1" style={{ fontFamily: "var(--font-space)" }}>
             {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
-          <h1 className="text-2xl font-bold text-white" style={{ fontFamily: "var(--font-syne)" }}>
-            Welcome back, <span style={{ color: "#cdff00" }}>Sahil</span>
-          </h1>
+          <DashboardWelcome />
         </div>
         <div className="flex items-center gap-3">
           {/* Backend status */}
