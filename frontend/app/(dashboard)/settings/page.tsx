@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 type SettingsTab = "profile" | "api" | "team" | "plan" | "integrations" | "notifications";
@@ -38,6 +38,14 @@ export default function SettingsPage() {
   const [apiVisible, setApiVisible] = useState(false);
   const [copied, setCopied] = useState("");
   const [saved, setSaved] = useState(false);
+
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    import("@/lib/auth").then((mod) => {
+      mod.getCurrentUser().then(setUser);
+    });
+  }, []);
 
   const copyKey = (key: string, label: string) => {
     navigator.clipboard.writeText(key).catch(() => {});
@@ -88,8 +96,12 @@ export default function SettingsPage() {
                 <motion.div variants={fadeUp} className="rounded-2xl p-6 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
                   <h2 className="text-sm font-bold text-white mb-5">Personal Information</h2>
                   <div className="flex items-start gap-5 mb-6">
-                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black text-[#050505] shrink-0"
-                      style={{ background: "#cdff00" }}>S</div>
+                    {user?.avatar_url ? (
+                      <img src={user.avatar_url} alt="Avatar" className="w-16 h-16 rounded-2xl border border-white/10 shrink-0" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black text-[#050505] shrink-0"
+                        style={{ background: "#cdff00" }}>{user?.name ? user.name.charAt(0).toUpperCase() : "S"}</div>
+                    )}
                     <div>
                       <button className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/10 text-[#888] hover:text-white hover:border-white/20 transition-all">
                         Change Photo
@@ -99,10 +111,10 @@ export default function SettingsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     {[
-                      { label: "Full Name", value: "Sahil Kumar" },
-                      { label: "Email", value: "sahil@company.com" },
-                      { label: "Company", value: "DevXray Inc." },
-                      { label: "Role", value: "Engineering Manager" },
+                      { label: "Full Name", value: user?.name || "DevXray User" },
+                      { label: "Email", value: user?.email || "user@devxray.ai" },
+                      { label: "Company", value: "DevXray Org" },
+                      { label: "Role", value: "Software Engineer" },
                     ].map(f => (
                       <div key={f.label}>
                         <label className="block text-[10px] font-bold text-[#555] uppercase tracking-wider mb-2">{f.label}</label>

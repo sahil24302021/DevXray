@@ -64,13 +64,13 @@ export function buildCandidateRecord(
     username,
     name: (result.name as string) || "",
     avatar_url: (result.avatar_url as string) || "",
-    final_score: Number(result.final_score ?? 0),
+    final_score: Math.round(Number(result.final_score ?? 0)),
     developer_tier: (result.developer_tier as string) || "",
     risk_level: (result.risk_level as string) || "",
     hiring_recommendation: hiringText,
     verified_skills: skillsArr,
     top_languages: langsArr,
-    confidence_score: Number(result.confidence_score ?? 0),
+    confidence_score: Math.round(Number(result.confidence_score ?? 0)),
     scanned_at: new Date().toISOString(),
     // Store light report summary — strip large payload to keep storage lean
     report_payload: {
