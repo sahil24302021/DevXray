@@ -350,7 +350,8 @@ export default function ComparePage() {
     setLoading(true); setError(""); setProgress("Connecting...");
     try {
       const jobId = `compare-${side}-${Date.now()}`;
-      const es = new EventSource(`http://localhost:8000/api/progress/${jobId}`);
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const es = new EventSource(`${API_BASE}/api/progress/${jobId}`);
       esRef.current = es;
       es.onmessage = (e) => {
         try {

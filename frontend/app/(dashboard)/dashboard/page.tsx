@@ -81,7 +81,8 @@ export default function DashboardPage() {
     try {
       // SSE progress
       const jobId = `dash-${Date.now()}`;
-      const es = new EventSource(`http://localhost:8000/api/progress/${jobId}`);
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const es = new EventSource(`${API_BASE}/api/progress/${jobId}`);
       es.onmessage = (evt) => {
         try {
           const data = JSON.parse(evt.data);
@@ -281,32 +282,39 @@ export default function DashboardPage() {
                     <motion.div key={`${c.username}-${i}`}
                       initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}
                       transition={{ delay: i * 0.04 }}
-                      className="flex items-center gap-4 px-5 py-3.5 border-b hover:bg-white/[0.01] transition-colors"
+                      className="border-b transition-colors"
                       style={{ borderColor: "rgba(255,255,255,0.03)" }}>
-                      {c.avatar ? (
-                        <img src={c.avatar} alt={c.name} className="w-9 h-9 rounded-full border border-white/10 shrink-0" />
-                      ) : (
-                        <div className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center font-bold text-[#050505] text-[12px]"
-                          style={{ background: TIER_COLORS[c.tier] || "#cdff00" }}>
-                          {c.name.charAt(0)}
+                      <Link href={`/report/${c.username}`} className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.03] no-underline">
+                        {c.avatar ? (
+                          <img src={c.avatar} alt={c.name} className="w-9 h-9 rounded-full border border-white/10 shrink-0" />
+                        ) : (
+                          <div className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center font-bold text-[#050505] text-[12px]"
+                            style={{ background: TIER_COLORS[c.tier] || "#cdff00" }}>
+                            {c.name.charAt(0)}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-white truncate">{c.name}</p>
+                          <p className="text-[11px] text-[#444]">@{c.username} · {c.time}</p>
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-semibold text-white truncate">{c.name}</p>
-                        <p className="text-[11px] text-[#444]">@{c.username} · {c.time}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                          style={{ background: `${TIER_COLORS[c.tier]}18`, color: TIER_COLORS[c.tier] }}>
-                          {c.tier}
-                        </span>
-                        <span className="text-base font-black" style={{ color: TIER_COLORS[c.tier], fontFamily: "var(--font-syne)" }}>
-                          {c.score}
-                        </span>
-                      </div>
-                      <span className="text-[10px] font-medium hidden md:block" style={{ color: REC_COLORS[c.recommendation] }}>
-                        {c.recommendation}
-                      </span>
+                        <div className="flex items-center gap-3">
+                          <div className="flex flex-col items-end">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full mb-0.5"
+                              style={{ background: `${TIER_COLORS[c.tier]}18`, color: TIER_COLORS[c.tier] }}>
+                              {c.tier}
+                            </span>
+                            <span className="text-[10px] font-medium hidden md:block" style={{ color: REC_COLORS[c.recommendation] }}>
+                              {c.recommendation}
+                            </span>
+                          </div>
+                          <span className="text-xl font-black" style={{ color: TIER_COLORS[c.tier], fontFamily: "var(--font-syne)" }}>
+                            {c.score}
+                          </span>
+                          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#666" strokeWidth="2" className="ml-1">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                      </Link>
                     </motion.div>
                   ))}
                 </AnimatePresence>
