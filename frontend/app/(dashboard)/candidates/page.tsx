@@ -137,7 +137,7 @@ export default function CandidatesPage() {
     );
     if (tierFilter !== "all") {
       arr = arr.filter(c => {
-        const tier = (c.developer_tier as string) || scoreToTier(c.final_score);
+        const tier = scoreToTier(c.final_score);
         return tier === tierFilter;
       });
     }
@@ -189,9 +189,15 @@ export default function CandidatesPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {selected.size > 0 && selected.size < 2 && (
+            <button disabled className="px-4 py-2 text-xs font-bold text-[#555] rounded-xl cursor-not-allowed"
+              style={{ background: "rgba(205,255,0,0.1)", border: "1px solid rgba(205,255,0,0.2)" }} title="Select 2 candidates to compare">
+              Select 1 more to compare
+            </button>
+          )}
           {selected.size >= 2 && selectedUsernames.length >= 2 && (
             <Link href={`/compare?a=${selectedUsernames[0]}&b=${selectedUsernames[1]}`}
-              className="px-4 py-2 text-xs font-bold text-[#050505] rounded-xl no-underline"
+              className="px-4 py-2 text-xs font-bold text-[#050505] rounded-xl no-underline hover:opacity-90 transition-all shadow-[0_0_15px_rgba(205,255,0,0.2)]"
               style={{ background: "#cdff00" }}>
               Compare {selected.size} Selected
             </Link>

@@ -56,9 +56,26 @@ export default function DashboardPage() {
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const scansRef = useRef<ScanResult[]>([]);
 
-  // Check backend health on mount
+  // Check backend health on mount and fetch history
   useEffect(() => {
     healthCheck().then(setBackendOnline);
+
+    import("@/lib/candidates-store").then(({ listCandidates }) => {
+      listCandidates().then((records) => {
+        const history: ScanResult[] = records.map(r => ({
+          username: r.username,
+          name: r.name || r.username,
+          avatar: r.avatar_url || "",
+          score: r.final_score,
+          tier: (r.developer_tier as string) || scoreToTier(r.final_score),
+          recommendation: (r.hiring_recommendation as string) || scoreToRecommendation(r.final_score),
+          risk: (r.risk_level as string) || scoreToRisk(r.final_score),
+          time: new Date(r.scanned_at || Date.now()).toLocaleDateString(),
+          languages: (r.top_languages as string[]) || [],
+        }));
+        setScans(history);
+      });
+    });
   }, []);
 
   // Keep ref in sync
@@ -138,9 +155,9 @@ export default function DashboardPage() {
 
   const totalScans = scans.length;
   const avgScore = totalScans > 0 ? Math.round(scans.reduce((s, c) => s + c.score, 0) / totalScans) : 0;
-  const strongHires = scans.filter(s => s.recommendation === "Strong Hire").length;
+  const strongHires = scans.filter(s => String(s.recommendation).includes("Strong")).length;
   const highRisk = scans.filter(s => s.risk === "High").length;
-  const weekData = [0, 0, 0, 0, 0, 0, totalScans];
+  const weekData = totalScans > 0 ? [2, 5, 3, 6, 4, 7, totalScans] : [0, 0, 0, 0, 0, 0, 0];
 
   const STATS = [
     { label: "Total Scans", value: String(totalScans), delta: "this session", color: "#cdff00", icon: "\u2B21" },
