@@ -44,41 +44,73 @@ export function buildCandidateRecord(
   result: AnalysisResult,
   username: string
 ): CandidateRecord {
-  const hr = result.hiring_recommendation;
+  // For resume scans, real data lives inside github_report
+  const ghReport = (result.github_report || result) as Record<string, unknown>;
+  const resumeData = (result.resume_data || {}) as Record<string, unknown>;
+
+  const hr = result.hiring_recommendation || (ghReport as any).hiring_recommendation;
   const hiringText =
     !hr
       ? ""
       : typeof hr === "string"
       ? hr
-      : hr.summary ?? "";
+      : (hr as any).summary ?? "";
 
   const skillsArr = Array.isArray(result.verified_skills)
     ? result.verified_skills as string[]
+    : Array.isArray((ghReport as any).verified_skills)
+    ? (ghReport as any).verified_skills as string[]
     : [];
   const langsArr = Array.isArray(result.top_languages)
     ? result.top_languages as string[]
+    : Array.isArray((ghReport as any).top_languages)
+    ? (ghReport as any).top_languages as string[]
     : [];
+
+  // Score: try top-level, then github_report, then score_breakdown
+  const rawScore = Number(
+    result.final_score ||
+    (ghReport as any).final_score ||
+    (result.score_breakdown as any)?.final_score ||
+    0
+  );
+
+  // Name: try top-level, then resume_data, then github_report
+  const candidateName = String(
+    result.name ||
+    resumeData.name ||
+    (ghReport as any).name ||
+    (result.basic_info as any)?.name ||
+    username
+  );
+
+  // Avatar
+  const avatarUrl = String(
+    result.avatar_url ||
+    (ghReport as any).avatar_url ||
+    (result.basic_info as any)?.avatar_url ||
+    ""
+  );
 
   return {
     id: crypto.randomUUID(),
     username,
-    name: (result.name as string) || "",
-    avatar_url: (result.avatar_url as string) || "",
-    final_score: Math.round(Number(result.final_score ?? 0)),
-    developer_tier: (result.developer_tier as string) || "",
-    risk_level: (result.risk_level as string) || "",
+    name: candidateName,
+    avatar_url: avatarUrl,
+    final_score: Math.round(rawScore),
+    developer_tier: String((result.developer_tier || (ghReport as any).developer_tier) || ""),
+    risk_level: String((result.risk_level || (ghReport as any).risk_level) || ""),
     hiring_recommendation: hiringText,
     verified_skills: skillsArr,
     top_languages: langsArr,
-    confidence_score: Math.round(Number(result.confidence_score ?? 0)),
+    confidence_score: Math.round(Number(result.confidence_score || (ghReport as any).confidence_score || 0)),
     scanned_at: new Date().toISOString(),
-    // Store light report summary — strip large payload to keep storage lean
     report_payload: {
-      final_score: result.final_score,
-      score_breakdown: result.score_breakdown,
-      strengths: result.strengths,
-      weaknesses: result.weaknesses,
-      verdict_explanation: result.verdict_explanation,
+      final_score: rawScore,
+      score_breakdown: result.score_breakdown || (ghReport as any).score_breakdown,
+      strengths: result.strengths || (ghReport as any).strengths,
+      weaknesses: result.weaknesses || (ghReport as any).weaknesses,
+      verdict_explanation: result.verdict_explanation || (ghReport as any).verdict_explanation,
     },
   };
 }

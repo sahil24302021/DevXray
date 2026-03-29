@@ -1162,8 +1162,8 @@ export default function Home() {
                 better hiring decisions, faster.
               </p>
               <div className="flex flex-wrap gap-4">
-                <MagneticButton href="/signin">
-                  Analyze a Profile
+                <MagneticButton href={isLoggedIn ? "/dashboard" : "/signin"}>
+                  {isLoggedIn ? "Go to Dashboard" : "Analyze a Profile"}
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                     <path d="M5 12h14M12 5l7 7-7 7" />
                   </svg>

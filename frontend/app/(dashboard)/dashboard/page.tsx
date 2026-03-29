@@ -3,8 +3,9 @@
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { useState, useCallback, useEffect, useRef } from "react";
-import { analyzeGitHub, extractScoring, scoreToTier, scoreToRisk, scoreToRecommendation, healthCheck, AnalysisResult } from "@/lib/api";
+import { analyzeGitHub, extractScoring, scoreToTier, scoreToRisk, scoreToRecommendation, normalizeTier, healthCheck, AnalysisResult } from "@/lib/api";
 import { saveCandidate } from "@/lib/candidates-store";
+import { getCurrentUser } from "@/lib/auth";
 
 // ── Types ──
 interface ScanResult {
@@ -55,24 +56,36 @@ export default function DashboardPage() {
   const [scans, setScans] = useState<ScanResult[]>([]);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const scansRef = useRef<ScanResult[]>([]);
+  const [userName, setUserName] = useState("there");
 
-  // Check backend health on mount and fetch history
+  // Check backend health on mount, fetch user name, and load scan history
   useEffect(() => {
     healthCheck().then(setBackendOnline);
 
+    // Get real user name
+    getCurrentUser().then(u => {
+      if (u?.firstName) setUserName(u.firstName);
+      else if (u?.email) setUserName(u.email.split("@")[0]);
+    });
+
+    // Load scan history from Supabase / localStorage
     import("@/lib/candidates-store").then(({ listCandidates }) => {
       listCandidates().then((records) => {
-        const history: ScanResult[] = records.map(r => ({
-          username: r.username,
-          name: r.name || r.username,
-          avatar: r.avatar_url || "",
-          score: r.final_score,
-          tier: (r.developer_tier as string) || scoreToTier(r.final_score),
-          recommendation: (r.hiring_recommendation as string) || scoreToRecommendation(r.final_score),
-          risk: (r.risk_level as string) || scoreToRisk(r.final_score),
-          time: new Date(r.scanned_at || Date.now()).toLocaleDateString(),
-          languages: (r.top_languages as string[]) || [],
-        }));
+        const history: ScanResult[] = records.map(r => {
+          const rawTier = (r.developer_tier as string) || "";
+          const tier = rawTier ? normalizeTier(rawTier) : scoreToTier(r.final_score);
+          return {
+            username: r.username,
+            name: r.name || r.username,
+            avatar: r.avatar_url || "",
+            score: r.final_score,
+            tier,
+            recommendation: (r.hiring_recommendation as string) || scoreToRecommendation(r.final_score),
+            risk: (r.risk_level as string) || scoreToRisk(r.final_score),
+            time: new Date(r.scanned_at || Date.now()).toLocaleDateString(),
+            languages: (r.top_languages as string[]) || [],
+          };
+        });
         setScans(history);
       });
     });
@@ -178,7 +191,7 @@ export default function DashboardPage() {
             {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
           <h1 className="text-2xl font-bold text-white" style={{ fontFamily: "var(--font-syne)" }}>
-            Welcome back, <span style={{ color: "#cdff00" }}>Sahil</span>
+            Welcome back, <span style={{ color: "#cdff00" }}>{userName}</span>
           </h1>
         </div>
         <div className="flex items-center gap-3">

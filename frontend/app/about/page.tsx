@@ -3,6 +3,7 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
 import { useRef, useEffect, useState, useCallback } from "react";
+import { getCurrentUser } from "@/lib/auth";
 
 /* ═══════════════════════════════════════════════════════════
    PARTICLE FIELD — Reusable canvas constellation
@@ -75,6 +76,11 @@ export default function AboutPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const { scrollYProgress } = useScroll({ target: containerRef });
   const y1 = useTransform(scrollYProgress, [0, 1], [0, -60]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    getCurrentUser().then(u => setIsLoggedIn(!!u));
+  }, []);
 
   const stagger = {
     hidden: {},
@@ -124,7 +130,7 @@ export default function AboutPage() {
           <div className="flex items-center gap-6">
             <Link href="/" className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">Home</Link>
             <Link href="/pricing" className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">Pricing</Link>
-            <Link href="/signin" className="magnetic-btn !py-2.5 !px-5 !text-[11px]">Get Started</Link>
+            <Link href={isLoggedIn ? "/dashboard" : "/signin"} className="magnetic-btn !py-2.5 !px-5 !text-[11px]">{isLoggedIn ? "Dashboard" : "Get Started"}</Link>
           </div>
         </div>
       </nav>
@@ -247,7 +253,7 @@ export default function AboutPage() {
           <p className="text-[#777] text-base font-light mb-10 max-w-md mx-auto">
             Start analyzing developer profiles in seconds. No setup required.
           </p>
-          <Link href="/signin" className="magnetic-btn">
+          <Link href={isLoggedIn ? "/dashboard" : "/signin"} className="magnetic-btn">
             Start Analyzing
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M5 12h14M12 5l7 7-7 7" />

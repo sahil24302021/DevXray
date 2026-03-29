@@ -11,6 +11,7 @@ export interface AuthUser {
   email: string;
   firstName: string;
   fullName: string;
+  avatar_url?: string;
 }
 
 // ─── Get current session user (client side) ──────────────────
@@ -23,12 +24,14 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
     const fullName = user.user_metadata?.full_name || user.user_metadata?.name || "";
     const firstName = fullName.split(" ")[0] || user.email?.split("@")[0] || "Developer";
+    const avatar = user.user_metadata?.avatar_url || user.user_metadata?.picture;
 
     return {
       id: user.id,
       email: user.email ?? "",
       firstName,
       fullName: fullName || firstName,
+      avatar_url: avatar,
     };
   } catch {
     return null;

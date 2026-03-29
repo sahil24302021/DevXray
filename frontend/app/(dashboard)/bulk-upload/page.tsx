@@ -100,9 +100,10 @@ export default function BulkUploadPage() {
         const tier = normalizeTier(String((ghReport as any).developer_tier || scoreToTier(scoring.finalScore)));
         const langs = extractLanguages(ghReport as any);
 
-        // Auto-save to candidates store
+        // Auto-save to candidates store with real candidate name
+        const saveUsername = String(resumeData.github_username || candidateName || uploadFile.name.replace(".pdf", "")).replace(/\s+/g, "_").toLowerCase();
         import("@/lib/candidates-store").then(({ saveCandidate }) => {
-          saveCandidate(result, "resume").catch(console.warn);
+          saveCandidate(result, saveUsername).catch(console.warn);
         });
 
         setFiles(prev => prev.map(f =>
@@ -231,6 +232,15 @@ export default function BulkUploadPage() {
                   style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}
                 />
               </div>
+              {/* Confirmation that requirements will be applied */}
+              {(jobTitle || requiredSkills || jobDesc) && (
+                <div className="flex items-center gap-2 text-[11px] text-[#34d399] font-medium mt-1 p-2 rounded-lg" style={{ background: "rgba(52,211,153,0.06)", border: "1px solid rgba(52,211,153,0.15)" }}>
+                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Requirements will be applied to all scans
+                </div>
+              )}
             </div>
           </motion.div>
 

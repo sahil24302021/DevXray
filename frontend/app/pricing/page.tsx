@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useState, useRef, useCallback, useEffect } from "react";
+import { getCurrentUser } from "@/lib/auth";
 
 /* ═══════════════════════════════════════════════════════════
    PARTICLE FIELD 
@@ -58,6 +59,11 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 
 export default function PricingPage() {
   const [annual, setAnnual] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    getCurrentUser().then(u => setIsLoggedIn(!!u));
+  }, []);
 
   const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.12, delayChildren: 0.1 } } };
   const fadeUp = { hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] as const } } };
@@ -122,7 +128,7 @@ export default function PricingPage() {
           <div className="flex items-center gap-6">
             <Link href="/" className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">Home</Link>
             <Link href="/about" className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">About</Link>
-            <Link href="/signin" className="magnetic-btn !py-2.5 !px-5 !text-[11px]">Get Started</Link>
+            <Link href={isLoggedIn ? "/dashboard" : "/signin"} className="magnetic-btn !py-2.5 !px-5 !text-[11px]">{isLoggedIn ? "Dashboard" : "Get Started"}</Link>
           </div>
         </div>
       </nav>

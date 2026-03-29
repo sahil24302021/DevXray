@@ -74,16 +74,56 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
   useEffect(() => {
     if (!username) return;
     
-    // Generate a unique chunk identifier for this analysis job
-    const newJobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    setJobId(newJobId);
-    
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
+
+      // 1) Check if we already have a cached report in Supabase/localStorage
+      try {
+        const { listCandidates } = await import("@/lib/candidates-store");
+        const cached = await listCandidates();
+        const existing = cached.find(c => c.username === username);
+        if (existing && existing.report_payload) {
+          // We have a cached result — use it directly instead of re-scanning
+          const payload = existing.report_payload as Record<string, unknown>;
+          // Reconstruct enough of an AnalysisResult for the report to render
+          const cachedResult: AnalysisResult = {
+            ...payload,
+            username: existing.username,
+            name: existing.name,
+            avatar_url: existing.avatar_url,
+            final_score: existing.final_score,
+            developer_tier: existing.developer_tier,
+            risk_level: existing.risk_level,
+            hiring_recommendation: existing.hiring_recommendation as any,
+            verified_skills: existing.verified_skills,
+            top_languages: existing.top_languages,
+            confidence_score: existing.confidence_score,
+          };
+          // If cached payload has enough data, use it; otherwise fall through to API
+          if (cachedResult.final_score && cachedResult.final_score > 0) {
+            setData(cachedResult);
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch {
+        // Cache miss — proceed to API
+      }
+
+      // 2) No cache hit — call the backend
+      const newJobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      setJobId(newJobId);
+
       try {
         const result = await analyzeProfile(username, newJobId);
         setData(result);
+
+        // Save to cache for next time
+        try {
+          const { saveCandidate } = await import("@/lib/candidates-store");
+          await saveCandidate(result as any, username);
+        } catch {}
       } catch (err: any) {
         setError(err.message || "An unknown error occurred");
       } finally {
@@ -151,6 +191,20 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           </Link>
           <div className="flex items-center gap-3">
             <button
+              onClick={() => {
+                // Force a fresh scan by clearing cache and reloading
+                import("@/lib/candidates-store").then(({ deleteCandidate }) => {
+                  deleteCandidate(username).then(() => window.location.reload());
+                });
+              }}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Re-scan
+            </button>
+            <button
               onClick={() => window.print()}
               className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all"
             >
@@ -160,7 +214,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
               Export PDF
             </button>
             <Link
-              href="/"
+              href="/dashboard"
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#050505] bg-[#cdff00] rounded-lg transition-all no-underline hover:bg-[#b0d800] tracking-wide"
             >
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">

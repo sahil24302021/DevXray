@@ -100,7 +100,7 @@ export default function SettingsPage() {
                       <img src={user.avatar_url} alt="Avatar" className="w-16 h-16 rounded-2xl border border-white/10 shrink-0" />
                     ) : (
                       <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black text-[#050505] shrink-0"
-                        style={{ background: "#cdff00" }}>{user?.name ? user.name.charAt(0).toUpperCase() : "S"}</div>
+                        style={{ background: "#cdff00" }}>{user?.fullName ? user.fullName.charAt(0).toUpperCase() : "S"}</div>
                     )}
                     <div>
                       <button className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/10 text-[#888] hover:text-white hover:border-white/20 transition-all">
@@ -111,7 +111,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     {[
-                      { label: "Full Name", value: user?.name || "DevXray User" },
+                      { label: "Full Name", value: user?.fullName || "DevXray User" },
                       { label: "Email", value: user?.email || "user@devxray.ai" },
                       { label: "Company", value: "DevXray Org" },
                       { label: "Role", value: "Software Engineer" },
