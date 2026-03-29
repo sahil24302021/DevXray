@@ -150,7 +150,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
   const data2 = dataWithAliases;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#fafafa] font-[family-name:var(--font-dm-sans)] relative print:min-h-0 print:bg-[#050505] print:block print:overflow-visible">
+    <div className="min-h-screen bg-[#050505] text-[#fafafa] font-[family-name:var(--font-dm-sans)] relative print:min-h-0 print:block print:overflow-visible">
       <div className="grain-overlay" />
       {/* Background effects */}
       <div className="fixed inset-0 pointer-events-none z-0 print:hidden">

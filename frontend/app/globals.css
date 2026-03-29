@@ -1088,14 +1088,14 @@ body {
   }
 
   /* ─── Fix Layouts for Print ─── */
-  .grid {
-    display: flex !important;
-    flex-wrap: wrap !important;
-    gap: 16px !important;
+  .grid, .flex {
+    display: block !important;
   }
   .grid > * {
-    margin-bottom: 0 !important;
-    flex: 1 1 calc(50% - 16px) !important;
+    width: 100% !important;
+    margin-bottom: 16px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
 
   /* ─── Typography (Force Dark Colors) ─── */
@@ -1128,12 +1128,16 @@ body {
   [class*="text-white"],
   [class*="text-slate-100"],
   [class*="text-slate-200"],
-  [class*="text-slate-300"] {
+  [class*="text-slate-300"],
+  [class*="text-[#fafafa]"] {
     color: #111111 !important;
   }
   
   [class*="text-slate-400"],
-  [class*="text-slate-500"] {
+  [class*="text-slate-500"],
+  [class*="text-[#888]"],
+  [class*="text-[#666]"],
+  [class*="text-[#999]"] {
     color: #4b5563 !important;
   }
 
