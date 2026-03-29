@@ -526,7 +526,9 @@ export default function Home() {
             ))}
           </div>
 
-          <NavAuthButtons />
+          <div className="flex items-center gap-4">
+            <NavAuthButtons />
+          </div>
         </motion.div>
       </nav>
 

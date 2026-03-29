@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 
 // Clerk imports — graceful fallback if not installed or configured
+// We use a wrapper hook because useUser() throws during SSG when
+// ClerkProvider is missing (build-time static generation).
 let _clerkUseUser: (() => { user: any; isLoaded: boolean }) | null = null;
 let SignOutButton: any = null;
 try {
@@ -16,7 +18,9 @@ try {
 function useSafeUser(): { user: any; isLoaded: boolean } {
   try {
     if (_clerkUseUser) return _clerkUseUser();
-  } catch {}
+  } catch {
+    // ClerkProvider not mounted (SSG / dev without keys)
+  }
   return { user: null, isLoaded: true };
 }
 
@@ -79,37 +83,59 @@ const Icon = {
 
 const navItems = [
   { label: "Overview", href: "/dashboard", icon: <Icon.Grid /> },
-  { label: "Bulk Upload", href: "/bulk-upload", icon: <Icon.Upload />, badge: "NEW" },
+  { label: "Bulk Upload", href: "/bulk-upload", icon: <Icon.Upload />, badge: "NEW", pro: false },
   { label: "Candidates", href: "/candidates", icon: <Icon.Users /> },
   { label: "Compare", href: "/compare", icon: <Icon.Compare /> },
   { label: "How We Score", href: "/how-we-score", icon: <Icon.Info /> },
   { label: "Settings", href: "/settings", icon: <Icon.Settings /> },
 ];
 
-// ✅ No more hardcoded props — everything comes from Clerk or sensible defaults
-export default function DashboardSidebar() {
+const PLAN_COLORS: Record<string, string> = {
+  free: "#555",
+  pro: "#cdff00",
+  enterprise: "#a78bfa",
+};
+
+interface SidebarProps {
+  plan?: "free" | "pro" | "enterprise";
+  userName?: string;
+  userEmail?: string;
+  scansUsed?: number;
+  scansLimit?: number;
+}
+
+export default function DashboardSidebar({
+  plan = "pro",
+  userName: defaultName = "Developer",
+  userEmail: defaultEmail = "",
+  scansUsed: propScansUsed,
+  scansLimit = 100,
+}: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Real user data from Clerk
-  const { user } = useSafeUser();
-  const displayName = user?.fullName || user?.firstName || "Developer";
-  const displayEmail = user?.primaryEmailAddress?.emailAddress || "";
-  const plan = (user?.publicMetadata?.plan as string) || "free";
+  // Clerk user info (graceful fallback)
+  const { user, isLoaded } = useSafeUser();
+  const displayName = user?.fullName || user?.firstName || defaultName;
+  const displayEmail = user?.primaryEmailAddress?.emailAddress || defaultEmail;
 
-  // Scan counter from localStorage
-  const [scansUsed, setScansUsed] = useState(0);
-  const scansLimit = plan === "pro" ? 500 : plan === "enterprise" ? 9999 : 50;
+  // Real scan counter from localStorage
+  const [scansUsed, setScansUsed] = useState(propScansUsed ?? 0);
   useEffect(() => {
+    if (propScansUsed !== undefined) return; // prop overrides
     const stored = parseInt(localStorage.getItem("devxray_scans_used") || "0", 10);
     setScansUsed(stored);
-    const handler = () => setScansUsed(parseInt(localStorage.getItem("devxray_scans_used") || "0", 10));
+    // Listen for storage changes from other tabs
+    const handler = () => {
+      setScansUsed(parseInt(localStorage.getItem("devxray_scans_used") || "0", 10));
+    };
     window.addEventListener("storage", handler);
     return () => window.removeEventListener("storage", handler);
-  }, []);
+  }, [propScansUsed]);
 
-  const usedPct = Math.min(Math.round((scansUsed / scansLimit) * 100), 100);
+  const usedPct = Math.round((scansUsed / scansLimit) * 100);
+
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -163,6 +189,12 @@ export default function DashboardSidebar() {
                   {item.badge}
                 </span>
               )}
+              {!collapsed && item.pro && plan === "free" && (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: "rgba(167,139,250,0.15)", color: "#a78bfa" }}>
+                  PRO
+                </span>
+              )}
             </Link>
           );
         })}
@@ -181,7 +213,10 @@ export default function DashboardSidebar() {
             <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
               <div
                 className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${usedPct}%`, background: usedPct > 80 ? "#fb7185" : "#cdff00" }}
+                style={{
+                  width: `${usedPct}%`,
+                  background: usedPct > 80 ? "#fb7185" : "#cdff00",
+                }}
               />
             </div>
             {usedPct > 70 && plan === "free" && (
@@ -197,7 +232,7 @@ export default function DashboardSidebar() {
       {/* User footer */}
       <div className={`px-4 py-4 border-t border-white/[0.05] flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
         <div className="w-8 h-8 rounded-full shrink-0 flex items-center justify-center font-bold text-[11px] text-[#050505]"
-          style={{ background: "#cdff00" }}>
+          style={{ background: PLAN_COLORS[plan] || "#cdff00" }}>
           {displayName.charAt(0).toUpperCase()}
         </div>
         {!collapsed && (
@@ -225,19 +260,22 @@ export default function DashboardSidebar() {
 
   return (
     <>
-      {/* Mobile toggle */}
+      {/* Mobile toggle button */}
       <button
         onClick={() => setMobileOpen(true)}
         className="lg:hidden fixed top-4 left-4 z-50 w-9 h-9 rounded-xl flex items-center justify-center border"
-        style={{ background: "rgba(5,5,5,0.9)", borderColor: "rgba(255,255,255,0.08)" }}>
+        style={{ background: "rgba(5,5,5,0.9)", borderColor: "rgba(255,255,255,0.08) " }}>
         <Icon.Menu />
       </button>
 
       {/* Mobile overlay */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm" onClick={() => setMobileOpen(false)}>
-          <div className="w-64 h-full" style={{ background: "#0a0a0a", borderRight: "1px solid rgba(255,255,255,0.06)" }}
-            onClick={(e) => e.stopPropagation()}>
+          <div
+            className="w-64 h-full"
+            style={{ background: "#0a0a0a", borderRight: "1px solid rgba(255,255,255,0.06)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <button onClick={() => setMobileOpen(false)} className="absolute top-4 right-4 text-[#555] hover:text-white">
               <Icon.X />
             </button>
