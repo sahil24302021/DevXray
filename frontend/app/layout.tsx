@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Syne, DM_Sans, Space_Grotesk } from "next/font/google";
-import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 const syne = Syne({
@@ -36,23 +35,9 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const hasClerkKey = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY &&
-    !process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY.includes("your_");
-
-  const inner = (
+  return (
     <html lang="en" className={`${syne.variable} ${dmSans.variable} ${spaceGrotesk.variable}`} data-scroll-behavior="smooth">
       <body>{children}</body>
     </html>
   );
-
-  // Only wrap with ClerkProvider if a real key is configured
-  if (hasClerkKey) {
-    return (
-      <ClerkProvider>
-        {inner}
-      </ClerkProvider>
-    );
-  }
-
-  return inner;
 }

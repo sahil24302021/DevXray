@@ -4,22 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 
-// Clerk imports — graceful fallback if not installed or configured
-// We use a wrapper hook because useUser() throws during SSG when
-// ClerkProvider is missing (build-time static generation).
-let _clerkUseUser: (() => { user: any; isLoaded: boolean }) | null = null;
-let SignOutButton: any = null;
-try {
-  const clerk = require("@clerk/nextjs");
-  _clerkUseUser = clerk.useUser;
-  SignOutButton = clerk.SignOutButton;
-} catch {}
-
 function useSafeUser(): { user: any; isLoaded: boolean } {
-  try {
-    if (_clerkUseUser) return _clerkUseUser();
-  } catch {
-    // ClerkProvider not mounted (SSG / dev without keys)
+  const match = typeof document !== 'undefined' ? document.cookie.match(/(^| )user_name=([^;]+)/) : null;
+  const username = match ? decodeURIComponent(match[2]) : null;
+  
+  if (username) {
+    return { user: { fullName: username }, isLoaded: true };
   }
   return { user: null, isLoaded: true };
 }
@@ -242,17 +232,11 @@ export default function DashboardSidebar({
           </div>
         )}
         {!collapsed && (
-          SignOutButton && user ? (
-            <SignOutButton>
-              <button className="text-[#444] hover:text-[#fb7185] transition-colors">
-                <Icon.Logout />
-              </button>
-            </SignOutButton>
-          ) : (
-            <Link href="/signin" className="text-[#444] hover:text-[#fb7185] transition-colors no-underline">
-              <Icon.Logout />
-            </Link>
-          )
+          <form action="/api/auth/logout" method="POST">
+             <button type="submit" className="text-[#444] hover:text-[#fb7185] transition-colors">
+               <Icon.Logout />
+             </button>
+          </form>
         )}
       </div>
     </div>
