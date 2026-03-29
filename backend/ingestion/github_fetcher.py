@@ -45,8 +45,8 @@ async def fetch_user_profile(username: str) -> Optional[Dict[str, Any]]:
             headers=GITHUB_HEADERS,
             timeout=15.0,
         )
-        if response.status_code in (403, 429):
-            raise HTTPException(status_code=429, detail="GitHub API rate limit exceeded. Please configure a GITHUB_TOKEN environment variable in the backend.")
+        if response.status_code in (401, 403, 429):
+            raise HTTPException(status_code=429, detail="GitHub API Error (401/403/429). Please ensure your GITHUB_TOKEN in Render is valid and has not expired.")
         if response.status_code != 200:
             return None
 
@@ -457,7 +457,8 @@ async def fetch_pinned_repos(username: str) -> List[Dict[str, Any]]:
     if cached:
         return cached
 
-    if not github_token:
+    token = get_github_token()
+    if not token:
         return []  # GraphQL requires authentication
 
     query = """
@@ -485,7 +486,7 @@ async def fetch_pinned_repos(username: str) -> List[Dict[str, Any]]:
             response = await client.post(
                 "https://api.github.com/graphql",
                 headers={
-                    "Authorization": f"Bearer {github_token}",
+                    "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json",
                 },
                 json={"query": query, "variables": {"username": username}},

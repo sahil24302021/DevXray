@@ -2,7 +2,7 @@
 // Supabase client for BOTH auth and database operations.
 // Uses @supabase/ssr for proper Next.js Server/Client separation.
 
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
@@ -10,13 +10,10 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 export const isSupabaseAvailable = !!(supabaseUrl && supabaseAnonKey);
 
 // Browser client (for use in Client Components and auth)
+// Using createBrowserClient automatically syncs the auth session to cookies
+// so that the Next.js middleware can protect routes securely.
 export const supabase = isSupabaseAvailable
-  ? createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    })
+  ? createBrowserClient(supabaseUrl, supabaseAnonKey)
   : null;
 
 // ─── Database schema ─────────────────────────────────────────
