@@ -568,43 +568,113 @@ async def _strategy_duckduckgo(username: str, name_hint: str = "") -> Optional[D
     if not is_strategy_enabled("duckduckgo"):
         return None
 
+    queries = [
+        f'site:linkedin.com/in/{username}',
+        f'linkedin.com/in/{username}',
+        f'"{username.replace("-", " ")}" linkedin developer',
+    ]
+    if name_hint:
+        queries.insert(0, f'site:linkedin.com "{name_hint}"')
+
+    for query in queries:
+        try:
+            search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+            headers = get_random_headers()
+            headers["Referer"] = "https://duckduckgo.com/"
+
+            async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
+                resp = await client.get(search_url, headers=headers)
+                if resp.status_code != 200:
+                    continue
+
+                soup = BeautifulSoup(resp.text, "html.parser")
+                results = []
+
+                # DDG HTML search uses multiple layout variants — try all known selectors
+                # Selector set 1: Classic layout
+                for div in soup.find_all("div", class_="result"):
+                    title_el = div.find("a", class_="result__a")
+                    snippet_el = div.find("a", class_="result__snippet") or div.find("div", class_="result__snippet")
+                    text = ""
+                    if title_el:
+                        text += title_el.get_text(strip=True) + " "
+                    if snippet_el:
+                        text += snippet_el.get_text(strip=True)
+                    if "linkedin" in text.lower() and len(text) > 10:
+                        results.append(text)
+
+                # Selector set 2: New DDG layout (links-only variant)
+                if not results:
+                    for div in soup.find_all("div", class_=re.compile(r"result|web-result|nrn-react-div")):
+                        text = div.get_text(separator=" ", strip=True)
+                        if "linkedin" in text.lower() and len(text) > 20:
+                            results.append(text[:500])
+
+                # Selector set 3: Fallback — grab all anchor tags pointing to linkedin
+                if not results:
+                    for a_tag in soup.find_all("a", href=True):
+                        href = a_tag.get("href", "")
+                        if "linkedin.com/in/" in href:
+                            parent = a_tag.find_parent(["div", "li", "article"])
+                            if parent:
+                                text = parent.get_text(separator=" ", strip=True)
+                                if len(text) > 10:
+                                    results.append(text[:500])
+
+                if results:
+                    combined = " | ".join(results[:5])
+                    parsed = _parse_search_snippet(combined)
+                    if parsed.get("full_name") or len(parsed.get("raw_text", "")) > 15:
+                        parsed["_source"] = "duckduckgo"
+                        parsed["_quality"] = "SNIPPET"
+                        print(f"[LinkedIn·S6] ✓ DuckDuckGo success ({len(results)} results)")
+                        return parsed
+
+            await asyncio.sleep(0.3)
+        except Exception as e:
+            print(f"[LinkedIn·S6] DuckDuckGo error: {e}")
+            continue
+    return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STRATEGY 6b: Startpage Search (Privacy-focused, good LinkedIn indexing)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _strategy_startpage(username: str, name_hint: str = "") -> Optional[Dict[str, Any]]:
+    """Startpage proxies Google results without rate-limiting."""
     query = f'site:linkedin.com/in/{username}'
     if name_hint:
         query = f'site:linkedin.com "{name_hint}"'
 
     try:
-        search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+        search_url = f"https://www.startpage.com/do/dsearch?query={quote_plus(query)}&cat=web"
         headers = get_random_headers()
+        headers["Referer"] = "https://www.startpage.com/"
 
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
             resp = await client.get(search_url, headers=headers)
             if resp.status_code != 200:
                 return None
 
             soup = BeautifulSoup(resp.text, "html.parser")
             results = []
-            for div in soup.find_all("div", class_="result"):
-                title = div.find("a", class_="result__a")
-                snippet = div.find("a", class_="result__snippet")
-                text = ""
-                if title:
-                    text += title.get_text(strip=True) + " "
-                if snippet:
-                    text += snippet.get_text(strip=True)
-                if "linkedin" in text.lower():
-                    results.append(text)
+            for div in soup.find_all(["div", "article"], class_=re.compile(r"result|w-gl")):
+                text = div.get_text(separator=" ", strip=True)
+                if "linkedin" in text.lower() and len(text) > 20:
+                    results.append(text[:500])
 
             if results:
                 combined = " | ".join(results[:3])
                 parsed = _parse_search_snippet(combined)
-                if parsed.get("full_name") or len(parsed.get("raw_text", "")) > 15:
-                    parsed["_source"] = "duckduckgo"
+                if parsed.get("full_name") or len(parsed.get("raw_text", "")) > 30:
+                    parsed["_source"] = "startpage"
                     parsed["_quality"] = "SNIPPET"
-                    print(f"[LinkedIn·S6] ✓ DuckDuckGo success")
+                    print(f"[LinkedIn·S6b] ✓ Startpage success")
                     return parsed
 
     except Exception as e:
-        print(f"[LinkedIn·S6] DuckDuckGo error: {e}")
+        print(f"[LinkedIn·S6b] Startpage error: {e}")
     return None
 
 
@@ -1066,12 +1136,16 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
     data = None
     raw_text_for_ai = ""  # Collect raw text for Strategy 10
     _partial_raw_texts = []  # Collect partial text from ALL strategies
+    _strategy_log = []  # Track which strategies were tried and their outcome
 
     # ─── Strategy 1: Voyager API (BEST quality) ───
     print(f"[LinkedIn] S1: Voyager API for '{username}'...")
     data = await _strategy_voyager_api(username)
     if data:
         rate_limit_record()
+        _strategy_log.append("S1:Voyager ✓")
+    else:
+        _strategy_log.append("S1:Voyager ✗" if get_li_at() else "S1:Voyager SKIP(no cookie)")
 
     # ─── Strategy 2: Authenticated Render ───
     if not data:
@@ -1082,6 +1156,9 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
             rate_limit_record()
             raw_text_for_ai = data.get("raw_text", "")
             _partial_raw_texts.append(raw_text_for_ai)
+            _strategy_log.append("S2:AuthRender ✓")
+        else:
+            _strategy_log.append("S2:AuthRender ✗" if get_li_at() else "S2:AuthRender SKIP(no cookie)")
 
     # ─── Strategy 3: Google CSE API ───
     if not data:
@@ -1091,33 +1168,38 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         if data:
             raw_text_for_ai = data.get("raw_text", "")
             _partial_raw_texts.append(raw_text_for_ai)
+            _strategy_log.append("S3:GoogleCSE ✓")
+        else:
+            _strategy_log.append("S3:GoogleCSE ✗" if get_google_cse_key() else "S3:GoogleCSE SKIP(no key)")
 
-    # ─── Strategy 4: Google Search Scrape ───
+    # ─── Strategies 4-6: Parallel Search Execution ───
+    # Run Google, Bing, DuckDuckGo in parallel for speed + more raw text
     if not data:
-        print(f"[LinkedIn] S4: Google Search...")
-        await asyncio.sleep(get_delay())
-        data = await _strategy_google_search(username)
-        if data:
-            raw_text_for_ai = data.get("raw_text", "")
-            _partial_raw_texts.append(raw_text_for_ai)
+        print(f"[LinkedIn] S4-S6: Parallel search (Google+Bing+DDG+Startpage)...")
+        search_tasks = [
+            _strategy_google_search(username),
+            _strategy_bing_search(username),
+            _strategy_duckduckgo(username),
+            _strategy_startpage(username),
+        ]
+        search_results = await asyncio.gather(*search_tasks, return_exceptions=True)
+        search_names = ["S4:Google", "S5:Bing", "S6:DDG", "S6b:Startpage"]
 
-    # ─── Strategy 5: Bing Search ───
-    if not data:
-        print(f"[LinkedIn] S5: Bing Search...")
-        await asyncio.sleep(get_delay())
-        data = await _strategy_bing_search(username)
-        if data:
-            raw_text_for_ai = data.get("raw_text", "")
-            _partial_raw_texts.append(raw_text_for_ai)
-
-    # ─── Strategy 6: DuckDuckGo ───
-    if not data:
-        print(f"[LinkedIn] S6: DuckDuckGo...")
-        await asyncio.sleep(get_delay() * 0.5)
-        data = await _strategy_duckduckgo(username)
-        if data:
-            raw_text_for_ai = data.get("raw_text", "")
-            _partial_raw_texts.append(raw_text_for_ai)
+        for i, sr in enumerate(search_results):
+            if isinstance(sr, dict) and sr:
+                if not data:
+                    data = sr
+                    _strategy_log.append(f"{search_names[i]} ✓ (used)")
+                else:
+                    _strategy_log.append(f"{search_names[i]} ✓ (collected text)")
+                # Always collect raw text from successful searches
+                sr_text = sr.get("raw_text", "")
+                if sr_text:
+                    _partial_raw_texts.append(sr_text)
+            elif isinstance(sr, Exception):
+                _strategy_log.append(f"{search_names[i]} ✗ ({type(sr).__name__})")
+            else:
+                _strategy_log.append(f"{search_names[i]} ✗")
 
     # ─── Strategy 7: Direct Scrape ───
     if not data:
@@ -1127,6 +1209,9 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         if data:
             raw_text_for_ai = data.get("raw_text", "")
             _partial_raw_texts.append(raw_text_for_ai)
+            _strategy_log.append("S7:DirectScrape ✓")
+        else:
+            _strategy_log.append("S7:DirectScrape ✗")
 
     # ─── Strategy 8: Google Cache ───
     if not data:
@@ -1135,6 +1220,9 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         if data:
             raw_text_for_ai = data.get("raw_text", "")
             _partial_raw_texts.append(raw_text_for_ai)
+            _strategy_log.append("S8:Cache ✓")
+        else:
+            _strategy_log.append("S8:Cache ✗")
 
     # ─── Strategy 9: Wayback Machine ───
     if not data:
@@ -1143,36 +1231,59 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         if data:
             raw_text_for_ai = data.get("raw_text", "")
             _partial_raw_texts.append(raw_text_for_ai)
+            _strategy_log.append("S9:Wayback ✓")
+        else:
+            _strategy_log.append("S9:Wayback ✗")
 
-    # ─── Always try DuckDuckGo to collect raw text for Strategy 10 ───
+    # ─── Aggregate raw text for AI extraction ───
+    # Always try to collect raw text even if no structured data was found
     if not raw_text_for_ai:
+        # Try multiple search engines in parallel just for raw text collection
         try:
-            query = f"linkedin.com/in/{username} developer"
-            ddg_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
-            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-                resp = await client.get(ddg_url, headers=get_random_headers())
-                if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, "html.parser")
-                    snippets = []
-                    for div in soup.find_all("div", class_="result"):
-                        text = div.get_text(separator=" ", strip=True)
-                        if "linkedin" in text.lower():
-                            snippets.append(text)
-                    if snippets:
-                        raw_text_for_ai = " ".join(snippets[:5])[:3000]
-                        print(f"[LinkedIn] DDG fallback collected {len(raw_text_for_ai)} chars of raw text")
+            raw_queries = [
+                f"linkedin.com/in/{username} developer",
+                f'"{username.replace("-", " ")}" linkedin profile',
+            ]
+            for rq in raw_queries:
+                if raw_text_for_ai:
+                    break
+                ddg_url = f"https://html.duckduckgo.com/html/?q={quote_plus(rq)}"
+                async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                    resp = await client.get(ddg_url, headers=get_random_headers())
+                    if resp.status_code == 200:
+                        soup = BeautifulSoup(resp.text, "html.parser")
+                        snippets = []
+                        # Use broader selectors
+                        for el in soup.find_all(["div", "a", "span"], class_=re.compile(r"result|snippet|desc")):
+                            text = el.get_text(separator=" ", strip=True)
+                            if "linkedin" in text.lower() and len(text) > 15:
+                                snippets.append(text)
+                        # Fallback — grab all text near linkedin links
+                        if not snippets:
+                            for a_tag in soup.find_all("a", href=True):
+                                if "linkedin.com" in a_tag.get("href", ""):
+                                    parent = a_tag.find_parent(["div", "li"])
+                                    if parent:
+                                        t = parent.get_text(separator=" ", strip=True)
+                                        if len(t) > 15:
+                                            snippets.append(t[:500])
+                        if snippets:
+                            raw_text_for_ai = " ".join(snippets[:5])[:3000]
+                            print(f"[LinkedIn] DDG fallback collected {len(raw_text_for_ai)} chars of raw text")
         except Exception:
             pass
 
-    # Also merge any partial texts collected earlier
-    if not raw_text_for_ai and _partial_raw_texts:
-        raw_text_for_ai = " | ".join(t for t in _partial_raw_texts if t)[:3000]
+    # Merge any partial texts collected from ALL strategies
+    if _partial_raw_texts:
+        merged = " | ".join(t for t in _partial_raw_texts if t)[:5000]
+        if len(merged) > len(raw_text_for_ai):
+            raw_text_for_ai = merged
 
     # ─── Strategy 10: AI-Enhanced Extraction ───
     # Run AI extraction when we have raw_text, regardless of whether data exists
     if raw_text_for_ai and (not data or data.get("_quality") in ("SNIPPET", "CACHED", "ARCHIVED", "META", None)):
         quality_label = data.get('_quality', 'raw_text') if data else 'raw_text_only'
-        print(f"[LinkedIn] S10: AI Enhancement on {quality_label} data...")
+        print(f"[LinkedIn] S10: AI Enhancement on {quality_label} data ({len(raw_text_for_ai)} chars)...")
         ai_data = await _strategy_ai_extraction(raw_text_for_ai if not data else (raw_text_for_ai or data.get("raw_text", "")), username)
         if ai_data:
             if data:
@@ -1193,12 +1304,17 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
             else:
                 # No data at all — use AI result directly
                 data = ai_data
+            _strategy_log.append("S10:AI ✓")
+        else:
+            _strategy_log.append("S10:AI ✗")
     elif not data and raw_text_for_ai:
         # Last resort: run AI on whatever raw text we collected
-        print(f"[LinkedIn] S10: AI extraction from raw text...")
+        print(f"[LinkedIn] S10: AI extraction from raw text ({len(raw_text_for_ai)} chars)...")
         data = await _strategy_ai_extraction(raw_text_for_ai, username)
+        _strategy_log.append(f"S10:AI {'✓' if data else '✗'}")
 
     # ─── Process result ───
+    strategy_summary = " → ".join(_strategy_log)
     if data:
         normalized = _normalize_linkedin_data(data)
         result["accessible"] = True
@@ -1220,20 +1336,31 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         result["note"] = f"LinkedIn data extracted via {normalized['_source'].replace('_', ' ')} (quality: {normalized['_quality']})."
         result["recommendation"] = "Profile data available for cross-reference with resume."
         print(f"[LinkedIn] ✓ SUCCESS via {normalized['_source']}: {normalized['name']} [quality={normalized['_quality']}]")
+        print(f"[LinkedIn] Strategy log: {strategy_summary}")
 
         # Cache successful result
         cache_set(cache_key, result)
     else:
         result["blocked"] = True
+        # Build informative error message showing what was tried
+        has_cookie = bool(get_li_at())
+        has_cse = bool(get_google_cse_key())
+        tips = []
+        if not has_cookie:
+            tips.append("Set LINKEDIN_LI_AT env var for Voyager API + Authenticated Render")
+        if not has_cse:
+            tips.append("Set GOOGLE_CSE_API_KEY + GOOGLE_CSE_CX for reliable Google Custom Search")
+        tips_text = " Tips: " + "; ".join(tips) if tips else ""
         result["note"] = (
-            "LinkedIn automated access unavailable (all 10 strategies tried). "
-            "Use the 'Paste LinkedIn' feature to manually provide profile text."
+            f"LinkedIn automated access unavailable — tried: {strategy_summary}.{tips_text} "
+            f"Use the 'Paste LinkedIn' feature to manually provide profile text."
         )
         result["recommendation"] = (
             "Visit the LinkedIn URL directly and use the 'Paste LinkedIn text' feature. "
             "Check: work history dates, endorsements, connections count, and activity level."
         )
         result["source"] = "none"
-        print(f"[LinkedIn] ✗ All 10 strategies failed for {clean_url}")
+        print(f"[LinkedIn] ✗ All strategies failed for {clean_url}")
+        print(f"[LinkedIn] Strategy log: {strategy_summary}")
 
     return result

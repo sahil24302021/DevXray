@@ -33,7 +33,8 @@ log = get_logger("scoring")
 #  AUTHENTICITY NORMALIZATION FIX
 # ═══════════════════════════════════════════════════════
 
-def normalize_authenticity(raw_authenticity: float, repos: List[Dict] = None, commits: List[Dict] = None) -> float:
+def normalize_authenticity(raw_authenticity: float, repos: List[Dict] = None, commits: List[Dict] = None,
+                          account_age_months: float = 0, bio: str = "") -> float:
     """
     Normalize the authenticity score to a 0-100 range.
 
@@ -43,10 +44,8 @@ def normalize_authenticity(raw_authenticity: float, repos: List[Dict] = None, co
     Also applies a data-aware floor: a developer with real repos and commits cannot
     have an authenticity score of near-zero — that indicates a formula bug, not fraud.
 
-    Scale detection:
-      - If value > 1.0 → already 0-100 scale → use as-is
-      - If value <= 1.0 → could be 0-1 scale (multiply by 100) OR a genuine near-zero
-        In the 0-1 case, we apply a floor based on evidence strength.
+    v2 FIX: Added organic commit ratio check — if commits show organic patterns
+    (varied times, different repos), the floor is raised significantly.
     """
     if repos is None:
         repos = []
@@ -65,29 +64,45 @@ def normalize_authenticity(raw_authenticity: float, repos: List[Dict] = None, co
         # On 0-1 scale — multiply by 100
         normalized = min(raw_authenticity * 100.0, 100.0)
 
-    # Step 2: Evidence-aware floor
-    # A developer cannot have near-zero authenticity if they have real repos and commits.
-    # If the engine computed < 15 but the developer has substantial activity,
-    # this is almost certainly a formula bug (e.g., bulk-commit penalty applied too harshly).
-    #
-    # Floor thresholds:
-    #   5+ repos + 20+ commits → floor of 20
-    #   10+ repos + 50+ commits → floor of 30
-    #   20+ repos + 100+ commits → floor of 40
+    # Step 2: Organic activity detection
+    # Check if commits are from multiple repos and different dates (organic pattern)
+    organic_signal = 0
+    if commits:
+        unique_repos = len(set(c.get("repo", c.get("repo_name", "")) for c in commits if isinstance(c, dict)))
+        unique_dates = len(set(str(c.get("date", ""))[:10] for c in commits if isinstance(c, dict) and c.get("date")))
+        if unique_repos >= 3:
+            organic_signal += 1
+        if unique_dates >= 5:
+            organic_signal += 1
+        if unique_dates >= 15:
+            organic_signal += 1
+
+    # Step 3: Evidence-aware floor with organic boost
+    # v2: More aggressive floors for developers with organic activity
     floor = 0.0
     if repo_count >= 20 and commit_count >= 100:
-        floor = 40.0
+        floor = 55.0 if organic_signal >= 2 else 40.0
     elif repo_count >= 10 and commit_count >= 50:
-        floor = 30.0
+        floor = 45.0 if organic_signal >= 2 else 30.0
     elif repo_count >= 5 and commit_count >= 20:
-        floor = 20.0
+        floor = 35.0 if organic_signal >= 1 else 20.0
     elif repo_count >= 2 and commit_count >= 5:
+        floor = 20.0 if organic_signal >= 1 else 10.0
+    elif repo_count >= 1 and commit_count >= 1:
         floor = 10.0
+
+    # Step 3b: Student/early-career boost
+    # Students with real repos should get a higher baseline
+    is_student = any(kw in bio.lower() for kw in ["student", "b.tech", "btech", "undergrad",
+                      "university", "college", "freshman", "sophomore", "learning", "learner"]) if bio else False
+    if is_student and account_age_months > 0 and account_age_months < 24 and repo_count >= 3:
+        floor = max(floor, 30.0)
+        log.info(f"[Authenticity] Student profile detected — floor raised to {floor}")
 
     if normalized < floor:
         log.warning(
             f"[Authenticity] Score {normalized:.1f} is below evidence-based floor {floor:.0f} "
-            f"(repos={repo_count}, commits={commit_count}). "
+            f"(repos={repo_count}, commits={commit_count}, organic={organic_signal}). "
             f"Applying floor — this indicates a formula calibration issue in the authenticity engine."
         )
         normalized = floor
@@ -512,6 +527,7 @@ def detect_career_stage(
 def apply_career_calibration(
     weights: Dict[str, float],
     career_stage: str,
+    bio: str = "",
 ) -> Dict[str, float]:
     """
     Adjust scoring weights based on career stage.
@@ -521,12 +537,23 @@ def apply_career_calibration(
       - Reduce consistency expectation (they're still building habits)
       - Slightly reduce skill_depth expectation
 
-    This prevents senior-level bias when evaluating early-career developers.
+    v2 FIX: Bio-aware calibration — if bio contains student keywords,
+    apply even stronger calibration to avoid unfairly penalizing students.
     """
-    if career_stage == "student":
-        weights["growth"] = round(weights.get("growth", 0.10) + 0.08, 3)
-        weights["consistency"] = round(max(weights.get("consistency", 0.15) - 0.06, 0.02), 3)
-        weights["skill_depth"] = round(max(weights.get("skill_depth", 0.20) - 0.02, 0.05), 3)
+    # Detect student from bio text
+    is_student_bio = any(kw in bio.lower() for kw in [
+        "student", "b.tech", "btech", "undergrad", "university", "college",
+        "freshman", "sophomore", "learning", "learner", "intern",
+    ]) if bio else False
+
+    if career_stage == "student" or (career_stage == "junior" and is_student_bio):
+        # v2: More aggressive calibration for students
+        weights["growth"] = round(weights.get("growth", 0.10) + 0.10, 3)
+        weights["consistency"] = round(max(weights.get("consistency", 0.15) - 0.08, 0.02), 3)
+        weights["skill_depth"] = round(max(weights.get("skill_depth", 0.20) - 0.04, 0.05), 3)
+        # Reduce code quality penalty — students are learning, not shipping to prod
+        weights["code_quality"] = round(max(weights.get("code_quality", 0.30) - 0.03, 0.10), 3)
+        log.info(f"Student calibration applied (bio_detected={is_student_bio})")
     elif career_stage == "junior":
         weights["growth"] = round(weights.get("growth", 0.10) + 0.04, 3)
         weights["consistency"] = round(max(weights.get("consistency", 0.15) - 0.03, 0.05), 3)

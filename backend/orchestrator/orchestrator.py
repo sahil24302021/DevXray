@@ -356,6 +356,7 @@ def _run_core_pipeline(
             detected_packages=all_packages,
             account_age_years=account_age_years,
             proof=proof,
+            repo_data=deep_data.get("repo_data", {}) if deep_data else {},
         )
     timing["truth_engine"] = round(time.time() - t0, 3)
 

@@ -1,15 +1,4 @@
-"""
-System Design Engine — Architecture & Design Quality Analysis.
 
-Analyzes:
-  - Architecture type detection (MVC, Clean, Microservices, Modular, Monolith)
-  - API design quality (versioning, middleware, auth patterns, validation)
-  - Scalability indicators (caching, queues, workers, connection pooling)
-  - Folder structure maturity (separation of concerns, config management)
-  - Database design quality (migrations, indexing, relationships)
-
-NO AI INVOLVEMENT — Pure deterministic pattern analysis.
-"""
 import re
 from collections import Counter
 from typing import Any, Dict, List, Optional, Tuple

@@ -22,6 +22,7 @@ def match_projects(
     resume_projects: List[Dict[str, Any]],
     github_repos: List[Dict[str, Any]],
     proof: ProofCollector,
+    repo_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Match resume projects against GitHub repositories.
@@ -31,19 +32,21 @@ def match_projects(
         unverified: Projects with no matching repo
         extra_repos: Repos not mentioned in resume (hidden work)
 
-    FIX: Threshold tuned — "CODE-REVIWER" (typo) should match "AI Code Reviewer".
-    We also match against repo description for projects with AI/tech keywords.
+    v2 FIX:
+     - Threshold tuned @ 0.55
+     - Uses repo file contents + README for deeper verification
+     - Checks actual imports/class names in fetched files
     """
-    MATCH_THRESHOLD = 0.55  # Slightly lowered to catch typo mismatches
+    MATCH_THRESHOLD = 0.55
     claims: List[Dict[str, Any]] = []
     matched_repos: set = set()
+    if repo_data is None:
+        repo_data = {}
 
     repo_map = {r.get("name", "").lower(): r for r in github_repos}
     repo_names = list(repo_map.keys())
 
     for project in resume_projects:
-        # FIX: Gemini resume parser is nondeterministic in key names.
-        # Try all known key variants so proj_name is never empty string.
         proj_name = (
             project.get("name")
             or project.get("project_name")
@@ -81,13 +84,9 @@ def match_projects(
             repo_desc = repo.get("description", "") or ""
             desc_score = _fuzzy_match(proj_desc, repo_desc) if proj_desc and repo_desc else 0.0
 
-            # Also try matching project name words against repo name
-            # e.g. "AI Code Reviewer" → words ["ai", "code", "reviewer"]
-            # vs repo "code-reviwer" → should get a decent score
             proj_words = set(_normalize_name(proj_name))
             repo_words = set(_normalize_name(repo_name))
             if len(proj_words) > 0 and len(repo_words) > 0:
-                # Jaccard similarity on characters (handles typos better)
                 intersection = len(proj_words & repo_words)
                 union = len(proj_words | repo_words)
                 char_jaccard = intersection / union if union > 0 else 0
@@ -100,7 +99,16 @@ def match_projects(
                     tech_bonus = 0.1
                     break
 
-            # Description keyword overlap bonus
+            # v2 FIX: Check README for technology mentions
+            rd = repo_data.get(repo.get("name", ""), {})
+            readme_text = (rd.get("readme", "") or "").lower()
+            if readme_text and proj_techs:
+                readme_tech_hits = sum(1 for t in proj_techs if t.lower() in readme_text)
+                if readme_tech_hits >= 2:
+                    tech_bonus = max(tech_bonus, 0.15)
+                elif readme_tech_hits >= 1:
+                    tech_bonus = max(tech_bonus, 0.08)
+
             if proj_desc and repo_desc:
                 proj_keywords = set(re.findall(r'\b\w{4,}\b', proj_desc.lower()))
                 repo_keywords = set(re.findall(r'\b\w{4,}\b', repo_desc.lower()))
@@ -117,12 +125,35 @@ def match_projects(
             matched_repos.add(best_match)
             repo = repo_map[best_match]
 
-            status = "SUPPORTED" if best_score >= 0.75 else "PARTIALLY_SUPPORTED"
+            # v2 FIX: Verify claimed techs against actual file contents
+            rd = repo_data.get(repo.get("name", ""), {})
+            file_verified_techs = []
+            if rd.get("files") and proj_techs:
+                all_file_content = " ".join(f.get("content", "")[:3000] for f in rd.get("files", []) if isinstance(f, dict))
+                for tech in proj_techs:
+                    tech_lower = tech.lower()
+                    # Check for import/require statements
+                    import_patterns = [
+                        f"import {tech_lower}", f"from {tech_lower}",
+                        f"require('{tech_lower}')", f"require(\"{tech_lower}\")",
+                        f"import {{ {tech_lower}", f"import {tech}",
+                    ]
+                    if any(p in all_file_content.lower() for p in import_patterns):
+                        file_verified_techs.append(tech)
+
+            # Upgrade status if file content confirms technologies
+            if file_verified_techs:
+                status = "SUPPORTED"
+                evidence_extra = f" | File-verified: {', '.join(file_verified_techs)}"
+            else:
+                status = "SUPPORTED" if best_score >= 0.75 else "PARTIALLY_SUPPORTED"
+                evidence_extra = ""
+
             claims.append({
                 "claim": proj_name,
                 "status": status,
                 "confidence": round(best_score, 2),
-                "evidence": [f"Matched repo '{best_match}'", repo.get("html_url", "")],
+                "evidence": [f"Matched repo '{best_match}'{evidence_extra}", repo.get("html_url", "")],
                 "repo_name": best_match,
                 "repo_stars": repo.get("stars", 0)
             })
@@ -132,35 +163,58 @@ def match_projects(
                 detail=(
                     f"Resume project '{proj_name}' {status} by repo "
                     f"'{best_match}' (confidence: {round(best_score * 100)}%)"
+                    f"{' [file-verified: ' + ','.join(file_verified_techs) + ']' if file_verified_techs else ''}"
                 ),
             )
         else:
-            # FIX: Use WEAK_SIGNAL instead of UNVERIFIED when there's a partial match.
-            # UNVERIFIED should only be used when there's genuinely zero evidence.
-            if best_match and best_score >= 0.3:
-                status = "WEAK_SIGNAL"
-                evidence = [
-                    f"Possible match: '{best_match}' (similarity {round(best_score, 2)}) — "
-                    f"may be private repo or different name"
-                ]
-            else:
-                status = "UNVERIFIABLE"  # Changed from UNVERIFIED — absence ≠ fabrication
-                evidence = [
-                    "No matching public repository found — may be private or renamed"
-                ]
+            # v2: Before giving up, check README text for project keywords
+            readme_match_found = False
+            if proj_name:
+                for rn in repo_names:
+                    if rn in matched_repos:
+                        continue
+                    rd = repo_data.get(repo_map[rn].get("name", ""), {})
+                    readme_text = (rd.get("readme", "") or "").lower()
+                    if readme_text and len(readme_text) > 50:
+                        proj_name_words = [w for w in proj_name.lower().split() if len(w) > 3]
+                        if proj_name_words and sum(1 for w in proj_name_words if w in readme_text) >= len(proj_name_words) * 0.5:
+                            matched_repos.add(rn)
+                            claims.append({
+                                "claim": proj_name,
+                                "status": "PARTIALLY_SUPPORTED",
+                                "confidence": 0.6,
+                                "evidence": [f"Project keyword match found in README of repo '{rn}'"],
+                                "repo_name": rn,
+                                "repo_stars": repo_map[rn].get("stars", 0)
+                            })
+                            readme_match_found = True
+                            break
 
-            claims.append({
-                "claim": proj_name,
-                "status": status,
-                "confidence": round(best_score, 2),
-                "evidence": evidence,
-                "repo_name": None,
-                "repo_stars": 0
-            })
-            proof.add(
-                evidence_type="truth_verification",
-                detail=f"Resume project '{proj_name}' {status} (best score: {round(best_score, 2)})",
-            )
+            if not readme_match_found:
+                if best_match and best_score >= 0.3:
+                    status = "WEAK_SIGNAL"
+                    evidence = [
+                        f"Possible match: '{best_match}' (similarity {round(best_score, 2)}) — "
+                        f"may be private repo or different name"
+                    ]
+                else:
+                    status = "UNVERIFIABLE"
+                    evidence = [
+                        "No matching public repository found — may be private or renamed"
+                    ]
+
+                claims.append({
+                    "claim": proj_name,
+                    "status": status,
+                    "confidence": round(best_score, 2),
+                    "evidence": evidence,
+                    "repo_name": None,
+                    "repo_stars": 0
+                })
+                proof.add(
+                    evidence_type="truth_verification",
+                    detail=f"Resume project '{proj_name}' {status} (best score: {round(best_score, 2)})",
+                )
 
     extra_repos = [
         repo_map[r]["name"] for r in repo_names
@@ -173,6 +227,7 @@ def match_projects(
         "extra_repos": extra_repos[:10],
         "match_rate": round(verified_count / max(len(resume_projects), 1), 2),
     }
+
 
 
 # ═══════════════════════════════════════════════════════
@@ -350,9 +405,25 @@ def verify_skills(
 
     overlap = verified_count / max(len(claimed), 1)
 
+    # v2 FIX: Surface hidden skills as a strong positive signal
+    hidden_skills_message = ""
+    if len(hidden) >= 5:
+        hidden_skills_message = (
+            f"Candidate demonstrates {len(hidden)} technologies in their codebase that are NOT listed on their resume "
+            f"({', '.join(h['skill'] for h in hidden[:8])}). This strongly suggests the candidate is more skilled "
+            f"than their resume indicates."
+        )
+    elif len(hidden) >= 2:
+        hidden_skills_message = (
+            f"Candidate uses {len(hidden)} unlisted technologies ({', '.join(h['skill'] for h in hidden[:5])}). "
+            f"Resume may underrepresent actual capabilities."
+        )
+
     return {
         "claims": claims,
-        "hidden_skills": hidden[:10],
+        "hidden_skills": hidden[:15],
+        "hidden_skills_message": hidden_skills_message,
+        "hidden_skills_count": len(hidden),
         "overlap_percentage": round(overlap * 100, 1),
     }
 
@@ -459,6 +530,7 @@ def run_truth_engine(
     detected_packages: Optional[List[str]] = None,
     account_age_years: float = 0.0,
     proof: Optional[ProofCollector] = None,
+    repo_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Master function: compute truth score from resume + GitHub comparison.
@@ -467,19 +539,23 @@ def run_truth_engine(
       40% project match rate +
       40% skill overlap +
       20% timeline plausibility
+
+    v2: Now accepts repo_data for file-level verification & README matching.
     """
     if proof is None:
         proof = ProofCollector()
 
     if detected_packages is None:
         detected_packages = []
+    if repo_data is None:
+        repo_data = {}
 
     resume_projects = resume_data.get("projects", [])
     resume_skills = resume_data.get("technical_skills", {})
     resume_years = resume_data.get("years_of_experience", 0) or 0
 
-    # Project matching
-    project_match = match_projects(resume_projects, github_repos, proof)
+    # Project matching (v2: with repo_data for file + README verification)
+    project_match = match_projects(resume_projects, github_repos, proof, repo_data=repo_data)
 
     # Skill verification
     skill_match = verify_skills(resume_skills, detected_skills, proof)

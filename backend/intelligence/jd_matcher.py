@@ -1,6 +1,4 @@
-"""
-Job Description Matcher — Computes alignment between candidate skills and a pasted JD.
-"""
+
 from typing import Dict, Any, List
 from services.gemini_client import generate_json
 

@@ -1,9 +1,4 @@
-"""
-LeetCode Profile Fetcher — Fetches competitive programming stats
-via the LeetCode GraphQL API.
 
-Used to verify problem-solving ability and algorithmic skill claims.
-"""
 import httpx
 from typing import Dict, Any, Optional
 

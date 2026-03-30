@@ -1,9 +1,4 @@
-"""
-NPM and PyPI Package Registry Verification.
 
-Checks if a developer has published packages on npm or PyPI,
-which is a strong credibility signal for experienced developers.
-"""
 import httpx
 from typing import Dict, List, Any, Optional
 

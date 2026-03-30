@@ -1,30 +1,4 @@
-"""
-Contribution Authenticity Engine + Advanced Anti-Cheat System.
 
-Detects fake or inflated GitHub profiles using:
-  - Commit frequency pattern analysis (burst detection, time distribution)
-  - Commit size distribution (giant single commits vs organic)
-  - PR vs direct commit ratio
-  - Repo ownership vs contribution detection
-  - Commit message entropy (Shannon entropy — low = repetitive/bot)
-  - Code similarity / repetitive structure detection
-  - Template project detection
-
-NO AI INVOLVEMENT — Pure statistical computation.
-
-FIXES v2:
-  1. AI code detection heuristics corrected:
-     - Uniform snake_case naming is Python best practice, NOT an AI signal
-     - High doc-to-code ratio is professional practice, NOT suspicious
-     - Only flag genuinely suspicious AI patterns
-  2. Evidence-aware minimum score floor:
-     - A developer with 10+ repos and 50+ commits cannot have near-zero authenticity
-     - This prevents calibration bugs from wrongly labeling real developers as fake
-  3. Solo developer context:
-     - No PR workflow is normal for solo projects — severity reduced to INFO
-     - Penalty removed from direct-push-only pattern
-  4. Score output is 0-1 range (kept same as before — intentional for scoring_engine)
-"""
 import math
 import re
 from collections import Counter

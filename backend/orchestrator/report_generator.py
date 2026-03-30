@@ -1,19 +1,4 @@
-"""
-Report Generator — Assembles the final Developer Intelligence Report.
 
-Takes output from all engines and builds the structured JSON report.
-Also generates the legacy-compatible response format for the existing frontend.
-
-FIX v2: authenticity_score normalization.
-The authenticity engine outputs 0.0-1.0 (e.g. 0.84).
-Previously this was stored raw, causing:
-  - Frontend to display "0.84%" instead of "84%"
-  - _generate_strengths checking auth_score >= 80 (never true for 0.84)
-  - _generate_weaknesses checking auth_score < 50 (always true for 0.84)
-
-Fix: normalize once in generate_report() using _normalize_auth_score(),
-then pass the 0-100 value everywhere consistently.
-"""
 from typing import Any, Dict, List, Optional, Union
 
 from scoring.scoring_engine import normalize_authenticity
@@ -285,8 +270,9 @@ def _generate_strengths(
 
     top = skills.get("top_skills", [])
     if top and top[0].get("skill_score", 0) >= 7:
+        score_display = top[0].get("formatted_score", f"{top[0]['skill_score']}/10")
         strengths.append(
-            f"Deep expertise in {top[0]['skill_name']} (score: {top[0]['skill_score']}/10)"
+            f"Deep expertise in {top[0]['skill_name']} — score: {score_display}"
         )
 
     skill_count = skills.get("total_skills_detected", 0)
@@ -374,13 +360,14 @@ def _generate_interview_questions(
 
     if top_skills:
         primary = top_skills[0]
+        score_display = primary.get("formatted_score", f"{primary.get('skill_score', 0)}/10")
         questions.append({
             "category": "Technical Depth",
             "question": (
                 f"Walk me through the architecture of your most complex "
                 f"{primary['skill_name']} project. What were the key technical decisions?"
             ),
-            "why": f"Primary skill ({primary['skill_score']}/10) — verify genuine depth",
+            "why": f"Primary skill ({score_display}) — verify genuine depth",
         })
 
     for weakness in weaknesses[:2]:

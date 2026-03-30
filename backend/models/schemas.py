@@ -1,7 +1,4 @@
-"""
-Pydantic Models for the Developer Intelligence Platform.
-Type-safe request/response schemas for all API endpoints.
-"""
+
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 

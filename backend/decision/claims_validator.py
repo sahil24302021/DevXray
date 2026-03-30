@@ -1,18 +1,4 @@
-"""
-World-Class Claims Validator.
-Cross-references resume claims against real GitHub data, portfolio content,
-and detected inconsistencies to produce an Authenticity Report.
 
-KEY FIXES v2:
-  1. Today's date injected into Gemini prompt — prevents LLM from calling
-     past dates "future" due to training cutoff confusion.
-  2. Actual repo list built from the report structure and passed to Gemini —
-     prevents "top_repos is empty" hallucination.
-  3. Plain-English account age injected — "7 months old" is clearer than a
-     raw ISO timestamp.
-  4. UNVERIFIABLE vs SUSPICIOUS distinction — missing data ≠ fabrication.
-  5. Removed overly harsh scoring baseline assumptions.
-"""
 import json
 from datetime import datetime, timezone
 from typing import Dict, Any, List

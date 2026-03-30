@@ -1,23 +1,4 @@
-"""
-AI Code Detection Engine — Forensic 12-Pattern Analysis.
 
-Detects AI-generated code through structural, stylometric, and statistical signals.
-NO false positives: uses a weighted evidence system, not a binary classifier.
-
-Patterns analyzed:
-  1. Docstring density (AI always documents every function)
-  2. Comment uniformity (AI comments are robotic/generic)
-  3. Variable naming entropy (AI uses over-verbose names)
-  4. Function length uniformity (AI functions are unnaturally even)
-  5. Import-to-code ratio (AI adds unnecessary library imports)
-  6. Error handling boilerplate (try/except everywhere, even trivially)
-  7. Commit message recurrence (AI bulk-commits with identical messages)
-  8. Code-to-blank-line ratio (AI code is over-spaced)
-  9. Magic number avoidance (AI always uses named constants)
- 10. Repetitive structure patterns (copy-paste-like class layouts)
- 11. Type hint over-annotation (AI annotates everything)
- 12. Test file signature analysis (AI writes assert-heavy boilerplate tests)
-"""
 import re
 import math
 from collections import Counter

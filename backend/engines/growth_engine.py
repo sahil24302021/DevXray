@@ -1,14 +1,4 @@
-"""
-Growth Engine — Developer Evolution Tracking.
 
-Analyzes:
-  - Commit timeline (activity density by quarter)
-  - Project complexity progression (are later repos more complex?)
-  - Tech stack evolution over time (new languages/frameworks adopted)
-  - Learning curve analysis (accelerating, steady, flat, decelerating)
-
-NO AI INVOLVEMENT — Pure temporal analysis.
-"""
 import math
 from collections import Counter, defaultdict
 from datetime import datetime, timezone, timedelta

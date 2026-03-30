@@ -1,8 +1,4 @@
-"""
-World-Class Resume Parser Service.
-Uses Gemini AI to deeply parse resumes — extracting every skill, claim,
-project, link, and timeline from the document.
-"""
+
 import io
 import os
 import json
@@ -229,24 +225,42 @@ URLs found in resume (for reference): {json.dumps(found_urls)}
                     val = "https://" + val.lstrip("/")
                 result[url_field] = val
 
-        # Regex fallback: search raw text for missed URLs
+        # ── v2 FIX: Stronger regex fallback for LinkedIn URL ──
+        # Handles: linkedin.com/in/xyz, www.linkedin.com/in/xyz, https://linkedin.com/in/xyz
         if not result.get("linkedin_url"):
-            li_match = re.search(r'linkedin\.com/in/[\w\-]+', text, re.I)
-            if li_match:
-                result["linkedin_url"] = "https://www." + li_match.group(0)
-                print(f"[ResumeParser] LinkedIn URL found via regex: {result['linkedin_url']}")
+            li_patterns = [
+                r'(?:https?://)?(?:www\.)?linkedin\.com/in/([\w\-]+)',
+                r'linkedin[\s.:]+com[\s/]+in[\s/]+([\w\-]+)',  # OCR-mangled URLs
+                r'(?:LinkedIn|Linkedin|LINKEDIN)[\s:]*(?:https?://)?(?:www\.)?linkedin\.com/in/([\w\-]+)',
+            ]
+            for pat in li_patterns:
+                li_match = re.search(pat, text, re.I)
+                if li_match:
+                    username_part = li_match.group(1) if li_match.lastindex else li_match.group(0)
+                    if "/" in username_part:
+                        username_part = username_part.split("/")[-1]
+                    result["linkedin_url"] = f"https://www.linkedin.com/in/{username_part}"
+                    print(f"[ResumeParser] LinkedIn URL found via regex: {result['linkedin_url']}")
+                    break
 
+        # ── v2 FIX: Stronger regex fallback for Portfolio URL ──
         if not result.get("portfolio_url"):
-            domain_match = re.search(
-                r'\b([\w\-]+\.(online|dev|io|me|site|app|tech|co))\b',
-                text, re.I
-            )
-            if domain_match:
-                candidate_domain = domain_match.group(0)
-                # Make sure it's not github/linkedin
-                if "github" not in candidate_domain.lower() and "linkedin" not in candidate_domain.lower():
-                    result["portfolio_url"] = "https://" + candidate_domain
-                    print(f"[ResumeParser] Portfolio URL found via regex: {result['portfolio_url']}")
+            domain_patterns = [
+                r'\b([\w\-]+\.(?:online|dev|io|me|site|app|tech|co|vercel\.app|netlify\.app|pages\.dev|web\.app))\b',
+                r'\b([\w\-]+\.(?:com|org|net))\b',
+            ]
+            for pat in domain_patterns:
+                for domain_match in re.finditer(pat, text, re.I):
+                    candidate_domain = domain_match.group(0)
+                    # Make sure it's not github/linkedin/google/npm/etc
+                    excluded = ["github", "linkedin", "google", "npmjs", "pypi", "medium",
+                                "stackoverflow", "leetcode", "hackerrank", "codechef"]
+                    if not any(exc in candidate_domain.lower() for exc in excluded):
+                        result["portfolio_url"] = "https://" + candidate_domain
+                        print(f"[ResumeParser] Portfolio URL found via regex: {result['portfolio_url']}")
+                        break
+                if result.get("portfolio_url"):
+                    break
 
         # Store raw text for downstream fallback matching
         result["_raw_text"] = text[:5000]

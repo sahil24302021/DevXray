@@ -1,27 +1,4 @@
-"""
-backend/ingestion/token_pool.py
-GitHub Token Rotation Pool — A6
 
-Manages a pool of GitHub Personal Access Tokens (PATs) to avoid hitting the
-60 req/hr anonymous rate limit.
-
-Usage:
-    from ingestion.token_pool import get_github_token
-
-    token = get_github_token()   # returns the least-recently-used token
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-
-Configuration:
-    Set one or more tokens in .env:
-        GITHUB_TOKEN=ghp_xxx
-        GITHUB_TOKEN_2=ghp_yyy
-        GITHUB_TOKEN_3=ghp_zzz
-
-    Or a comma-separated list:
-        GITHUB_TOKENS=ghp_xxx,ghp_yyy,ghp_zzz
-
-    If no tokens are set, the fetcher falls back to unauthenticated (60 req/hr).
-"""
 
 import os
 import time

@@ -95,41 +95,107 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
         windowWidth: 1200,
         scrollY: -window.scrollY,
         onclone: (clonedDoc: Document) => {
-          // Ensure framer-motion elements are visible
-          clonedDoc.querySelectorAll("[style]").forEach((node) => {
+          // ── FIX 1: Remove all CSS gradients (causes CanvasGradient crash) ──
+          clonedDoc.querySelectorAll("*").forEach((node) => {
             const htmlEl = node as HTMLElement;
-            if (htmlEl.style.opacity === "0" || htmlEl.style.transform) {
-              htmlEl.style.opacity = "1";
-              htmlEl.style.transform = "none";
+            const cs = htmlEl.style;
+            const computed = clonedDoc.defaultView?.getComputedStyle(htmlEl);
+
+            // Fix framer-motion invisible elements
+            if (cs.opacity === "0") cs.opacity = "1";
+            if (cs.transform && cs.transform !== "none") cs.transform = "none";
+
+            // Remove backdrop-filter (unsupported by html2canvas)
+            if (cs.backdropFilter) cs.backdropFilter = "none";
+            if ((cs as any).webkitBackdropFilter) (cs as any).webkitBackdropFilter = "none";
+
+            // Replace gradient backgrounds with solid fallback
+            const bg = computed?.background || computed?.backgroundImage || cs.background || cs.backgroundImage || "";
+            if (bg && (bg.includes("gradient") || bg.includes("linear-") || bg.includes("radial-"))) {
+              // Extract first color from gradient or use transparent dark
+              const colorMatch = bg.match(/#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\)/);
+              cs.background = colorMatch ? colorMatch[0] : "rgba(255,255,255,0.03)";
+              cs.backgroundImage = "none";
+            }
+
+            // Remove mix-blend-mode (unsupported)
+            if (computed?.mixBlendMode && computed.mixBlendMode !== "normal") {
+              cs.mixBlendMode = "normal";
+            }
+
+            // Remove CSS filter on non-SVG elements
+            if (computed?.filter && computed.filter !== "none" && htmlEl.tagName !== "SVG") {
+              cs.filter = "none";
             }
           });
-          // Hide print-hidden elements
-          clonedDoc.querySelectorAll(".print\\:hidden").forEach((node) => {
+
+          // ── FIX 2: Remove SVG filters and drop-shadows ──
+          clonedDoc.querySelectorAll("svg").forEach((svg) => {
+            svg.style.filter = "none";
+          });
+
+          // ── FIX 3: Hide print-hidden and decorative elements ──
+          clonedDoc.querySelectorAll(".print\\:hidden, [class*='grain-overlay'], [class*='pointer-events-none']").forEach((node) => {
             (node as HTMLElement).style.display = "none";
+          });
+
+          // ── FIX 4: Ensure all motion.div elements are visible ──
+          clonedDoc.querySelectorAll("[style*='opacity']").forEach((node) => {
+            const htmlEl = node as HTMLElement;
+            const opacity = parseFloat(htmlEl.style.opacity);
+            if (!isNaN(opacity) && opacity < 0.5) {
+              htmlEl.style.opacity = "1";
+            }
           });
         },
       });
 
       document.body.style.overflow = originalOverflow;
 
-      const imgWidth = 210; // A4 width in mm
-      const pageHeight = 297; // A4 height in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      // ── FIX 5: Proper per-page canvas slicing (no image duplication) ──
+      const imgWidthMM = 210; // A4 width in mm
+      const pageHeightMM = 297; // A4 height in mm
+      const imgWidthPx = canvas.width;
+      const imgHeightPx = canvas.height;
+      const pxPerMM = imgWidthPx / imgWidthMM;
+      const pageHeightPx = Math.floor(pageHeightMM * pxPerMM);
+      const totalPages = Math.ceil(imgHeightPx / pageHeightPx);
+
       const pdf = new jsPDF("p", "mm", "a4");
 
-      let heightLeft = imgHeight;
-      let position = 0;
-      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+      for (let page = 0; page < totalPages; page++) {
+        if (page > 0) pdf.addPage();
 
-      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+        // Create a per-page canvas slice
+        const sliceCanvas = document.createElement("canvas");
+        sliceCanvas.width = imgWidthPx;
+        const sliceHeight = Math.min(pageHeightPx, imgHeightPx - page * pageHeightPx);
+        sliceCanvas.height = sliceHeight;
 
-      while (heightLeft > 0) {
-        position = -(imgHeight - heightLeft);
-        pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+        const sliceCtx = sliceCanvas.getContext("2d");
+        if (sliceCtx) {
+          // Fill background first
+          sliceCtx.fillStyle = "#050505";
+          sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+          // Draw the relevant slice from the full canvas
+          sliceCtx.drawImage(
+            canvas,
+            0, page * pageHeightPx, imgWidthPx, sliceHeight,
+            0, 0, imgWidthPx, sliceHeight,
+          );
+        }
+
+        const sliceData = sliceCanvas.toDataURL("image/png");
+        const sliceHeightMM = (sliceHeight / pxPerMM);
+        pdf.addImage(sliceData, "PNG", 0, 0, imgWidthMM, sliceHeightMM);
       }
+
+      // PDF metadata
+      pdf.setProperties({
+        title: `DevXray Report — @${data?.username || "report"}`,
+        subject: "GitHub Developer Intelligence Report",
+        creator: "DevXray AI",
+      });
 
       pdf.save(`DevXray_${data?.username || "report"}_${new Date().toISOString().split("T")[0]}.pdf`);
     } catch (err) {

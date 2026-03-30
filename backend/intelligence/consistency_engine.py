@@ -1,27 +1,4 @@
-"""
-Consistency Engine — Developer Activity Regularity & Stability Analysis.
 
-Deep deterministic analysis of:
-  - Commit interval variance (statistical dispersion of commit timing)
-  - Activity stability (smoothed activity density)
-  - Inactivity gap detection (largest contiguous inactive periods)
-  - Repository completion ratio (finished vs abandoned projects)
-  - Streak consistency (sustained contribution patterns)
-  - Behavioral risk indicators
-
-Output:
-  {
-    "consistency_score": float (0-100),
-    "activity_stability": float (0-1),
-    "largest_gap_days": int,
-    "completion_ratio": float (0-1),
-    "commit_interval_variance": float,
-    "streak_weeks": int,
-    "risk_flags": [{"type": str, "severity": str, "detail": str}]
-  }
-
-NO AI INVOLVEMENT — Pure statistical computation.
-"""
 import math
 from collections import Counter, defaultdict
 from datetime import datetime, timezone, timedelta

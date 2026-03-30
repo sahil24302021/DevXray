@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -49,6 +49,97 @@ export default function ResumeReportPage() {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string>("");
+  const [isExporting, setIsExporting] = useState(false);
+  const reportRef = useRef<HTMLElement>(null);
+
+  const handleExportPDF = async () => {
+    if (!reportRef.current || isExporting) return;
+    setIsExporting(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+
+      const el = reportRef.current;
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "visible";
+
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#050505",
+        logging: false,
+        windowWidth: 1200,
+        scrollY: -window.scrollY,
+        onclone: (clonedDoc: Document) => {
+          clonedDoc.querySelectorAll("*").forEach((node) => {
+            const htmlEl = node as HTMLElement;
+            const cs = htmlEl.style;
+            const computed = clonedDoc.defaultView?.getComputedStyle(htmlEl);
+            if (cs.opacity === "0") cs.opacity = "1";
+            if (cs.transform && cs.transform !== "none") cs.transform = "none";
+            if (cs.backdropFilter) cs.backdropFilter = "none";
+            if ((cs as any).webkitBackdropFilter) (cs as any).webkitBackdropFilter = "none";
+            const bg = computed?.background || computed?.backgroundImage || cs.background || cs.backgroundImage || "";
+            if (bg && (bg.includes("gradient") || bg.includes("linear-") || bg.includes("radial-"))) {
+              const colorMatch = bg.match(/#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\)/);
+              cs.background = colorMatch ? colorMatch[0] : "rgba(255,255,255,0.03)";
+              cs.backgroundImage = "none";
+            }
+            if (computed?.mixBlendMode && computed.mixBlendMode !== "normal") cs.mixBlendMode = "normal";
+            if (computed?.filter && computed.filter !== "none" && htmlEl.tagName !== "SVG") cs.filter = "none";
+          });
+          clonedDoc.querySelectorAll("svg").forEach((svg) => { svg.style.filter = "none"; });
+          clonedDoc.querySelectorAll(".print\\:hidden, [class*='grain-overlay'], [class*='pointer-events-none']").forEach((node) => {
+            (node as HTMLElement).style.display = "none";
+          });
+          clonedDoc.querySelectorAll("[style*='opacity']").forEach((node) => {
+            const htmlEl = node as HTMLElement;
+            const opacity = parseFloat(htmlEl.style.opacity);
+            if (!isNaN(opacity) && opacity < 0.5) htmlEl.style.opacity = "1";
+          });
+        },
+      });
+
+      document.body.style.overflow = originalOverflow;
+
+      const imgWidthMM = 210;
+      const pageHeightMM = 297;
+      const pxPerMM = canvas.width / imgWidthMM;
+      const pageHeightPx = Math.floor(pageHeightMM * pxPerMM);
+      const totalPages = Math.ceil(canvas.height / pageHeightPx);
+      const pdf = new jsPDF("p", "mm", "a4");
+
+      for (let page = 0; page < totalPages; page++) {
+        if (page > 0) pdf.addPage();
+        const sliceCanvas = document.createElement("canvas");
+        sliceCanvas.width = canvas.width;
+        const sliceHeight = Math.min(pageHeightPx, canvas.height - page * pageHeightPx);
+        sliceCanvas.height = sliceHeight;
+        const sliceCtx = sliceCanvas.getContext("2d");
+        if (sliceCtx) {
+          sliceCtx.fillStyle = "#050505";
+          sliceCtx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+          sliceCtx.drawImage(canvas, 0, page * pageHeightPx, canvas.width, sliceHeight, 0, 0, canvas.width, sliceHeight);
+        }
+        const sliceData = sliceCanvas.toDataURL("image/png");
+        pdf.addImage(sliceData, "PNG", 0, 0, imgWidthMM, sliceHeight / pxPerMM);
+      }
+
+      pdf.setProperties({
+        title: `DevXray Resume Report — ${data?.resume_data?.name || "Candidate"}`,
+        subject: "Resume Intelligence Report",
+        creator: "DevXray AI",
+      });
+
+      pdf.save(`DevXray_Resume_${(data?.resume_data?.name || "report").replace(/\s+/g, "_")}_${new Date().toISOString().split("T")[0]}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      alert("PDF export failed. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     const rawData = sessionStorage.getItem("resume_report_data");
@@ -116,15 +207,16 @@ export default function ResumeReportPage() {
           </Link>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => window.print()}
-              className="px-3.5 py-1.5 text-xs font-bold text-white bg-white/10 rounded-lg transition-all hover:bg-white/20 border border-white/10 cursor-pointer flex items-center gap-1.5"
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="px-3.5 py-1.5 text-xs font-bold text-white bg-white/10 rounded-lg transition-all hover:bg-white/20 border border-white/10 cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                 <polyline points="7 10 12 15 17 10" />
                 <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              Export PDF
+              Export PDF{isExporting ? "..." : ""}
             </button>
             <Link href="/" className="px-3.5 py-1.5 text-xs font-bold text-[#050505] bg-[#cdff00] rounded-lg transition-all no-underline hover:bg-[#b0d800]">
               New Scan
@@ -133,7 +225,7 @@ export default function ResumeReportPage() {
         </div>
       </nav>
 
-      <main className="relative z-10 mx-auto max-w-6xl px-6 py-10 pb-20 space-y-6">
+      <main ref={reportRef} className="relative z-10 mx-auto max-w-6xl px-6 py-10 pb-20 space-y-6">
 
         {/* ═══ HEADER ═══ */}
         <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}

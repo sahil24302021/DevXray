@@ -1,9 +1,4 @@
-"""
-Dev.to Article Fetcher — Discovers technical writing by the developer.
 
-Technical blog articles provide evidence of communication skills
-and deeper understanding of claimed technologies.
-"""
 import httpx
 from typing import Dict, List, Any, Optional
 

@@ -1,10 +1,4 @@
-"""
-Stack Overflow Integration — Fetches user profile and top tags
-for skill verification and credibility scoring.
 
-Uses the Stack Exchange API v2.3 (no auth required, 300 req/day).
-Set SO_API_KEY env var for 10,000 req/day.
-"""
 import os
 import math
 import httpx
