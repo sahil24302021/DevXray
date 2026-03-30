@@ -282,35 +282,87 @@ async def match_resume_projects_to_repos(
     projects: List[Dict[str, Any]],
     repos: List[Dict[str, Any]],
     username: str,
+    repo_deep_data: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Match resume projects to GitHub repos by name similarity or URL.
-    Returns list of matched repos with their project names.
+    Match resume project claims to GitHub repos using multiple signals.
+
+    Bug 5a fix: Uses 4 signals instead of just name matching:
+      1. Name similarity (word overlap)
+      2. Technology overlap with repo languages/topics
+      3. Description keyword overlap
+      4. README content matching (if deep data available)
     """
-    matched = []
-    repo_name_map = {r["name"].lower(): r for r in repos}
+    import re as _re
 
-    for project in projects:
-        proj_name = project.get("name", "").lower().strip()
-        proj_desc = project.get("description", "").lower()
+    matches = []
 
-        # Direct name match
-        if proj_name in repo_name_map:
-            matched.append({
-                "project_name": project.get("name"),
-                **repo_name_map[proj_name],
-            })
-            continue
+    for proj in projects:
+        proj_name = (proj.get("name") or "").lower()
+        proj_desc = (proj.get("description") or "").lower()
+        proj_tech = [t.lower() for t in (proj.get("technologies") or [])]
 
-        # Partial name match (e.g., "AI Tools Hub" matches "ai-tools-hub")
-        normalized_proj = proj_name.replace(" ", "-").replace("_", "-")
-        for repo_name, repo in repo_name_map.items():
+        best_match = None
+        best_score = 0
+
+        for repo in repos:
+            repo_name = (repo.get("name") or "").lower()
+            repo_desc = (repo.get("description") or "").lower()
+            score = 0
+
+            # Signal 1: Name similarity
+            name_words = set(proj_name.replace("-", " ").replace("_", " ").split())
+            repo_words = set(repo_name.replace("-", " ").replace("_", " ").split())
+            name_overlap = len(name_words & repo_words)
+            score += name_overlap * 30
+
+            # Direct name containment (e.g., "JARVIS" in "jarvis-ai")
+            normalized_proj = proj_name.replace(" ", "-").replace("_", "-")
             normalized_repo = repo_name.replace("_", "-")
-            if normalized_proj == normalized_repo or normalized_proj in normalized_repo or normalized_repo in normalized_proj:
-                matched.append({
-                    "project_name": project.get("name"),
-                    **repo,
-                })
-                break
+            if normalized_proj and normalized_repo:
+                if normalized_proj == normalized_repo:
+                    score += 50
+                elif normalized_proj in normalized_repo or normalized_repo in normalized_proj:
+                    score += 35
 
-    return matched
+            # Signal 2: Technology overlap with repo languages/topics
+            repo_topics = [t.lower() for t in (repo.get("topics") or [])]
+            repo_lang = (repo.get("language") or "").lower()
+            tech_matches = sum(1 for t in proj_tech if t in repo_topics or t == repo_lang or t in repo_name)
+            score += tech_matches * 20
+
+            # Signal 3: Description keyword overlap
+            proj_keywords = set(_re.findall(r'\b\w{4,}\b', proj_desc))
+            repo_keywords = set(_re.findall(r'\b\w{4,}\b', repo_desc))
+            desc_overlap = len(proj_keywords & repo_keywords)
+            score += min(desc_overlap * 5, 25)
+
+            # Signal 4: Check README content if available
+            if repo_deep_data:
+                rd = repo_deep_data.get("repo_data", {}) if isinstance(repo_deep_data, dict) else {}
+                readme = (rd.get(repo.get("name"), {}) or {}).get("readme", "").lower()
+                if readme:
+                    readme_keywords = set(_re.findall(r'\b\w{4,}\b', readme))
+                    readme_overlap = len(proj_keywords & readme_keywords)
+                    score += min(readme_overlap * 3, 20)
+
+            if score > best_score:
+                best_score = score
+                best_match = repo
+
+        if best_match and best_score >= 20:
+            matches.append({
+                "project_name": proj.get("name"),
+                "confidence": min(best_score / 100, 1.0),
+                "match_score": best_score,
+                **best_match,
+            })
+        else:
+            matches.append({
+                "project_name": proj.get("name"),
+                "confidence": 0,
+                "match_score": 0,
+                "repo": None,
+            })
+
+    return matches

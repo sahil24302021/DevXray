@@ -133,10 +133,11 @@ Respond with a JSON object matching this EXACT schema — no extra keys, no mark
     "email": "email@example.com",
     "phone": "phone number if found",
     "github_username": "just the username, not URL",
-    "github_url": "full github profile URL",
-    "linkedin_url": "full linkedin URL",
-    "portfolio_url": "personal website / portfolio URL",
+    "github_url": "Extract GitHub profile URL. Look for 'github.com/username' (not github.com/username/reponame). Prepend https:// if missing.",
+    "linkedin_url": "Extract the FULL LinkedIn URL. Look for 'linkedin.com/in/...' anywhere in the text. If found as 'linkedin.com/in/xyz' without https://, prepend https://www. Return empty string if not found.",
+    "portfolio_url": "Extract the personal website/portfolio URL. Look for custom domains (anything.online, anything.dev, anything.io, yourname.com), NOT github.com or linkedin.com. If found without https://, prepend https://. Return empty string if not found.",
     "other_links": ["any other URLs found in resume"],
+    "github_repo_links": ["any github.com/username/reponame URLs found in resume project descriptions"],
     "location": "city/country if mentioned",
     "current_role": "their current or most recent job title",
     "years_of_experience": 0,
@@ -217,7 +218,39 @@ URLs found in resume (for reference): {json.dumps(found_urls)}
             parts = [p for p in gh_url.rstrip("/").split("/") if p]
             if parts:
                 result["github_username"] = parts[-1]
-        
+
+        # ─── URL normalization (Bug 6 fix) ───
+        for url_field in ["linkedin_url", "portfolio_url", "github_url"]:
+            val = result.get(url_field, "") or ""
+            if val and not val.startswith("http"):
+                if "linkedin.com" in val:
+                    val = "https://www." + val.lstrip("/")
+                else:
+                    val = "https://" + val.lstrip("/")
+                result[url_field] = val
+
+        # Regex fallback: search raw text for missed URLs
+        if not result.get("linkedin_url"):
+            li_match = re.search(r'linkedin\.com/in/[\w\-]+', text, re.I)
+            if li_match:
+                result["linkedin_url"] = "https://www." + li_match.group(0)
+                print(f"[ResumeParser] LinkedIn URL found via regex: {result['linkedin_url']}")
+
+        if not result.get("portfolio_url"):
+            domain_match = re.search(
+                r'\b([\w\-]+\.(online|dev|io|me|site|app|tech|co))\b',
+                text, re.I
+            )
+            if domain_match:
+                candidate_domain = domain_match.group(0)
+                # Make sure it's not github/linkedin
+                if "github" not in candidate_domain.lower() and "linkedin" not in candidate_domain.lower():
+                    result["portfolio_url"] = "https://" + candidate_domain
+                    print(f"[ResumeParser] Portfolio URL found via regex: {result['portfolio_url']}")
+
+        # Store raw text for downstream fallback matching
+        result["_raw_text"] = text[:5000]
+
         # Ensure claims is always a non-empty list
         if not result.get("claims"):
             result["claims"] = []

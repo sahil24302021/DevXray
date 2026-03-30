@@ -131,6 +131,22 @@ def analyze_commit_frequency(
     elif organic_ratio > 0.5:
         pattern = "organic"
 
+    # STUDENT DEVELOPER CORRECTION (Bug 4 fix):
+    # If most "bulk" commits cluster on same dates (initial project uploads),
+    # this is normal student behavior, not malicious bulk dumps.
+    if burst_ratio > 0.3 and len(dates) >= 3:
+        date_only = [d.date() for d in dates]
+        date_counts = Counter(date_only)
+        most_common_date_count = date_counts.most_common(1)[0][1]
+        # If more than 60% of commits happen on same days (project uploads),
+        # don't penalize organic ratio
+        if most_common_date_count / len(dates) > 0.6:
+            # These are batch project uploads, not malicious bulk dumps
+            organic_ratio = max(organic_ratio, 0.65)  # Floor: assume 65% organic
+            pattern = "batch_project_upload"  # New pattern type
+            flags = [f for f in flags if "burst" not in f.lower()]  # Remove burst flags
+            print(f"[Authenticity] Batch project upload detected — organic ratio floored to {organic_ratio}")
+
     return {
         "burst_ratio": round(burst_ratio, 3),
         "organic_ratio": round(organic_ratio, 3),
@@ -870,6 +886,7 @@ def run_authenticity_engine(
     repos: List[Dict[str, Any]],
     file_contents: Optional[List[Dict[str, str]]] = None,
     proof: Optional[ProofCollector] = None,
+    account_age_years: float = 0.0,
 ) -> Dict[str, Any]:
     """
     Master function: compute authenticity score from commit patterns.
@@ -984,6 +1001,19 @@ def run_authenticity_engine(
             f"(repos={len(repos)}, commits={len(commits)}). Applying floor."
         )
         score = floor
+
+    # ─── Account age context (Bug 4b fix) ───
+    # New developers with real repos deserve higher floors
+    account_age_months = account_age_years * 12
+    if account_age_months < 18:
+        non_fork = [r for r in repos if not r.get("is_fork", r.get("fork", False))]
+        repo_count = len(non_fork)
+        if repo_count >= 5:
+            score = max(score, 55.0)  # 55% if 5+ repos for new devs
+            log.info(f"[Authenticity] New dev ({account_age_months:.0f}mo) with {repo_count} repos — floor raised to 55")
+        elif repo_count >= 3:
+            score = max(score, 45.0)  # 45% if 3+ repos for new devs
+            log.info(f"[Authenticity] New dev ({account_age_months:.0f}mo) with {repo_count} repos — floor raised to 45")
 
     score = round(score)
 

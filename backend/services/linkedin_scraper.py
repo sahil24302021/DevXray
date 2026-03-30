@@ -597,7 +597,7 @@ async def _strategy_duckduckgo(username: str, name_hint: str = "") -> Optional[D
             if results:
                 combined = " | ".join(results[:3])
                 parsed = _parse_search_snippet(combined)
-                if parsed.get("full_name") or len(parsed.get("raw_text", "")) > 40:
+                if parsed.get("full_name") or len(parsed.get("raw_text", "")) > 15:
                     parsed["_source"] = "duckduckgo"
                     parsed["_quality"] = "SNIPPET"
                     print(f"[LinkedIn·S6] ✓ DuckDuckGo success")
@@ -1065,6 +1065,7 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
 
     data = None
     raw_text_for_ai = ""  # Collect raw text for Strategy 10
+    _partial_raw_texts = []  # Collect partial text from ALL strategies
 
     # ─── Strategy 1: Voyager API (BEST quality) ───
     print(f"[LinkedIn] S1: Voyager API for '{username}'...")
@@ -1080,6 +1081,7 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         if data:
             rate_limit_record()
             raw_text_for_ai = data.get("raw_text", "")
+            _partial_raw_texts.append(raw_text_for_ai)
 
     # ─── Strategy 3: Google CSE API ───
     if not data:
@@ -1088,6 +1090,7 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         data = await _strategy_google_cse_api(username)
         if data:
             raw_text_for_ai = data.get("raw_text", "")
+            _partial_raw_texts.append(raw_text_for_ai)
 
     # ─── Strategy 4: Google Search Scrape ───
     if not data:
@@ -1096,6 +1099,7 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         data = await _strategy_google_search(username)
         if data:
             raw_text_for_ai = data.get("raw_text", "")
+            _partial_raw_texts.append(raw_text_for_ai)
 
     # ─── Strategy 5: Bing Search ───
     if not data:
@@ -1104,6 +1108,7 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         data = await _strategy_bing_search(username)
         if data:
             raw_text_for_ai = data.get("raw_text", "")
+            _partial_raw_texts.append(raw_text_for_ai)
 
     # ─── Strategy 6: DuckDuckGo ───
     if not data:
@@ -1112,6 +1117,7 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         data = await _strategy_duckduckgo(username)
         if data:
             raw_text_for_ai = data.get("raw_text", "")
+            _partial_raw_texts.append(raw_text_for_ai)
 
     # ─── Strategy 7: Direct Scrape ───
     if not data:
@@ -1120,6 +1126,7 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         data = await _strategy_direct_scrape(clean_url)
         if data:
             raw_text_for_ai = data.get("raw_text", "")
+            _partial_raw_texts.append(raw_text_for_ai)
 
     # ─── Strategy 8: Google Cache ───
     if not data:
@@ -1127,6 +1134,7 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         data = await _strategy_google_cache(clean_url)
         if data:
             raw_text_for_ai = data.get("raw_text", "")
+            _partial_raw_texts.append(raw_text_for_ai)
 
     # ─── Strategy 9: Wayback Machine ───
     if not data:
@@ -1134,28 +1142,57 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         data = await _strategy_wayback_machine(clean_url)
         if data:
             raw_text_for_ai = data.get("raw_text", "")
+            _partial_raw_texts.append(raw_text_for_ai)
+
+    # ─── Always try DuckDuckGo to collect raw text for Strategy 10 ───
+    if not raw_text_for_ai:
+        try:
+            query = f"linkedin.com/in/{username} developer"
+            ddg_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+                resp = await client.get(ddg_url, headers=get_random_headers())
+                if resp.status_code == 200:
+                    soup = BeautifulSoup(resp.text, "html.parser")
+                    snippets = []
+                    for div in soup.find_all("div", class_="result"):
+                        text = div.get_text(separator=" ", strip=True)
+                        if "linkedin" in text.lower():
+                            snippets.append(text)
+                    if snippets:
+                        raw_text_for_ai = " ".join(snippets[:5])[:3000]
+                        print(f"[LinkedIn] DDG fallback collected {len(raw_text_for_ai)} chars of raw text")
+        except Exception:
+            pass
+
+    # Also merge any partial texts collected earlier
+    if not raw_text_for_ai and _partial_raw_texts:
+        raw_text_for_ai = " | ".join(t for t in _partial_raw_texts if t)[:3000]
 
     # ─── Strategy 10: AI-Enhanced Extraction ───
-    # If we got raw text from any strategy but data quality is < FULL,
-    # run AI extraction to get structured data
-    if data and data.get("_quality") in ("SNIPPET", "CACHED", "ARCHIVED", "META"):
-        print(f"[LinkedIn] S10: AI Enhancement on {data.get('_quality')} data...")
-        ai_data = await _strategy_ai_extraction(raw_text_for_ai or data.get("raw_text", ""), username)
+    # Run AI extraction when we have raw_text, regardless of whether data exists
+    if raw_text_for_ai and (not data or data.get("_quality") in ("SNIPPET", "CACHED", "ARCHIVED", "META", None)):
+        quality_label = data.get('_quality', 'raw_text') if data else 'raw_text_only'
+        print(f"[LinkedIn] S10: AI Enhancement on {quality_label} data...")
+        ai_data = await _strategy_ai_extraction(raw_text_for_ai if not data else (raw_text_for_ai or data.get("raw_text", "")), username)
         if ai_data:
-            # Merge AI extraction with existing data (prefer AI for structured fields)
-            for key in ["experiences", "education", "certifications", "languages"]:
-                if ai_data.get(key) and not data.get(key):
-                    data[key] = ai_data[key]
-            for key in ["skills"]:
-                ai_skills = ai_data.get(key, [])
-                existing_skills = data.get(key, [])
-                if len(ai_skills) > len(existing_skills):
-                    data[key] = ai_skills
-            for key in ["full_name", "headline", "summary", "current_company", "location", "years_experience"]:
-                if ai_data.get(key) and not data.get(key):
-                    data[key] = ai_data[key]
-            data["_quality"] = "AI_ENHANCED"
-            data["_source"] = f"{data.get('_source', 'unknown')}+ai"
+            if data:
+                # Merge AI extraction with existing data (prefer AI for structured fields)
+                for key in ["experiences", "education", "certifications", "languages"]:
+                    if ai_data.get(key) and not data.get(key):
+                        data[key] = ai_data[key]
+                for key in ["skills"]:
+                    ai_skills = ai_data.get(key, [])
+                    existing_skills = data.get(key, [])
+                    if len(ai_skills) > len(existing_skills):
+                        data[key] = ai_skills
+                for key in ["full_name", "headline", "summary", "current_company", "location", "years_experience"]:
+                    if ai_data.get(key) and not data.get(key):
+                        data[key] = ai_data[key]
+                data["_quality"] = "AI_ENHANCED"
+                data["_source"] = f"{data.get('_source', 'unknown')}+ai"
+            else:
+                # No data at all — use AI result directly
+                data = ai_data
     elif not data and raw_text_for_ai:
         # Last resort: run AI on whatever raw text we collected
         print(f"[LinkedIn] S10: AI extraction from raw text...")

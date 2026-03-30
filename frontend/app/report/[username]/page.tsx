@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import { analyzeProfile, AnalysisResult } from "@/lib/api";
@@ -70,6 +70,75 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [jobId, setJobId] = useState<string>("");
+  const [isExporting, setIsExporting] = useState(false);
+  const reportRef = useRef<HTMLElement>(null);
+
+  const handleExportPDF = async () => {
+    if (!reportRef.current || isExporting) return;
+    setIsExporting(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+
+      const el = reportRef.current;
+
+      // Temporarily make all sections visible for capture
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = "visible";
+
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#050505",
+        logging: false,
+        windowWidth: 1200,
+        scrollY: -window.scrollY,
+        onclone: (clonedDoc: Document) => {
+          // Ensure framer-motion elements are visible
+          clonedDoc.querySelectorAll("[style]").forEach((node) => {
+            const htmlEl = node as HTMLElement;
+            if (htmlEl.style.opacity === "0" || htmlEl.style.transform) {
+              htmlEl.style.opacity = "1";
+              htmlEl.style.transform = "none";
+            }
+          });
+          // Hide print-hidden elements
+          clonedDoc.querySelectorAll(".print\\:hidden").forEach((node) => {
+            (node as HTMLElement).style.display = "none";
+          });
+        },
+      });
+
+      document.body.style.overflow = originalOverflow;
+
+      const imgWidth = 210; // A4 width in mm
+      const pageHeight = 297; // A4 height in mm
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const pdf = new jsPDF("p", "mm", "a4");
+
+      let heightLeft = imgHeight;
+      let position = 0;
+      const imgData = canvas.toDataURL("image/jpeg", 0.92);
+
+      pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = -(imgHeight - heightLeft);
+        pdf.addPage();
+        pdf.addImage(imgData, "JPEG", 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save(`DevXray_${data?.username || "report"}_${new Date().toISOString().split("T")[0]}.pdf`);
+    } catch (err) {
+      console.error("PDF export failed:", err);
+      alert("PDF export failed. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     if (!username) return;
@@ -205,13 +274,14 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
               Re-scan
             </button>
             <button
-              onClick={() => window.print()}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all"
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all disabled:opacity-50"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Export PDF
+              Export PDF{isExporting ? "..." : ""}
             </button>
             <Link
               href="/dashboard"
@@ -227,7 +297,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
       </nav>
 
       {/* --- Report Content --- */}
-      <main className="relative z-10 mx-auto max-w-5xl px-6 py-10 pb-20 animate-fade-in print:p-0 print:m-0 print:max-w-none print:w-full print:block print:overflow-visible">
+      <main ref={reportRef} className="relative z-10 mx-auto max-w-5xl px-6 py-10 pb-20 animate-fade-in print:p-0 print:m-0 print:max-w-none print:w-full print:block print:overflow-visible">
           {/* -- Profile Card + Score Radar -- */}
           <div className="grid grid-cols-1 md:grid-cols-[1fr_280px] gap-5 mb-5 print:block print:space-y-5">
             {/* Profile Card */}

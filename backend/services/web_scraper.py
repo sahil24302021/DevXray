@@ -69,18 +69,25 @@ async def scrape_portfolio(url: str) -> str:
     """Fetches and extracts readable text from a portfolio website."""
     if not url or not url.startswith("http"):
         return ""
-    try:
-        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
-            response = await client.get(url, headers=_random_headers())
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
-            for tag in soup(["script", "style", "noscript", "meta", "link", "svg", "path"]):
-                tag.extract()
-            text = soup.get_text(separator=" ", strip=True)
-            return re.sub(r'\s+', ' ', text)[:6000]
-    except Exception as e:
-        print(f"[Scraper] Portfolio scrape failed for {url}: {e}")
-        return ""
+
+    for attempt in range(2):  # Try twice
+        try:
+            timeout = 12.0 if attempt == 0 else 18.0
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                response = await client.get(url, headers=_random_headers())
+                response.raise_for_status()
+                soup = BeautifulSoup(response.text, "html.parser")
+                for tag in soup(["script", "style", "noscript", "meta", "link", "svg", "path"]):
+                    tag.extract()
+                text = soup.get_text(separator=" ", strip=True)
+                result = re.sub(r'\s+', ' ', text)[:8000]
+                if len(result) > 200:
+                    return result
+        except Exception as e:
+            print(f"[Scraper] Portfolio attempt {attempt+1} failed for {url}: {e}")
+            if attempt == 0:
+                await asyncio.sleep(2)
+    return ""
 
 
 async def scrape_portfolio_deep(url: str) -> Dict[str, Any]:
@@ -134,6 +141,34 @@ async def scrape_portfolio_deep(url: str) -> Dict[str, Any]:
             result["social_links"] = social[:10]
             for tag in soup(["script", "style"]): tag.extract()
             result["raw_text"] = soup.get_text(separator=" ", strip=True)[:6000]
+
+            # Find internal links to scrape (projects, about, work pages)
+            internal_links = []
+            for a in soup.find_all("a", href=True):
+                href = a.get("href", "")
+                if href.startswith("/") and len(href) > 1 and "." not in href.split("/")[-1]:
+                    full_url = url.rstrip("/") + href
+                    if full_url not in internal_links:
+                        internal_links.append(full_url)
+
+            # Scrape up to 3 subpages
+            subpage_texts = []
+            for subpage_url in internal_links[:3]:
+                try:
+                    async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as sub_client:
+                        sub_resp = await sub_client.get(subpage_url, headers=_random_headers())
+                        if sub_resp.status_code == 200:
+                            sub_soup = BeautifulSoup(sub_resp.text, "html.parser")
+                            for tag in sub_soup(["script", "style", "noscript"]):
+                                tag.extract()
+                            sub_text = sub_soup.get_text(separator=" ", strip=True)
+                            subpage_texts.append(re.sub(r'\s+', ' ', sub_text)[:2000])
+                except Exception:
+                    pass
+
+            if subpage_texts:
+                result["raw_text"] = result.get("raw_text", "") + " | " + " | ".join(subpage_texts)
+                result["raw_text"] = result["raw_text"][:10000]
     except Exception as e:
         result["error"] = str(e)[:120]
     return result

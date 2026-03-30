@@ -370,6 +370,7 @@ def _run_core_pipeline(
         repos=repos,
         file_contents=all_file_contents if all_file_contents else None,
         proof=proof,
+        account_age_years=account_age_years,
     )
     timing["authenticity_engine"] = round(time.time() - t0, 3)
 

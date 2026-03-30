@@ -311,6 +311,16 @@ def _generate_strengths(
     if code.get("project_structure", {}).get("has_docker"):
         strengths.append("Containerizes applications — deployment-ready mindset")
 
+    # Strengths: Surface hidden skills as key findings (Bug 5b fix)
+    hidden_skills = skills.get("hidden_skills", [])
+    if hidden_skills:
+        hidden_names = [s.get("skill_name", s) if isinstance(s, dict) else str(s) for s in hidden_skills[:6]]
+        if hidden_names:
+            strengths.append(
+                f"Unreported skills found in GitHub code: {', '.join(hidden_names)} — "
+                f"candidate is likely more skilled than resume shows"
+            )
+
     return strengths[:8]
 
 

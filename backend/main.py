@@ -657,6 +657,14 @@ async def analyze_resume_endpoint(
     linkedin_url = resume_data.get("linkedin_url", "")
     other_links = resume_data.get("other_links", [])
 
+    # Bug 1d: LinkedIn fallback — search other_links for LinkedIn URL
+    if not linkedin_url and other_links:
+        for link in other_links:
+            if isinstance(link, str) and "linkedin.com/in/" in link.lower():
+                linkedin_url = link if link.startswith("http") else "https://" + link
+                log.info(f"LinkedIn URL found in other_links: {linkedin_url}")
+                break
+
     # ═══ STEP 2: PARALLEL data fetching ═══
     await emit_progress(job_id, f"Fetching data for {username or 'candidate'}...")
     async def _fetch_github():
@@ -747,6 +755,13 @@ async def analyze_resume_endpoint(
     portfolio_deep_data = await portfolio_deep_task if portfolio_url else None
     linkedin_data = await linkedin_task
     other_data = await other_task
+
+    # Bug 2c: Merge deep portfolio text into portfolio_text for richer cross-referencing
+    if portfolio_deep_data and isinstance(portfolio_deep_data, dict):
+        deep_raw = portfolio_deep_data.get("raw_text", "")
+        if deep_raw and len(deep_raw) > len(portfolio_text or ""):
+            portfolio_text = deep_raw
+            log.info(f"Portfolio deep text merged: {len(portfolio_text)} chars")
 
     # Await multi-source (graceful degradation)
     so_data = (await so_task) if so_task else {"found": False}
