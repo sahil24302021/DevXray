@@ -436,6 +436,18 @@ def _run_core_pipeline(
             f"(public={total_public_repos}, total_contribs={total_contribs})"
         )
 
+    # ── ACCOUNT AGE COMPUTATION ──
+    account_age_months = 0.0
+    created_at = profile.get("created_at", "")
+    if created_at:
+        try:
+            from datetime import datetime, timezone
+            created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            age_days = (datetime.now(timezone.utc) - created_dt).days
+            account_age_months = max(age_days / 30.44, 0)
+        except Exception:
+            pass
+
     scoring = compute_final_score(
         code_quality=code_analysis.get("code_quality_score", 0),
         skill_depth=skills.get("skill_depth_average", 0),
@@ -453,11 +465,9 @@ def _run_core_pipeline(
         commits=commits,
         ci_depth_bonus=total_ci_bonus,
         test_culture_score=float(test_culture.get("test_culture_score", 0)),
-        # BUG 6 FIX: truth engine only runs when resume_data is present.
-        # Pass has_resume so truth weight is zeroed for GitHub-only scans,
-        # preventing unfair score penalties for developers without resumes.
         has_resume=(resume_data is not None),
         multi_source_bonus=multi_source_bonus_from_private,
+        account_age_months=account_age_months,
     )
     timing["scoring_engine"] = round(time.time() - t0, 3)
 

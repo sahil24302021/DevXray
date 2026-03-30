@@ -13,6 +13,14 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Conditional Playwright install (only when LinkedIn scraping is configured)
+# Set INSTALL_PLAYWRIGHT=true at build time to include Chromium (~400MB)
+ARG INSTALL_PLAYWRIGHT=false
+RUN if [ "$INSTALL_PLAYWRIGHT" = "true" ]; then \
+        pip install --no-cache-dir playwright && \
+        playwright install chromium --with-deps; \
+    fi
+
 # Copy application code
 COPY . .
 

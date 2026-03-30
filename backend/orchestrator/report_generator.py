@@ -70,6 +70,7 @@ def generate_report(
     deep_data: Optional[Dict[str, Any]] = None,
     pinned_code_reviews: Optional[List[Dict[str, Any]]] = None,
     ai_summary: Optional[Dict[str, Any]] = None,
+    jd_match: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Assemble the complete Developer Intelligence Report.
@@ -233,6 +234,10 @@ def generate_report(
         ),
         "verified_skills": [s["skill_name"] for s in skills.get("top_skills", [])[:10]],
         "account_age_years": profile.get("_account_age_years", 0),
+        "percentile": benchmark.get("percentile", 0),
+
+        # ─── JD Matcher ───
+        "jd_match": jd_match or {},
 
         # ─── Pinned Code Reviews ───
         "pinned_code_reviews": pinned_code_reviews or [],

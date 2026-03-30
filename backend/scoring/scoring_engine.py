@@ -487,13 +487,122 @@ def estimate_salary_range(
 
 
 # ═══════════════════════════════════════════════════════
+#  CAREER-STAGE CALIBRATION
+# ═══════════════════════════════════════════════════════
+
+def detect_career_stage(
+    account_age_months: float,
+    repos_count: int,
+    years_experience: int = 0,
+) -> str:
+    """
+    Detect the career stage from objective signals.
+
+    Returns: "student" | "junior" | "mid" | "senior"
+    """
+    if years_experience > 5 or account_age_months > 60:
+        return "senior"
+    if years_experience > 2 or (account_age_months > 24 and repos_count > 15):
+        return "mid"
+    if account_age_months < 18 or repos_count < 8:
+        return "student"
+    return "junior"
+
+
+def apply_career_calibration(
+    weights: Dict[str, float],
+    career_stage: str,
+) -> Dict[str, float]:
+    """
+    Adjust scoring weights based on career stage.
+
+    Students/juniors:
+      - Boost growth weight (learning signal matters more)
+      - Reduce consistency expectation (they're still building habits)
+      - Slightly reduce skill_depth expectation
+
+    This prevents senior-level bias when evaluating early-career developers.
+    """
+    if career_stage == "student":
+        weights["growth"] = round(weights.get("growth", 0.10) + 0.08, 3)
+        weights["consistency"] = round(max(weights.get("consistency", 0.15) - 0.06, 0.02), 3)
+        weights["skill_depth"] = round(max(weights.get("skill_depth", 0.20) - 0.02, 0.05), 3)
+    elif career_stage == "junior":
+        weights["growth"] = round(weights.get("growth", 0.10) + 0.04, 3)
+        weights["consistency"] = round(max(weights.get("consistency", 0.15) - 0.03, 0.05), 3)
+        weights["skill_depth"] = round(max(weights.get("skill_depth", 0.20) - 0.01, 0.05), 3)
+    # mid and senior: no adjustment needed
+
+    # Re-normalize so weights sum to 1.0
+    total = sum(weights.values())
+    if total > 0:
+        weights = {k: round(v / total, 3) for k, v in weights.items()}
+
+    return weights
+
+
+def compute_percentile_benchmark(
+    final_score: float,
+    account_age_months: float,
+) -> Dict[str, Any]:
+    """
+    Compute peer-group percentile for HR context.
+
+    Adjusts percentile expectations based on account age:
+    a student with 45/100 is impressive; a 10-year veteran with 45/100 is not.
+    """
+    # Base percentile from score
+    if final_score >= 90:
+        base_pct = 97
+    elif final_score >= 80:
+        base_pct = 90
+    elif final_score >= 70:
+        base_pct = 78
+    elif final_score >= 60:
+        base_pct = 62
+    elif final_score >= 50:
+        base_pct = 45
+    elif final_score >= 40:
+        base_pct = 28
+    elif final_score >= 30:
+        base_pct = 15
+    elif final_score >= 20:
+        base_pct = 8
+    else:
+        base_pct = 3
+
+    # Age-adjusted percentile (younger devs get a boost)
+    if account_age_months < 12:
+        peer_group = "New developers (< 1 year)"
+        adjusted_pct = min(base_pct + 15, 99)
+    elif account_age_months < 24:
+        peer_group = "Early-career (1-2 years)"
+        adjusted_pct = min(base_pct + 8, 99)
+    elif account_age_months < 48:
+        peer_group = "Mid-career (2-4 years)"
+        adjusted_pct = base_pct
+    else:
+        peer_group = "Experienced (4+ years)"
+        adjusted_pct = max(base_pct - 5, 1)
+
+    return {
+        "percentile": adjusted_pct,
+        "peer_group": peer_group,
+        "raw_percentile": base_pct,
+        "note": f"Ranked in the {adjusted_pct}th percentile among {peer_group.lower()}.",
+    }
+
+
+# ═══════════════════════════════════════════════════════
 #  DYNAMIC SCORING & MASTER ENGINE
 # ═══════════════════════════════════════════════════════
 
 def determine_dynamic_weights(
     years_experience: int,
     job_requirements: Optional[Dict[str, Any]] = None,
-    has_resume: bool = False,  # BUG 6 FIX: redistribute truth weight when no resume present
+    has_resume: bool = False,
+    account_age_months: float = 0.0,
+    repos_count: int = 0,
 ) -> Dict[str, float]:
     """
     Adaptive weights logic.
@@ -551,6 +660,12 @@ def determine_dynamic_weights(
         weights["skill_depth"] = round(weights.get("skill_depth", 0.20) + truth_weight * 0.4, 3)
         weights["truth"] = 0.0
 
+    # ── CAREER-STAGE CALIBRATION ──
+    if account_age_months > 0:
+        career_stage = detect_career_stage(account_age_months, repos_count, years_experience)
+        weights = apply_career_calibration(weights, career_stage)
+        log.info(f"Career calibration applied: stage={career_stage}, age={account_age_months:.0f}mo")
+
     total = sum(weights.values())
     return {k: round(float(v / total), 3) for k, v in weights.items()}
 
@@ -573,7 +688,8 @@ def compute_final_score(
     ci_depth_bonus: int = 0,
     multi_source_bonus: float = 0.0,
     test_culture_score: float = 0.0,
-    has_resume: bool = False,   # BUG 6 FIX: pass to determine_dynamic_weights
+    has_resume: bool = False,
+    account_age_months: float = 0.0,
 ) -> Dict[str, Any]:
     """
     Compute the final deterministic developer score with full explainability.
@@ -600,8 +716,12 @@ def compute_final_score(
     authenticity_normalized = normalize_authenticity(authenticity, repos, commits)
 
     # ── WEIGHTS (DYNAMIC) ──
-    # BUG 6 FIX: Pass has_resume so truth weight is zeroed for GitHub-only scans
-    weights = determine_dynamic_weights(years_experience, job_requirements, has_resume)
+    non_fork_repos_for_weights = [r for r in repos if not r.get("is_fork", r.get("fork", False))]
+    weights = determine_dynamic_weights(
+        years_experience, job_requirements, has_resume,
+        account_age_months=account_age_months,
+        repos_count=len(non_fork_repos_for_weights),
+    )
 
     raw_scores = {
         "code_quality": code_quality,

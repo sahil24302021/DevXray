@@ -149,6 +149,60 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
 
   const data2 = dataWithAliases;
 
+  // ─── PDF Export Logic (Text-based to avoid dark-mode html2canvas bugs) ───
+  const handleExportPDF = () => {
+    import("jspdf").then((jsPDFModule) => {
+      const jsPDF = jsPDFModule.default;
+      const doc = new jsPDF();
+      const margin = 20;
+      let yPos = margin;
+      const lineHeight = 10;
+
+      // Title & Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.text(`DevXray Intelligence Report`, margin, yPos);
+      yPos += lineHeight * 2;
+
+      doc.setFontSize(16);
+      doc.text(data2?.name || "Unknown Candidate", margin, yPos);
+      yPos += lineHeight;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(12);
+      doc.text(`GitHub: @${data2?.username || "N/A"}`, margin, yPos);
+      yPos += lineHeight * 2;
+
+      // Scores
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text(`Intelligence Score: ${score || 0} / 100`, margin, yPos);
+      yPos += lineHeight;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.text(`Percentile: ${(data2 as any)?.benchmark?.percentile || "N/A"}th`, margin, yPos);
+      yPos += lineHeight;
+      doc.text(`Tier: ${(data2 as any)?.benchmark?.tier || data2?.developer_tier || "N/A"}`, margin, yPos);
+      yPos += lineHeight * 2;
+
+      // Summary
+      if (data2?.verdict_explanation) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(14);
+          doc.text("Executive Summary", margin, yPos);
+          yPos += lineHeight;
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(11);
+          const lines = doc.splitTextToSize(data2.verdict_explanation, 170);
+          doc.text(lines, margin, yPos);
+          yPos += lines.length * 6 + 10;
+      }
+
+      doc.save(`DevXray_Report_${data2?.username || "Candidate"}.pdf`);
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#fafafa] font-[family-name:var(--font-dm-sans)] relative print:min-h-0 print:block print:overflow-visible">
       <div className="grain-overlay" />
@@ -205,7 +259,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
               Re-scan
             </button>
             <button
-              onClick={() => window.print()}
+              onClick={handleExportPDF}
               className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

@@ -450,7 +450,178 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             {"name": "Functions", "patterns": [r"@function\s+", r"@return\s+", r"@each\s+", r"@for\s+"], "weight": 3, "advanced": True},
         ],
     },
+    # ─── NAMED AI/ML/BOT SKILLS (v3.1) ───
+    "TensorFlow": {
+        "category": "ml",
+        "file_patterns": [r"\.py$", r"\.ipynb$"],
+        "indicators": [
+            {"name": "TF import", "patterns": [r"import tensorflow", r"from tensorflow", r"import tf"], "weight": 1, "advanced": False},
+            {"name": "Keras models", "patterns": [r"tf\.keras", r"Sequential\(", r"Model\(", r"keras\.layers"], "weight": 1, "advanced": False},
+            {"name": "TF datasets", "patterns": [r"tf\.data\.Dataset", r"tfds\.load", r"tf\.io"], "weight": 2, "advanced": True},
+            {"name": "Custom training", "patterns": [r"tf\.GradientTape", r"tf\.function", r"@tf\.function"], "weight": 3, "advanced": True},
+            {"name": "TF Serving/Lite", "patterns": [r"tf\.saved_model", r"tflite", r"TFLiteConverter", r"tf\.lite"], "weight": 3, "advanced": True},
+            {"name": "Distributed", "patterns": [r"tf\.distribute", r"MirroredStrategy", r"TPUStrategy"], "weight": 3, "advanced": True},
+        ],
+    },
+    "OpenCV": {
+        "category": "ml",
+        "file_patterns": [r"\.py$", r"\.cpp$"],
+        "indicators": [
+            {"name": "CV2 import", "patterns": [r"import cv2", r"from cv2", r"#include.*opencv"], "weight": 1, "advanced": False},
+            {"name": "Image I/O", "patterns": [r"cv2\.imread", r"cv2\.imshow", r"cv2\.imwrite"], "weight": 1, "advanced": False},
+            {"name": "Image processing", "patterns": [r"cv2\.cvtColor", r"cv2\.GaussianBlur", r"cv2\.threshold", r"cv2\.Canny"], "weight": 2, "advanced": False},
+            {"name": "Object detection", "patterns": [r"cv2\.CascadeClassifier", r"cv2\.dnn", r"detectMultiScale"], "weight": 3, "advanced": True},
+            {"name": "Video processing", "patterns": [r"cv2\.VideoCapture", r"cv2\.VideoWriter"], "weight": 2, "advanced": True},
+            {"name": "Feature detection", "patterns": [r"cv2\.SIFT", r"cv2\.ORB", r"cv2\.findContours", r"cv2\.matchTemplate"], "weight": 3, "advanced": True},
+        ],
+    },
+    "LangChain": {
+        "category": "ml",
+        "file_patterns": [r"\.py$"],
+        "indicators": [
+            {"name": "LangChain import", "patterns": [r"from langchain", r"import langchain", r"langchain_core", r"langchain_community"], "weight": 1, "advanced": False},
+            {"name": "Chains", "patterns": [r"LLMChain", r"SequentialChain", r"ConversationChain", r"RunnableSequence"], "weight": 2, "advanced": False},
+            {"name": "Agents", "patterns": [r"create_.*agent", r"AgentExecutor", r"Tool\(", r"BaseTool"], "weight": 3, "advanced": True},
+            {"name": "Vector stores", "patterns": [r"Chroma", r"FAISS", r"Pinecone", r"VectorStore", r"embeddings"], "weight": 3, "advanced": True},
+            {"name": "RAG patterns", "patterns": [r"RetrievalQA", r"load_qa_chain", r"RecursiveCharacterTextSplitter"], "weight": 3, "advanced": True},
+            {"name": "Prompt templates", "patterns": [r"PromptTemplate", r"ChatPromptTemplate", r"SystemMessage"], "weight": 1, "advanced": False},
+        ],
+    },
+    "HuggingFace": {
+        "category": "ml",
+        "file_patterns": [r"\.py$", r"\.ipynb$"],
+        "indicators": [
+            {"name": "Transformers import", "patterns": [r"from transformers", r"import transformers"], "weight": 1, "advanced": False},
+            {"name": "Model loading", "patterns": [r"AutoModel", r"AutoTokenizer", r"from_pretrained", r"pipeline\("], "weight": 1, "advanced": False},
+            {"name": "Fine-tuning", "patterns": [r"Trainer\(", r"TrainingArguments", r"DataCollator"], "weight": 3, "advanced": True},
+            {"name": "Datasets", "patterns": [r"from datasets", r"load_dataset", r"DatasetDict"], "weight": 2, "advanced": True},
+            {"name": "PEFT/LoRA", "patterns": [r"from peft", r"LoraConfig", r"get_peft_model", r"PeftModel"], "weight": 3, "advanced": True},
+            {"name": "Custom heads", "patterns": [r"ForSequenceClassification", r"ForTokenClassification", r"ForCausalLM"], "weight": 2, "advanced": True},
+        ],
+    },
+    "OpenAI API": {
+        "category": "ml",
+        "file_patterns": [r"\.py$", r"\.ts$", r"\.js$"],
+        "indicators": [
+            {"name": "SDK import", "patterns": [r"import openai", r"from openai", r"new OpenAI\(", r"import OpenAI"], "weight": 1, "advanced": False},
+            {"name": "Chat completions", "patterns": [r"chat\.completions", r"ChatCompletion", r"gpt-4", r"gpt-3\.5"], "weight": 1, "advanced": False},
+            {"name": "Embeddings", "patterns": [r"embeddings\.create", r"text-embedding", r"Embedding\.create"], "weight": 2, "advanced": True},
+            {"name": "Function calling", "patterns": [r"function_call", r"tool_choice", r"tools=\[", r"functions=\["], "weight": 3, "advanced": True},
+            {"name": "Streaming", "patterns": [r"stream=True", r"stream:\s*true", r"for.*chunk.*in"], "weight": 2, "advanced": True},
+            {"name": "Assistants API", "patterns": [r"assistants\.create", r"threads\.create", r"runs\.create"], "weight": 3, "advanced": True},
+        ],
+    },
+    "Telegram Bot": {
+        "category": "backend",
+        "file_patterns": [r"\.py$", r"\.js$", r"\.ts$"],
+        "indicators": [
+            {"name": "Bot import", "patterns": [r"python-telegram-bot", r"from telegram", r"import telebot", r"telegraf", r"Telegraf"], "weight": 1, "advanced": False},
+            {"name": "Handlers", "patterns": [r"CommandHandler", r"MessageHandler", r"CallbackQueryHandler", r"bot\.command\("], "weight": 1, "advanced": False},
+            {"name": "Inline keyboards", "patterns": [r"InlineKeyboardButton", r"InlineKeyboardMarkup", r"callback_data"], "weight": 2, "advanced": True},
+            {"name": "ConversationHandler", "patterns": [r"ConversationHandler", r"entry_points", r"states"], "weight": 3, "advanced": True},
+            {"name": "Webhooks", "patterns": [r"set_webhook", r"webhook", r"bot\.launch\("], "weight": 2, "advanced": True},
+        ],
+    },
 }
+
+
+# ═══════════════════════════════════════════════════════
+#  DEPENDENCY FILE SKILL MINING
+# ═══════════════════════════════════════════════════════
+
+# Maps package names from dependency files → SKILL_DEFINITIONS keys
+_DEPENDENCY_SKILL_MAP = {
+    # Python (requirements.txt / pyproject.toml)
+    "tensorflow": "TensorFlow", "tf-nightly": "TensorFlow",
+    "keras": "TensorFlow", "torch": "Deep Learning",
+    "torchvision": "Deep Learning", "opencv-python": "OpenCV",
+    "opencv-contrib-python": "OpenCV", "langchain": "LangChain",
+    "langchain-core": "LangChain", "langchain-community": "LangChain",
+    "transformers": "HuggingFace", "datasets": "HuggingFace",
+    "openai": "OpenAI API", "python-telegram-bot": "Telegram Bot",
+    "telebot": "Telegram Bot", "fastapi": "FastAPI",
+    "django": "Django", "flask": "Python (Backend)",
+    "scikit-learn": "Machine Learning", "sklearn": "Machine Learning",
+    "pandas": "Data Science", "numpy": "Data Science",
+    "scipy": "Data Science", "matplotlib": "Data Science",
+    "seaborn": "Data Science", "plotly": "Data Science",
+    "redis": "Redis", "pymongo": "MongoDB",
+    "motor": "MongoDB", "sqlalchemy": "SQL/Databases",
+    "psycopg2": "SQL/Databases", "pika": "RabbitMQ",
+    "kafka-python": "Kafka", "elasticsearch": "Elasticsearch",
+    "boto3": "AWS", "boto": "AWS",
+    # JavaScript / TypeScript (package.json)
+    "react": "React", "react-dom": "React",
+    "next": "Next.js", "vue": "Vue.js",
+    "@angular/core": "Angular", "express": "Node.js",
+    "typescript": "TypeScript", "tailwindcss": "Tailwind CSS",
+    "react-native": "React Native", "telegraf": "Telegram Bot",
+    "@tensorflow/tfjs": "TensorFlow", "socket.io": "WebSockets",
+    "@elastic/elasticsearch": "Elasticsearch",
+    "kafkajs": "Kafka", "amqplib": "RabbitMQ",
+    "graphql": "GraphQL", "@apollo/server": "GraphQL",
+    "@grpc/grpc-js": "gRPC",
+    # Go (go.mod)
+    "github.com/gin-gonic/gin": "Go",
+    "github.com/gorilla/mux": "Go",
+    "github.com/go-redis/redis": "Redis",
+    "go.mongodb.org/mongo-driver": "MongoDB",
+    "gorm.io/gorm": "SQL/Databases",
+}
+
+
+def extract_skills_from_dependencies(
+    file_contents: List[Dict[str, str]],
+) -> Set[str]:
+    """
+    Parse dependency files (package.json, requirements.txt, go.mod)
+    and return a set of SKILL_DEFINITIONS keys that are confirmed
+    present via declared dependencies.
+    """
+    detected_skills: Set[str] = set()
+
+    for f in file_contents:
+        path = f.get("path", "").lower()
+        content = f.get("content", "")
+        if not content:
+            continue
+
+        packages: List[str] = []
+
+        if path.endswith("package.json"):
+            try:
+                import json
+                pkg = json.loads(content)
+                for key in ("dependencies", "devDependencies", "peerDependencies"):
+                    packages.extend(pkg.get(key, {}).keys())
+            except Exception:
+                pass
+
+        elif path.endswith("requirements.txt"):
+            for line in content.splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or line.startswith("-"):
+                    continue
+                # Strip version specifiers: package>=1.0 → package
+                pkg_name = re.split(r"[>=<!=~\[\]]", line)[0].strip().lower()
+                if pkg_name:
+                    packages.append(pkg_name)
+
+        elif path.endswith("go.mod"):
+            for line in content.splitlines():
+                line = line.strip()
+                if line.startswith("require") or line.startswith(")"):
+                    continue
+                parts = line.split()
+                if parts and "/" in parts[0]:
+                    packages.append(parts[0])
+
+        for pkg in packages:
+            pkg_lower = pkg.lower()
+            if pkg_lower in _DEPENDENCY_SKILL_MAP:
+                detected_skills.add(_DEPENDENCY_SKILL_MAP[pkg_lower])
+
+    return detected_skills
 
 
 # ═══════════════════════════════════════════════════════
@@ -675,6 +846,31 @@ def run_skill_verification(
             for ev in result.get("evidence", []):
                 ev["repo"] = repo_name
             verified_skills.append(result)
+
+    # ─── Dependency-file skill mining (hidden skill detection) ───
+    dep_skills = extract_skills_from_dependencies(file_contents)
+    detected_skill_names = {s["skill_name"] for s in verified_skills}
+    for dep_skill_name in dep_skills:
+        if dep_skill_name not in detected_skill_names and dep_skill_name in SKILL_DEFINITIONS:
+            # Skill found in dependency files but not in code patterns → add with a base score
+            skill_def = SKILL_DEFINITIONS[dep_skill_name]
+            verified_skills.append({
+                "skill_name": dep_skill_name,
+                "skill_score": 2.0,  # Base score for dependency-only detection
+                "category": skill_def.get("category", "other"),
+                "evidence": [{"repo": repo_name, "file": "dependency file", "sample": "Declared in dependencies"}],
+                "sub_indicators": [{"name": "Dependency Declared", "detected": True, "detail": "Found in package manifest"}],
+                "indicators_detected": 1,
+                "indicators_total": len(skill_def.get("indicators", [])),
+                "basic_detected": 1,
+                "advanced_detected": 0,
+            })
+            proof.add_skill(
+                skill=dep_skill_name,
+                repo_name=repo_name,
+                file_path="dependency file",
+                detail=f"Hidden skill detected via dependency file (score: 2.0/10)",
+            )
 
     # Sort by score
     verified_skills.sort(key=lambda s: s["skill_score"], reverse=True)

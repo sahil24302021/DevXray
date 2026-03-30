@@ -86,6 +86,80 @@ export default function ResumeReportPage() {
   
   const skills = resume_data?.technical_skills || {};
 
+  // JD Matching display variables
+  const jdMatch = github_intelligence?.jd_match;
+  const matchPercentage = jdMatch?.match_percentage || 0;
+
+  // ─── PDF Export Logic (Text-based to avoid dark-mode html2canvas bugs) ───
+  const handleExportPDF = () => {
+    // Dynamic import inside click handler to enforce client-side only
+    import("jspdf").then((jsPDFModule) => {
+      const jsPDF = jsPDFModule.default;
+      const doc = new jsPDF();
+      const margin = 20;
+      let yPos = margin;
+      const lineHeight = 10;
+
+      // Title & Header
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(22);
+      doc.text(`DevXray Intelligence Report`, margin, yPos);
+      yPos += lineHeight * 2;
+
+      doc.setFontSize(16);
+      doc.text(resume_data?.name || "Unknown Candidate", margin, yPos);
+      yPos += lineHeight;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(12);
+      doc.text(`Role: ${resume_data?.current_role || "N/A"}`, margin, yPos);
+      yPos += lineHeight;
+      doc.text(`GitHub: @${analysis_metadata?.github_username || "N/A"}`, margin, yPos);
+      yPos += lineHeight * 2;
+
+      // Scores
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text(`Intelligence Score: ${github_intelligence?.final_score || score || 0} / 100`, margin, yPos);
+      yPos += lineHeight;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.text(`Percentile: ${github_intelligence?.percentile || github_intelligence?.benchmark?.percentile || "N/A"}th`, margin, yPos);
+      yPos += lineHeight;
+      doc.text(`Tier: ${github_intelligence?.developer_tier || "N/A"}`, margin, yPos);
+      yPos += lineHeight * 2;
+
+      // Claims Validation
+      if (claims_validation?.overall_assessment) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(14);
+          doc.text("Forensic Claims Validation", margin, yPos);
+          yPos += lineHeight;
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(11);
+          const lines = doc.splitTextToSize(claims_validation.overall_assessment, 170);
+          doc.text(lines, margin, yPos);
+          yPos += lines.length * 6 + 10;
+      }
+
+      // JD Match
+      if (matchPercentage > 0) {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(14);
+          doc.text(`Job Description Alignment: ${matchPercentage}%`, margin, yPos);
+          yPos += lineHeight;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(11);
+          const lines = doc.splitTextToSize(jdMatch?.recommendation || "", 170);
+          doc.text(lines, margin, yPos);
+          yPos += lines.length * 6 + 10;
+      }
+
+      doc.save(`DevXray_Report_${(resume_data?.name || "Candidate").replace(/\s+/g, '_')}.pdf`);
+    });
+  };
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#fafafa] font-[family-name:var(--font-dm-sans)] relative overflow-hidden">
       {/* --- Print Styles (page-specific overrides) --- */}
@@ -112,7 +186,7 @@ export default function ResumeReportPage() {
           </Link>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => window.print()}
+              onClick={handleExportPDF}
               className="px-3.5 py-1.5 text-xs font-bold text-white bg-white/10 rounded-lg transition-all hover:bg-white/20 border border-white/10 cursor-pointer flex items-center gap-1.5"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

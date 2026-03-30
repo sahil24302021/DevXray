@@ -808,6 +808,23 @@ async def analyze_resume_endpoint(
         except Exception as e:
             log.warning(f"AI summary failed: {e}")
 
+        # ─── JD Matching ───
+        jd_match = None
+        if job_requirements and job_requirements.get("job_description"):
+            try:
+                from intelligence.jd_matcher import match_jd
+                verified_skills_list = [
+                    s.get("skill_name") for s in engine_results.get("skills", {}).get("skills", [])
+                ]
+                jd_match = await match_jd(
+                    job_description=job_requirements["job_description"],
+                    candidate_skills=verified_skills_list,
+                    candidate_tier=engine_results.get("scoring", {}).get("benchmark", {}).get("tier", "Unknown"),
+                    years_experience=years_exp,
+                )
+            except Exception as e:
+                log.warning(f"JD matching failed: {e}")
+
         from orchestrator.report_generator import generate_report
         github_report = generate_report(
             profile=profile,
@@ -824,6 +841,7 @@ async def analyze_resume_endpoint(
             deep_data=deep_data,
             pinned_code_reviews=pinned_code_reviews,
             ai_summary=ai_summary,
+            jd_match=jd_match,
         )
 
         github_report["confidence_score"] = pipeline_meta.get("confidence_score", 0)
