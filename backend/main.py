@@ -105,6 +105,9 @@ ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:3001",
+    # Production Vercel frontend
+    "https://dev-xray.vercel.app",
+    "https://www.dev-xray.vercel.app",
 ]
 
 # Add production frontend URL if set
