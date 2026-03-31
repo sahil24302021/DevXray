@@ -1105,6 +1105,14 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         "_quality": "none",
     }
 
+    # Pre-flight: Check if li_at cookie is likely expired
+    from services.linkedin_config import get_li_at_status
+    cookie_status = get_li_at_status()
+    if cookie_status["has_cookie"] and cookie_status["age_hours"] and cookie_status["age_hours"] > 24:
+        print(f"[LinkedIn] WARNING: Cookie is {cookie_status['age_hours']}h old — likely expired. Strategies 1-2 will probably fail.")
+    elif not cookie_status["has_cookie"]:
+        print(f"[LinkedIn] INFO: No li_at cookie configured. Strategies 1-2 will be skipped. Search engine strategies (4-9) will run.")
+
     if not url or "linkedin.com" not in url:
         result["note"] = "No valid LinkedIn URL provided."
         result["recommendation"] = "Ask the candidate to provide their LinkedIn profile URL."

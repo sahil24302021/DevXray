@@ -4,11 +4,15 @@ import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
-type SettingsTab = "profile" | "api" | "team" | "plan" | "integrations" | "notifications";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://devxray-backend.onrender.com";
+const ADMIN_SECRET = process.env.NEXT_PUBLIC_ADMIN_SECRET || "devxray-admin-2024";
+
+type SettingsTab = "profile" | "api" | "team" | "plan" | "integrations" | "notifications" | "linkedin";
 
 const NAV_TABS: { id: SettingsTab; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "api", label: "API Keys" },
+  { id: "linkedin", label: "LinkedIn" },
   { id: "team", label: "Team" },
   { id: "plan", label: "Plan & Billing" },
   { id: "integrations", label: "Integrations" },
@@ -41,6 +45,13 @@ export default function SettingsPage() {
 
   const [user, setUser] = useState<any>(null);
 
+  // LinkedIn cookie management state
+  const [liCookie, setLiCookie] = useState("");
+  const [liStatus, setLiStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [liMessage, setLiMessage] = useState("");
+  const [cookieStatus, setCookieStatus] = useState<any>(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+
   useEffect(() => {
     import("@/lib/auth").then((mod) => {
       mod.getCurrentUser().then(setUser);
@@ -56,6 +67,47 @@ export default function SettingsPage() {
   const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleUpdateLiCookie = async () => {
+    if (!liCookie.trim()) {
+      setLiMessage("Please paste your li_at cookie value");
+      setLiStatus("error");
+      return;
+    }
+    setLiStatus("loading");
+    setLiMessage("");
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/update-linkedin-cookie`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookie: liCookie.trim(), secret: ADMIN_SECRET }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setLiStatus("success");
+        setLiMessage(data.message);
+        setLiCookie("");
+      } else {
+        setLiStatus("error");
+        setLiMessage(data.detail || "Failed to update cookie");
+      }
+    } catch {
+      setLiStatus("error");
+      setLiMessage("Could not reach backend. Check if Render is awake.");
+    }
+  };
+
+  const handleCheckCookieStatus = async () => {
+    setCheckingStatus(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/admin/linkedin-cookie-status?secret=${ADMIN_SECRET}`);
+      const data = await res.json();
+      setCookieStatus(data);
+    } catch {
+      setCookieStatus({ error: "Could not reach backend" });
+    }
+    setCheckingStatus(false);
   };
 
   const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
@@ -297,6 +349,119 @@ export default function SettingsPage() {
                   </div>
                 ))}
               </motion.div>
+            )}
+
+            {/* ── LINKEDIN COOKIE MANAGER ── */}
+            {tab === "linkedin" && (
+              <>
+                <motion.div variants={fadeUp} className="rounded-2xl p-6 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa" }}>ADMIN</span>
+                    <h2 className="text-sm font-bold text-white">LinkedIn Cookie Manager</h2>
+                  </div>
+                  <p className="text-[12px] text-[#555] mb-5 leading-relaxed">
+                    LinkedIn&apos;s Voyager API requires a valid <code className="px-1 py-0.5 rounded text-[10px] font-mono" style={{ background: "rgba(255,255,255,0.06)" }}>li_at</code> session cookie.
+                    This cookie expires after 1–2 uses from a server IP. Update it here whenever LinkedIn scraping stops working —
+                    no Render redeployment needed.
+                  </p>
+
+                  {/* How to get the cookie */}
+                  <div className="rounded-xl p-4 mb-5 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
+                    <p className="text-[10px] font-bold text-[#888] uppercase tracking-wider mb-2">How to get your fresh li_at cookie</p>
+                    <ol className="text-[11px] text-[#555] space-y-1.5 list-none">
+                      <li>1. Open <span className="text-[#60a5fa]">linkedin.com</span> in Chrome and make sure you are logged in</li>
+                      <li>2. Press <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: "rgba(255,255,255,0.06)" }}>F12</code> (DevTools) → Application tab → Cookies → linkedin.com</li>
+                      <li>3. Find the cookie named <code className="px-1 py-0.5 rounded text-[10px]" style={{ background: "rgba(255,255,255,0.06)" }}>li_at</code></li>
+                      <li>4. Copy the entire Value (a long string starting with AQE...)</li>
+                      <li>5. Paste it below and click Update</li>
+                    </ol>
+                  </div>
+
+                  <div className="space-y-3">
+                    <textarea
+                      value={liCookie}
+                      onChange={(e) => setLiCookie(e.target.value)}
+                      placeholder="Paste li_at cookie value here (starts with AQE...)"
+                      className="w-full rounded-xl px-4 py-3 text-sm text-white border outline-none transition-all focus:border-[#cdff00]/40 resize-none font-mono"
+                      style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}
+                      rows={3}
+                    />
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleUpdateLiCookie}
+                        disabled={liStatus === "loading"}
+                        className="flex-1 py-2.5 rounded-xl text-sm font-bold text-[#050505] transition-all hover:opacity-90 disabled:opacity-50"
+                        style={{ background: "#cdff00" }}
+                      >
+                        {liStatus === "loading" ? "Updating..." : "Update LinkedIn Cookie"}
+                      </button>
+                      <button
+                        onClick={handleCheckCookieStatus}
+                        disabled={checkingStatus}
+                        className="px-5 py-2.5 rounded-xl text-[12px] font-bold border transition-all hover:border-white/20"
+                        style={{ borderColor: "rgba(255,255,255,0.1)", color: "#888" }}
+                      >
+                        {checkingStatus ? "Checking..." : "Check Status"}
+                      </button>
+                    </div>
+
+                    {liStatus === "success" && liMessage && (
+                      <div className="rounded-xl px-4 py-3 text-[12px] font-medium" style={{ background: "rgba(52,211,153,0.08)", color: "#34d399", border: "1px solid rgba(52,211,153,0.15)" }}>
+                        ✓ {liMessage}
+                      </div>
+                    )}
+                    {liStatus === "error" && liMessage && (
+                      <div className="rounded-xl px-4 py-3 text-[12px] font-medium" style={{ background: "rgba(251,113,133,0.08)", color: "#fb7185", border: "1px solid rgba(251,113,133,0.15)" }}>
+                        ✗ {liMessage}
+                      </div>
+                    )}
+
+                    {cookieStatus && (
+                      <div className="rounded-xl p-4 border space-y-2" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-[#555]">Cookie present</span>
+                          <span style={{ color: cookieStatus.has_cookie ? "#34d399" : "#fb7185" }}>
+                            {cookieStatus.has_cookie ? "Yes" : "No"}
+                          </span>
+                        </div>
+                        {cookieStatus.source && (
+                          <div className="flex justify-between text-[11px]">
+                            <span className="text-[#555]">Source</span>
+                            <span className="text-white">{cookieStatus.source === "runtime_api" ? "Runtime API (recent update)" : cookieStatus.source === "environment_var" ? "Environment Variable" : cookieStatus.source}</span>
+                          </div>
+                        )}
+                        {cookieStatus.age_hours !== null && cookieStatus.age_hours !== undefined && (
+                          <div className="flex justify-between text-[11px]">
+                            <span className="text-[#555]">Cookie age</span>
+                            <span style={{ color: cookieStatus.age_hours > 24 ? "#fbbf24" : "#34d399" }}>
+                              {cookieStatus.age_hours}h {cookieStatus.age_hours > 24 ? "(may be expired)" : "(fresh)"}
+                            </span>
+                          </div>
+                        )}
+                        {cookieStatus.recommendation && (
+                          <div className="pt-2 mt-1 border-t text-[11px] text-[#555]" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
+                            {cookieStatus.recommendation}
+                          </div>
+                        )}
+                        {cookieStatus.error && (
+                          <div className="text-[11px]" style={{ color: "#fb7185" }}>{cookieStatus.error}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+
+                {/* Why does cookie expire */}
+                <motion.div variants={fadeUp} className="rounded-2xl p-5 border" style={{ background: "rgba(167,139,250,0.04)", borderColor: "rgba(167,139,250,0.12)" }}>
+                  <p className="text-[12px] font-bold text-[#a78bfa] mb-2">Why does the cookie expire so fast?</p>
+                  <p className="text-[11px] text-[#555] leading-relaxed">
+                    LinkedIn detects API calls from server IPs (not real browsers) and invalidates the session immediately as an anti-bot measure.
+                    This is normal — every time you scan a LinkedIn profile, you may need a fresh cookie.
+                    This Settings page makes the process take 30 seconds instead of 10 minutes.
+                  </p>
+                </motion.div>
+              </>
             )}
 
             {/* ── NOTIFICATIONS ── */}

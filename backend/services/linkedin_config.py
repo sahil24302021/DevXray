@@ -14,9 +14,76 @@ from typing import Dict, Optional
 # ENV-BASED CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Runtime cookie store — survives across requests within one server process
+# Key: "li_at" → Value: (cookie_string, set_at_timestamp)
+_runtime_cookie_store: dict = {}
+
 def get_li_at() -> str:
-    """Get LinkedIn li_at session cookie from environment."""
+    """
+    Get LinkedIn li_at session cookie.
+    Priority: 1) Runtime store (set via API)  2) Environment variable
+    This allows cookie updates without redeployment.
+    """
+    # Check runtime store first (most recently updated via API)
+    stored = _runtime_cookie_store.get("li_at")
+    if stored:
+        cookie_val, set_at = stored
+        # Use runtime cookie if set within the last 48 hours
+        if time.time() - set_at < 172800:  # 48 hours
+            return cookie_val.strip()
+        else:
+            # Expired from runtime store — clear it
+            del _runtime_cookie_store["li_at"]
+    
+    # Fall back to environment variable
     return os.environ.get("LINKEDIN_LI_AT", "").strip()
+
+def set_li_at_runtime(cookie: str) -> bool:
+    """
+    Update the li_at cookie at runtime without redeployment.
+    Called by the admin API endpoint.
+    Returns True if the cookie looks valid (basic format check).
+    """
+    cookie = cookie.strip()
+    if not cookie or len(cookie) < 20:
+        return False
+    # LinkedIn li_at cookies always start with AQE or are a long alphanumeric string
+    _runtime_cookie_store["li_at"] = (cookie, time.time())
+    print(f"[LinkedIn·Config] li_at updated via runtime store (length={len(cookie)})")
+    return True
+
+def get_li_at_status() -> dict:
+    """
+    Return the current cookie status for the health check endpoint.
+    """
+    env_cookie = os.environ.get("LINKEDIN_LI_AT", "").strip()
+    runtime_stored = _runtime_cookie_store.get("li_at")
+    
+    source = "none"
+    age_hours = None
+    has_cookie = False
+    
+    if runtime_stored:
+        _, set_at = runtime_stored
+        age_hours = round((time.time() - set_at) / 3600, 1)
+        source = "runtime_api"
+        has_cookie = True
+    elif env_cookie:
+        source = "environment_var"
+        has_cookie = True
+    
+    return {
+        "has_cookie": has_cookie,
+        "source": source,
+        "age_hours": age_hours,
+        "env_var_set": bool(env_cookie),
+        "runtime_set": bool(runtime_stored),
+        "recommendation": (
+            "Cookie is fresh — LinkedIn should work." if has_cookie and (age_hours is None or age_hours < 24)
+            else "Cookie is old (>24h) — may be expired. Update via Settings." if has_cookie
+            else "No li_at cookie set. LinkedIn Voyager API unavailable. Update via Settings."
+        )
+    }
 
 def get_csrf_token() -> str:
     """

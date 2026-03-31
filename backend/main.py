@@ -1237,6 +1237,66 @@ async def batch_analyze_resumes_endpoint(
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# ADMIN: LinkedIn Cookie Management
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from services.linkedin_config import set_li_at_runtime, get_li_at_status
+
+ADMIN_SECRET = os.environ.get("DEVXRAY_ADMIN_SECRET", "devxray-admin-2024")
+
+@app.post("/api/admin/update-linkedin-cookie")
+async def update_linkedin_cookie(request: Request):
+    """
+    Securely update the LinkedIn li_at cookie at runtime.
+    No redeployment needed. Cookie is stored in memory for 48 hours.
+    
+    Request body: { "cookie": "AQEDATxxx...", "secret": "your-admin-secret" }
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    
+    # Validate admin secret
+    secret = body.get("secret", "")
+    if secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid admin secret")
+    
+    cookie = body.get("cookie", "").strip()
+    if not cookie:
+        raise HTTPException(status_code=400, detail="Cookie value is required")
+    
+    if len(cookie) < 20:
+        raise HTTPException(status_code=400, detail="Cookie too short — does not look valid")
+    
+    success = set_li_at_runtime(cookie)
+    if not success:
+        raise HTTPException(status_code=400, detail="Cookie validation failed")
+    
+    log.info(f"[Admin] LinkedIn li_at cookie updated via API (length={len(cookie)})")
+    
+    return {
+        "success": True,
+        "message": "LinkedIn cookie updated successfully. LinkedIn scraping will use this cookie for the next 48 hours.",
+        "cookie_length": len(cookie),
+        "source": "runtime_api"
+    }
+
+
+@app.get("/api/admin/linkedin-cookie-status")
+async def linkedin_cookie_status(secret: str = ""):
+    """
+    Check the current LinkedIn cookie status.
+    Query param: ?secret=your-admin-secret
+    """
+    if secret != ADMIN_SECRET:
+        raise HTTPException(status_code=403, detail="Invalid admin secret")
+    
+    status = get_li_at_status()
+    return status
+
+
 @app.get("/health")
 async def health():
     return {
