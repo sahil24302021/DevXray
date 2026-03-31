@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, useSpring, useMotionValue, useTransform } from "framer-motion";
 import Link from "next/link";
 
 /* --- Status Badge --- */
@@ -22,6 +22,25 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+/* --- Animated Score Counter --- */
+function AnimatedScoreValue({ value, className }: { value: number; className?: string }) {
+  const motionValue = useMotionValue(0);
+  const spring = useSpring(motionValue, { stiffness: 50, damping: 20, duration: 1.5 });
+  const display = useTransform(spring, (v) => Math.round(v));
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    motionValue.set(value);
+  }, [value, motionValue]);
+
+  useEffect(() => {
+    const unsubscribe = display.on("change", (v) => setDisplayValue(v));
+    return unsubscribe;
+  }, [display]);
+
+  return <span className={className}>{displayValue}</span>;
+}
+
 /* --- Score Ring --- */
 function ScoreRing({ score, size = 120 }: { score: number; size?: number }) {
   const r = (size - 12) / 2;
@@ -32,13 +51,15 @@ function ScoreRing({ score, size = 120 }: { score: number; size?: number }) {
     <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="6" />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth="6"
-          strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset}
-          style={{ transition: "stroke-dashoffset 1s ease-out" }}
+        <motion.circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth="6"
+          strokeLinecap="round" strokeDasharray={c}
+          initial={{ strokeDashoffset: c }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className="text-3xl font-bold" style={{ color }}>{score}</span>
+        <AnimatedScoreValue value={score} className="text-3xl font-bold" />
         <span className="text-[10px] text-slate-500 uppercase tracking-widest">/ 100</span>
       </div>
     </div>
@@ -233,8 +254,8 @@ export default function ResumeReportPage() {
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <h1 className="font-[family-name:var(--font-syne)] font-bold text-3xl mb-1">{resume_data?.name || "Unknown Candidate"}</h1>
-              <p className="text-[#888] text-sm">{resume_data?.current_role}</p>
-              <p className="text-[#666] text-sm mt-1">{resume_data?.email} {resume_data?.phone ? `• ${resume_data.phone}` : ""} {resume_data?.location ? `• ${resume_data.location}` : ""}</p>
+              <p className="text-slate-400 text-sm">{resume_data?.current_role}</p>
+              <p className="text-slate-500 text-sm mt-1">{resume_data?.email} {resume_data?.phone ? `• ${resume_data.phone}` : ""} {resume_data?.location ? `• ${resume_data.location}` : ""}</p>
               <div className="flex flex-wrap gap-3 mt-4">
                 {resume_data?.github_url && <a href={resume_data.github_url} target="_blank" className="text-xs text-[#cdff00] hover:underline">🔗 GitHub</a>}
                 {resume_data?.linkedin_url && <a href={resume_data.linkedin_url} target="_blank" className="text-xs text-[#cdff00] hover:underline">🔗 LinkedIn</a>}
@@ -312,7 +333,7 @@ export default function ResumeReportPage() {
             <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[#cdff00]" /> Technical Skills
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {Object.entries(skills).map(([category, items]: [string, any]) => (
                 Array.isArray(items) && items.length > 0 && (
                   <div key={category} className="p-4 rounded-xl bg-black/40 border border-white/[0.05]">
@@ -336,7 +357,7 @@ export default function ResumeReportPage() {
             <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-cyan-400" /> Skill Verification Matrix
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {[
                 { title: "Verified by GitHub", items: claims_validation.skill_match_analysis.verified_skills, color: "emerald" },
                 { title: "Unverified (claimed)", items: claims_validation.skill_match_analysis.unverified_skills, color: "amber" },
@@ -422,7 +443,7 @@ export default function ResumeReportPage() {
             <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-purple-400" /> Projects Extracted
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {resume_data.projects.map((p: any, i: number) => (
                 <div key={i} className="p-4 rounded-xl bg-black/40 border border-white/[0.05]">
                   <h3 className="text-sm font-bold text-white mb-1">{p.name}</h3>
@@ -454,7 +475,7 @@ export default function ResumeReportPage() {
                 Full GitHub Report →
               </Link>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               {[
                 { label: "Signal Score", value: `${github_intelligence.score}/100` },
                 { label: "Risk Level", value: github_intelligence.risk_level },
@@ -471,7 +492,7 @@ export default function ResumeReportPage() {
               ].map((stat, i) => (
                 stat.value !== "-" && (
                   <div key={i} className="p-3 rounded-xl bg-black/40 border border-white/5">
-                    <span className="block text-[#888] text-[10px] uppercase tracking-wider mb-1">{stat.label}</span>
+                    <span className="block text-slate-400 text-[10px] uppercase tracking-wider mb-1">{stat.label}</span>
                     <span className="text-sm font-bold text-white">{stat.value || "N/A"}</span>
                   </div>
                 )
@@ -535,14 +556,18 @@ export default function ResumeReportPage() {
             <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg mb-4 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-violet-400" /> Skill Assessment (AI Estimated)
             </h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               {Object.entries(deep_report.skill_assessment).map(([skill, level]: [string, any]) => (
                 <div key={skill} className="p-3 rounded-xl bg-black/40 border border-white/5">
                   <span className="block text-[10px] text-slate-500 uppercase tracking-wider mb-2">{skill.replace(/_/g, " ")}</span>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full transition-all duration-1000" style={{
-                        width: `${(level as number) * 10}%`,
+                      <motion.div
+                        className="h-full rounded-full"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(level as number) * 10}%` }}
+                        transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.5 }}
+                        style={{
                         background: (level as number) >= 7 ? "#22c55e" : (level as number) >= 4 ? "#eab308" : "#ef4444"
                       }} />
                     </div>

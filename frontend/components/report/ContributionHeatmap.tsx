@@ -179,7 +179,7 @@ export default function ContributionHeatmap({
             return (
               <span
                 key={i}
-                className="text-[9px] text-slate-600 flex-1 text-center"
+                className="text-[9px] text-slate-500 flex-1 text-center"
               >
                 {months[monthDate.getMonth()]}
               </span>

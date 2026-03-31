@@ -941,6 +941,31 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════
+   DARK THEME CONTRAST FIX — WCAG AA (4.5:1 minimum)
+   All text against #050505 (lum ~0.02) must be >= #888 for body text
+   ═══════════════════════════════════════════════════════════ */
+
+/* Bump CSS custom property minimums */
+:root {
+  --text-muted: #888888; /* was #444444 — now meets 4.5:1 */
+}
+
+/* Utility overrides for common low-contrast Tailwind classes in dark mode */
+/* slate-600 (#475569) only has ~3.3:1 on #050505 → bump to slate-400 (#94a3b8 = 6.4:1) */
+.text-slate-600 {
+  color: #94a3b8 !important;
+}
+
+/* Inline hex overrides that appear in report components */
+.text-\[\#444\],
+.text-\[\#555\] {
+  color: #9ca3af !important; /* gray-400 = 6.3:1 */
+}
+.text-\[\#666\] {
+  color: #9ca3af !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
    RESPONSIVE
    ═══════════════════════════════════════════════════════════ */
 

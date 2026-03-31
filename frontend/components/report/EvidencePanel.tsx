@@ -99,7 +99,7 @@ export default function EvidencePanel({
         <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-violet-400" /> Scoring Evidence Panel
         </h2>
-        <span className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+        <span className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">
           Transparent AI Evaluation
         </span>
       </div>
@@ -148,7 +148,7 @@ export default function EvidencePanel({
       <h3 className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-3">
         Dimension Weighting
       </h3>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
         {features.map((feat, i) => {
           const evidence = getEvidenceForFeature(feat.component);
           return (
@@ -167,11 +167,11 @@ export default function EvidencePanel({
                   <span className="text-[10px] uppercase tracking-wider text-slate-300 font-bold">
                     {feat.component.replace(/_/g, " ")}
                   </span>
-                  <span className="text-[10px] text-slate-500">{(feat.weight * 100).toFixed(0)}% wgt</span>
+                  <span className="text-[10px] text-slate-400">{(feat.weight * 100).toFixed(0)}% wgt</span>
                 </div>
                 <div className="flex items-end gap-2">
                   <span className="text-sm font-bold text-white">+{feat.contribution} pts</span>
-                  <span className="text-[10px] text-slate-500 pb-[2px]">
+                  <span className="text-[10px] text-slate-400 pb-[2px]">
                     (raw: {feat.raw_score})
                   </span>
                 </div>
@@ -201,7 +201,7 @@ export default function EvidencePanel({
 
               return (
                 <div key={i} className={`flex gap-2 ${colorClass}`}>
-                  <span className="text-slate-600 shrink-0">{'>'}</span>
+                  <span className="text-slate-500 shrink-0">{'>'}</span>
                   <span className="whitespace-pre-wrap">{log}</span>
                 </div>
               );

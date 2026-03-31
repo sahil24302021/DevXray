@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useSpring, useMotionValue, useTransform } from "framer-motion";
 import Link from "next/link";
 import { analyzeProfile, AnalysisResult } from "@/lib/api";
 import { use } from "react";
@@ -23,8 +23,28 @@ import ExecutiveSummary from "@/components/report/ExecutiveSummary";
 import InterviewQuestions from "@/components/report/InterviewQuestions";
 import VerificationSources from "@/components/report/VerificationSources";
 import EvidencePanel from "@/components/report/EvidencePanel";
+import RecruiterBrief from "@/components/report/RecruiterBrief";
 
 import LoadingState from "@/components/LoadingState";
+
+/* ─── Animated Score Counter ─── */
+function AnimatedScore({ value, className }: { value: number; className: string }) {
+  const motionValue = useMotionValue(0);
+  const spring = useSpring(motionValue, { stiffness: 50, damping: 20, duration: 1.5 });
+  const display = useTransform(spring, (v) => Math.round(v));
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    motionValue.set(value);
+  }, [value, motionValue]);
+
+  useEffect(() => {
+    const unsubscribe = display.on("change", (v) => setDisplayValue(v));
+    return unsubscribe;
+  }, [display]);
+
+  return <span className={className}>{displayValue}</span>;
+}
 
 function ErrorState({ error, username }: { error: string; username: string }) {
   return (
@@ -71,7 +91,26 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
   const [isLoading, setIsLoading] = useState(true);
   const [jobId, setJobId] = useState<string>("");
   const [isExporting, setIsExporting] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const reportRef = useRef<HTMLElement>(null);
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      // fallback
+      const input = document.createElement("input");
+      input.value = window.location.href;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    }
+  };
 
   const handleExportPDF = async () => {
     if (!reportRef.current || isExporting) return;
@@ -112,7 +151,6 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             // Replace gradient backgrounds with solid fallback
             const bg = computed?.background || computed?.backgroundImage || cs.background || cs.backgroundImage || "";
             if (bg && (bg.includes("gradient") || bg.includes("linear-") || bg.includes("radial-"))) {
-              // Extract first color from gradient or use transparent dark
               const colorMatch = bg.match(/#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\)/);
               cs.background = colorMatch ? colorMatch[0] : "rgba(255,255,255,0.03)";
               cs.backgroundImage = "none";
@@ -305,9 +343,9 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
       `}</style>
 
       {/* --- Nav --- */}
-      <nav className="sticky top-0 z-50 px-6 md:px-10 pt-4 print:hidden">
+      <nav className="sticky top-0 z-50 px-4 sm:px-6 md:px-10 pt-4 print:hidden">
         <div
-          className="mx-auto max-w-5xl flex items-center justify-between rounded-2xl px-6 py-3 border border-white/[0.06]"
+          className="mx-auto max-w-5xl flex items-center justify-between rounded-2xl px-4 sm:px-6 py-3 border border-white/[0.06]"
           style={{
             background: "rgba(5, 5, 5, 0.85)",
             backdropFilter: "blur(20px) saturate(150%)",
@@ -324,7 +362,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
               DevXray<span className="grad-text">.ai</span>
             </span>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => {
                 // Force a fresh scan by clearing cache and reloading
@@ -332,38 +370,59 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                   deleteCandidate(username).then(() => window.location.reload());
                 });
               }}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              Re-scan
+              <span className="hidden sm:inline">Re-scan</span>
             </button>
             <button
               onClick={handleExportPDF}
               disabled={isExporting}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all disabled:opacity-50"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
-              Export PDF{isExporting ? "..." : ""}
+              <span className="hidden sm:inline">Export PDF{isExporting ? "..." : ""}</span>
+            </button>
+            {/* Copy Link / Share Button */}
+            <button
+              onClick={handleCopyLink}
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-medium text-slate-400 hover:text-white border border-white/[0.08] rounded-lg hover:bg-white/[0.05] transition-all"
+            >
+              {linkCopied ? (
+                <>
+                  <svg className="w-3.5 h-3.5 text-[#cdff00]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="hidden sm:inline text-[#cdff00]">Copied!</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                  <span className="hidden sm:inline">Copy Link</span>
+                </>
+              )}
             </button>
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#050505] bg-[#cdff00] rounded-lg transition-all no-underline hover:bg-[#b0d800] tracking-wide"
+              className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 text-xs font-bold text-[#050505] bg-[#cdff00] rounded-lg transition-all no-underline hover:bg-[#b0d800] tracking-wide"
             >
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <path d="M12 5v14M5 12h14" />
               </svg>
-              New Report
+              <span className="hidden sm:inline">New Report</span>
             </Link>
           </div>
         </div>
       </nav>
 
       {/* --- Report Content --- */}
-      <main ref={reportRef} className="relative z-10 mx-auto max-w-5xl px-6 py-10 pb-20 animate-fade-in print:p-0 print:m-0 print:max-w-none print:w-full print:block print:overflow-visible">
+      <main ref={reportRef} className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 py-8 sm:py-10 pb-20 animate-fade-in print:p-0 print:m-0 print:max-w-none print:w-full print:block print:overflow-visible">
           {/* -- Profile Card + Score Radar -- */}
           <div className="grid grid-cols-1 md:grid-cols-[1fr_280px] gap-5 mb-5 print:block print:space-y-5">
             {/* Profile Card */}
@@ -371,7 +430,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="rounded-2xl border border-white/[0.06] p-6 md:p-8"
+              className="rounded-2xl border border-white/[0.06] p-5 sm:p-6 md:p-8"
               style={{
                 background: "rgba(255,255,255,0.03)",
                 backdropFilter: "blur(24px)",
@@ -420,12 +479,13 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                 {/* Right: Score */}
                 <div className="text-center md:text-right shrink-0">
                   <div className="inline-flex flex-col items-center md:items-end">
-                    <span className={`text-5xl font-bold tabular-nums ${
-                      score >= 80 ? "grad-text-score-strong" :
-                      score >= 60 ? "grad-text-score-moderate" : "grad-text-score-risky"
-                    }`}>
-                      {score}
-                    </span>
+                    <AnimatedScore
+                      value={score}
+                      className={`text-5xl font-bold tabular-nums ${
+                        score >= 80 ? "grad-text-score-strong" :
+                        score >= 60 ? "grad-text-score-moderate" : "grad-text-score-risky"
+                      }`}
+                    />
                     <span className="text-xs text-slate-500 font-medium mt-1">/ 100 intelligence score</span>
                   </div>
                 </div>
@@ -458,7 +518,18 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             </div>
           </div>
 
-          {/* -- Executive Summary (NEW) -- */}
+          {/* ═══ NARRATIVE FLOW ═══ */}
+
+          {/* -- Recruiter Brief (TL;DR) -- */}
+          <RecruiterBrief data={data2} />
+
+          {/* -- Section: Assessment -- */}
+          <div className="flex items-center gap-3 mb-4 mt-2">
+            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em]">Assessment</span>
+            <div className="flex-1 h-px bg-white/[0.04]" />
+          </div>
+
+          {/* -- Executive Summary (Hero) -- */}
           <ExecutiveSummary 
             tier={{
               tier: (data2 as any).benchmark?.tier || ((typeof data2.developer_tier === 'string') ? data2.developer_tier : 'Unknown'),
@@ -481,6 +552,18 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             <HiringRecommendation data={data2} />
           </div>
 
+          {/* -- Strengths + Weaknesses -- */}
+          <StrengthWeakness data={data2} />
+
+          {/* -- Red Flags -- */}
+          <RedFlags data={data2} />
+
+          {/* -- Section: Evidence -- */}
+          <div className="flex items-center gap-3 mb-4 mt-8">
+            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em]">Evidence</span>
+            <div className="flex-1 h-px bg-white/[0.04]" />
+          </div>
+
           {/* -- Evidence Panel (Scoring Details) -- */}
           {(data2.feature_importance || data2.decision_trace) && (
             <EvidencePanel 
@@ -495,7 +578,16 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             {data2.commit_analysis && <CommitAnalysis data={data2.commit_analysis} />}
           </div>
 
-          {/* -- Streak + Community (NEW) -- */}
+          {/* -- Multi-Source Verification -- */}
+          {data2.verification_sources && <VerificationSources data={data2.verification_sources} />}
+
+          {/* -- Section: Deep Dive -- */}
+          <div className="flex items-center gap-3 mb-4 mt-8">
+            <span className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em]">Deep Dive</span>
+            <div className="flex-1 h-px bg-white/[0.04]" />
+          </div>
+
+          {/* -- Streak + Community -- */}
           {(data2.contribution_streak || data2.community_stats) && (
             <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-5 mb-5 print:block print:space-y-5">
               {data2.contribution_streak && <ContributionStreak data={data2.contribution_streak} />}
@@ -503,28 +595,19 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             </div>
           )}
 
-          {/* -- Multi-Source Verification -- */}
-          {data2.verification_sources && <VerificationSources data={data2.verification_sources} />}
-
           {/* -- Language DNA -- */}
           {data2.language_breakdown && <LanguageBreakdown data={data2.language_breakdown} />}
 
           {/* -- Activity Timeline -- */}
           {data2.activity_heatmap && <ActivityHeatmap data={data2.activity_heatmap} />}
 
-          {/* -- Coding Patterns (NEW) -- */}
+          {/* -- Coding Patterns -- */}
           {data2.coding_patterns && <CodingPatterns data={data2.coding_patterns} />}
-
-          {/* -- Strengths + Weaknesses -- */}
-          <StrengthWeakness data={data2} />
-
-          {/* -- Red Flags -- */}
-          <RedFlags data={data2} />
 
           {/* -- Growth Roadmap -- */}
           {data2.improvements && <ImprovementPlan data={data2} />}
 
-          {/* -- Interview Questions (NEW) -- */}
+          {/* -- Interview Questions -- */}
           {data2.interview_questions && data2.interview_questions.length > 0 && (
             <div className="mt-5 mb-5">
               <InterviewQuestions questions={data2.interview_questions} />
@@ -536,7 +619,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
 
           {/* Footer */}
           <div className="mt-12 pt-6 border-t border-white/[0.06] text-center">
-            <p className="text-slate-600 text-[10px] tracking-[0.15em] uppercase font-medium">
+            <p className="text-slate-500 text-[10px] tracking-[0.15em] uppercase font-medium">
               DevXray AI · Deep Intelligence Report · @{data2.username} · {data2.repos_deep_analyzed} repos deep-analyzed
             </p>
           </div>

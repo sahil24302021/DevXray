@@ -349,13 +349,16 @@ async def stream_progress(request: Request, job_id: str):
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
-async def emit_progress(job_id: Optional[str], step: str, done: bool = False):
+async def emit_progress(job_id: Optional[str], step: str, done: bool = False, progress: int = 0, detail: str = ""):
     """Push a progress event to the client stream."""
     if not job_id:
         return
     queue = progress_queues.get(job_id)
     if queue:
-        await queue.put({"step": step, "done": done})
+        payload = {"step": step, "done": done, "progress": progress}
+        if detail:
+            payload["detail"] = detail
+        await queue.put(payload)
 
 
 @app.get("/analyze")
@@ -377,10 +380,10 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
         return cached_data
 
     log.info(f"Starting analysis for {username}")
-    await emit_progress(job_id, "Initializing analysis engine...")
+    await emit_progress(job_id, "Fetching GitHub profile", progress=5, detail="Connecting to GitHub API")
 
     # ─── Fetch all data ───
-    await emit_progress(job_id, "Fetching GitHub profile data...")
+    await emit_progress(job_id, "Fetching GitHub profile", progress=10, detail="Loading profile data")
     profile = await fetch_user_profile(username)
     if not profile:
         raise HTTPException(status_code=404, detail=f"GitHub user '{username}' not found")
@@ -404,11 +407,11 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
         )
 
     # ─── Deep repo analysis ───
-    await emit_progress(job_id, "Analyzing repository DNA...")
+    await emit_progress(job_id, "Analyzing repositories", progress=25, detail=f"{len(repos)} repos found")
     deep_data = await fetch_deep_repo_data(username, repos)
 
     # ─── Multi-source data fetching (parallel, best-effort) ───
-    await emit_progress(job_id, "Cross-referencing external data sources...")
+    await emit_progress(job_id, "Cross-referencing sources", progress=40, detail="StackOverflow, NPM, LeetCode")
     async def _code_review_with_timeout():
         try:
             pinned = await asyncio.wait_for(fetch_pinned_repos(username), timeout=5.0)
@@ -493,7 +496,7 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
     account_age = max(0.0, account_age_ctx.get("days_ago", 0) or 0) / 365.25
 
     # ─── Run the DIP Orchestrator ───
-    await emit_progress(job_id, "Running core intelligence orchestrator...")
+    await emit_progress(job_id, "Running intelligence engine", progress=60, detail="Scoring dimensions")
     engine_results, pipeline_meta = run_github_analysis(
         username=username,
         profile=profile,
@@ -543,7 +546,7 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
         log.warning(f"AI summary failed: {e}")
 
     # Generate final report
-    await emit_progress(job_id, "Synthesizing final executive summary...")
+    await emit_progress(job_id, "Generating AI summary", progress=80, detail="Synthesizing findings")
     from orchestrator.report_generator import generate_report
     report = generate_report(
         profile=profile,
@@ -592,7 +595,7 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
         f"Confidence: {pipeline_meta.get('confidence_score', 0)}"
     )
 
-    await emit_progress(job_id, "Analysis complete", done=True)
+    await emit_progress(job_id, "Building report", progress=100, detail="Complete", done=True)
     return report
 
 
@@ -636,7 +639,7 @@ async def analyze_resume_endpoint(
         }
 
     # ═══ STEP 1: Parse Resume ═══
-    await emit_progress(job_id, "Parsing resume data with AI...")
+    await emit_progress(job_id, "Reading code files", progress=10, detail="Extracting resume text")
     try:
         resume_data = await parse_resume_with_gemini(content, file.filename)
     except ValueError as e:
@@ -666,7 +669,7 @@ async def analyze_resume_endpoint(
                 break
 
     # ═══ STEP 2: PARALLEL data fetching ═══
-    await emit_progress(job_id, f"Fetching data for {username or 'candidate'}...")
+    await emit_progress(job_id, "Verifying resume claims", progress=30, detail=f"Fetching data for {username or 'candidate'}")
     async def _fetch_github():
         if not username:
             return None, None, None, None

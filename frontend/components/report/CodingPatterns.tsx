@@ -58,7 +58,7 @@ export default function CodingPatterns({ data }: Props) {
           </div>
           <div>
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em]">Coding Patterns</span>
-            <p className="text-[10px] text-slate-600 mt-0.5">When does this developer code?</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">When does this developer code?</p>
           </div>
         </div>
         <span className="text-[10px] font-bold text-[#cdff00] bg-[#cdff00]/10 px-2.5 py-1 rounded-full border border-[#cdff00]/20">
@@ -74,7 +74,7 @@ export default function CodingPatterns({ data }: Props) {
             {hours.map((h) => (
               <div key={h} className="flex-1 text-center">
                 {hourLabels.includes(h) && (
-                  <span className="text-[8px] text-slate-600 font-medium tabular-nums">
+                  <span className="text-[8px] text-slate-500 font-medium tabular-nums">
                     {h === 0 ? "12a" : h < 12 ? `${h}a` : h === 12 ? "12p" : `${h - 12}p`}
                   </span>
                 )}
@@ -116,7 +116,7 @@ export default function CodingPatterns({ data }: Props) {
 
           {/* Legend */}
           <div className="flex items-center justify-end gap-1.5 mt-3 pr-0.5">
-            <span className="text-[8px] text-slate-600 font-medium">Less</span>
+            <span className="text-[8px] text-slate-500 font-medium">Less</span>
             {[0, 0.1, 0.25, 0.5, 0.85].map((opacity, i) => (
               <div
                 key={i}
@@ -124,27 +124,27 @@ export default function CodingPatterns({ data }: Props) {
                 style={{ background: opacity === 0 ? "rgba(255,255,255,0.04)" : `rgba(205,255,0,${opacity})` }}
               />
             ))}
-            <span className="text-[8px] text-slate-600 font-medium">More</span>
+            <span className="text-[8px] text-slate-500 font-medium">More</span>
           </div>
         </div>
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-4 gap-2 mt-4 pt-4 border-t border-white/[0.06]">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-4 border-t border-white/[0.06]">
         <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
-          <div className="text-[8px] text-slate-600 uppercase tracking-wider font-semibold mb-1">Peak Day</div>
+          <div className="text-[8px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Peak Day</div>
           <div className="text-[13px] font-semibold text-slate-200">{data.most_active_day}</div>
         </div>
         <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
-          <div className="text-[8px] text-slate-600 uppercase tracking-wider font-semibold mb-1">Weekend %</div>
+          <div className="text-[8px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Weekend %</div>
           <div className="text-[13px] font-semibold text-slate-200 tabular-nums">{data.weekend_ratio}%</div>
         </div>
         <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
-          <div className="text-[8px] text-slate-600 uppercase tracking-wider font-semibold mb-1">Avg/Day</div>
+          <div className="text-[8px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Avg/Day</div>
           <div className="text-[13px] font-semibold text-slate-200 tabular-nums">{data.avg_commits_per_active_day}</div>
         </div>
         <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.04]">
-          <div className="text-[8px] text-slate-600 uppercase tracking-wider font-semibold mb-1">Peak Hour</div>
+          <div className="text-[8px] text-slate-500 uppercase tracking-wider font-semibold mb-1">Peak Hour</div>
           <div className="text-[13px] font-semibold text-slate-200 tabular-nums">
             {data.peak_hours?.[0] ? `${data.peak_hours[0].hour > 12 ? data.peak_hours[0].hour - 12 : data.peak_hours[0].hour}${data.peak_hours[0].hour >= 12 ? 'pm' : 'am'}` : "—"}
           </div>

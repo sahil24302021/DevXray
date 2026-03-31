@@ -163,7 +163,7 @@ export default function ScoreRadar({ dimensions }: Props) {
           >
             <div className="text-[9px] text-slate-500 uppercase tracking-wider font-semibold">{d.label}</div>
             <div className="text-sm font-bold tabular-nums" style={{ color: d.color }}>
-              {d.value}<span className="text-slate-600 text-[10px] font-normal">/{d.max}</span>
+              {d.value}<span className="text-slate-500 text-[10px] font-normal">/{d.max}</span>
             </div>
           </div>
         ))}

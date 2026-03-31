@@ -85,7 +85,7 @@ export default function CommunityStats({ data }: Props) {
           </div>
           <div>
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em]">Community Engagement</span>
-            <p className="text-[10px] text-slate-500 mt-0.5">{data.total_community_actions} total actions</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">{data.total_community_actions} total actions</p>
           </div>
         </div>
 
@@ -97,7 +97,7 @@ export default function CommunityStats({ data }: Props) {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {stats.map((s, i) => (
           <div
             key={s.label}

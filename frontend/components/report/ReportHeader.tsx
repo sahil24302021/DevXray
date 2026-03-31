@@ -91,7 +91,7 @@ export default function ReportHeader({ data }: Props) {
       {/* Verdict + Confidence */}
       <div className="flex items-center gap-3 mb-6 flex-wrap justify-center">
         <span className="text-sm font-semibold text-white">{data.verdict}</span>
-        <span className="text-slate-600">·</span>
+        <span className="text-slate-500">·</span>
         <span className="stat-pill text-xs">
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.4)]" />
           {Math.round(((data.confidence_score ?? 0) > 1 ? (data.confidence_score ?? 0) : (data.confidence_score ?? 0) * 100))}% confidence
