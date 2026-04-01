@@ -116,13 +116,10 @@ export function buildCandidateRecord(
     top_languages: langsArr,
     confidence_score: Math.round(Number(result.confidence_score || (ghReport as any).confidence_score || 0)),
     scanned_at: new Date().toISOString(),
-    report_payload: {
-      final_score: rawScore,
-      score_breakdown: result.score_breakdown || (ghReport as any).score_breakdown,
-      strengths: result.strengths || (ghReport as any).strengths,
-      weaknesses: result.weaknesses || (ghReport as any).weaknesses,
-      verdict_explanation: result.verdict_explanation || (ghReport as any).verdict_explanation,
-    },
+    // CRITICAL FIX: Save the FULL result so cached reports retain all data
+    // (authenticity_score, organic_commits_percentage, authenticity, etc.)
+    // Previously only 5 fields were saved → cached reports showed 0% authenticity.
+    report_payload: ghReport as Record<string, unknown>,
   };
 }
 
