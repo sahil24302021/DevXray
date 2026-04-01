@@ -229,6 +229,7 @@ async def fetch_repo_commits(username: str, repo_name: str, limit: int = 30) -> 
                 "message": c.get("commit", {}).get("message", ""),
                 "date": c.get("commit", {}).get("author", {}).get("date", ""),
                 "author": c.get("commit", {}).get("author", {}).get("name", ""),
+                "repo_name": repo_name,  # ADD THIS — critical for organic detection
             }
             for c in commits
             if isinstance(c, dict)
@@ -298,11 +299,16 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
             for lang, bytes_count in lr.items():
                 total_languages[lang] = total_languages.get(lang, 0) + bytes_count
 
-    # Collect all commits for analysis
+    # Collect all commits for analysis — include repo_name for organic detection
     all_commits = []
-    for cr in commit_results:
+    for repo, cr in zip(top_repos, commit_results):
         if isinstance(cr, list):
-            all_commits.extend(cr)
+            for commit in cr:
+                if isinstance(commit, dict):
+                    # Add repo_name so scoring_engine can detect multi-repo activity
+                    commit_with_repo = dict(commit)
+                    commit_with_repo["repo_name"] = repo.get("name", "")
+                    all_commits.append(commit_with_repo)
 
     # ─── Deep file content fetching for top 5 repos ───
     repo_data: Dict[str, Dict[str, Any]] = {}

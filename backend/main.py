@@ -56,7 +56,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Simple in-memory cache fallback
-CACHE_TTL = 600  # 10 minutes
+CACHE_TTL = 1800  # 30 minutes — longer cache prevents inconsistent re-runs
 
 # Try Redis first, fall back to in-memory dict
 _redis_client = None
@@ -382,6 +382,17 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
         log.info(f"Cache hit for {username}")
         return cached_data
 
+    # Check Supabase for a recent scan (< 1 hour old) before running full analysis
+    try:
+        from lib.supabase_client import get_recent_scan
+        recent_scan = await get_recent_scan(username_lower, max_age_seconds=3600)
+        if recent_scan:
+            log.info(f"Supabase cache hit for {username} — returning persisted scan")
+            cache_set(username_lower, recent_scan)  # warm the memory cache too
+            return recent_scan
+    except Exception as e:
+        log.debug(f"Supabase scan lookup skipped: {e}")
+
     log.info(f"Starting analysis for {username}")
     await emit_progress(job_id, "Fetching GitHub profile", progress=5, detail="Connecting to GitHub API")
 
@@ -411,7 +422,20 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
 
     # ─── Deep repo analysis ───
     await emit_progress(job_id, "Analyzing repositories", progress=25, detail=f"{len(repos)} repos found")
-    deep_data = await fetch_deep_repo_data(username, repos)
+    try:
+        deep_data = await asyncio.wait_for(
+            fetch_deep_repo_data(username, repos),
+            timeout=45.0  # was previously unlimited — caused silent partial results
+        )
+        if deep_data is None:
+            deep_data = {"language_bytes": {}, "all_commits": [], "repos_analyzed": 0, "repo_data": {}}
+            log.warning(f"[{username}] deep_data returned None — using empty fallback")
+    except asyncio.TimeoutError:
+        log.warning(f"[{username}] fetch_deep_repo_data timed out after 45s — using partial data")
+        deep_data = {"language_bytes": {}, "all_commits": [], "repos_analyzed": 0, "repo_data": {}}
+    except Exception as e:
+        log.warning(f"[{username}] fetch_deep_repo_data failed: {e} — using empty fallback")
+        deep_data = {"language_bytes": {}, "all_commits": [], "repos_analyzed": 0, "repo_data": {}}
 
     # ─── Multi-source data fetching (parallel, best-effort) ───
     await emit_progress(job_id, "Cross-referencing sources", progress=40, detail="StackOverflow, NPM, LeetCode")
@@ -592,6 +616,15 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
 
     # Cache result
     cache_set(username_lower, report)
+
+    # Persist scan result to Supabase so it survives Render restarts
+    try:
+        from lib.supabase_client import save_scan_result  # create this helper
+        await save_scan_result(username_lower, report)
+        log.info(f"Scan result persisted to Supabase for {username}")
+    except Exception as e:
+        log.debug(f"Supabase persist skipped: {e}")  # non-fatal
+
     log.info(
         f"Analysis complete for {username} — "
         f"Score: {report.get('final_score', 'N/A')} | "
