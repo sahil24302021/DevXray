@@ -20,7 +20,6 @@ export async function GET(request: Request) {
           setAll(cookiesToSet) {
             try {
               cookiesToSet.forEach(({ name, value, options }) => {
-                // Ignore maxAge constraint errors from cookieStore.set
                 cookieStore.set({ name, value, ...options })
               })
             } catch (error) {
@@ -34,5 +33,6 @@ export async function GET(request: Request) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  return NextResponse.redirect(`${origin}/dashboard`)
+  // ✅ Redirect to landing page so user lands on the hero with the analyze input
+  return NextResponse.redirect(`${origin}/`)
 }

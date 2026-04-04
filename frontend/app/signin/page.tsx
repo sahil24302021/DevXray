@@ -8,19 +8,20 @@ import { signInWithEmail, signInWithGoogle, getCurrentUser } from "@/lib/auth";
 function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirect = searchParams.get("redirect") || "/dashboard";
+  // ✅ Default to landing page, not dashboard
+  const redirect = searchParams.get("redirect") || "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Redirect if already signed in
+  // ✅ If already signed in, go to landing page
   useEffect(() => {
     getCurrentUser().then((user) => {
-      if (user) router.replace(redirect);
+      if (user) router.replace("/");
     });
-  }, [router, redirect]);
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +36,7 @@ function SignInContent() {
       return;
     }
 
+    // ✅ Go to landing page after sign in
     router.push(redirect);
   };
 
@@ -45,7 +47,7 @@ function SignInContent() {
       setError(authError);
       setLoading(false);
     }
-    // Google redirects automatically
+    // Google OAuth redirects via /auth/callback → /
   };
 
   return (

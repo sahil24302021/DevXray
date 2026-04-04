@@ -14,9 +14,10 @@ export default function SignUpPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  // ✅ If already signed in, go to landing page (not dashboard)
   useEffect(() => {
     getCurrentUser().then((user) => {
-      if (user) router.replace("/dashboard");
+      if (user) router.replace("/");
     });
   }, [router]);
 
@@ -38,25 +39,34 @@ export default function SignUpPage() {
       return;
     }
 
-    // Supabase sends confirmation email — show success state
+    // ✅ Show success, then redirect to landing page
     setSuccess(true);
     setLoading(false);
-    // If email confirmation is disabled in Supabase, redirect directly
-    setTimeout(() => router.push("/dashboard"), 1500);
+    setTimeout(() => router.push("/"), 1500);
   };
 
   const handleGoogle = async () => {
     setLoading(true);
     await signInWithGoogle();
+    // Google OAuth redirects via /auth/callback → /
   };
 
   if (success) {
     return (
       <main className="min-h-screen bg-[#050505] flex items-center justify-center">
         <div className="text-center">
-          <div className="text-5xl mb-4">✓</div>
-          <h2 className="text-white text-2xl font-bold mb-2">Account created!</h2>
-          <p className="text-[#888]">Redirecting to dashboard...</p>
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
+            style={{ background: "rgba(205,255,0,0.1)", border: "1px solid rgba(205,255,0,0.2)" }}
+          >
+            <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="#cdff00" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-white text-2xl font-bold mb-2 font-[family-name:var(--font-syne)]">
+            Account created!
+          </h2>
+          <p className="text-[#888]">Taking you to the analyzer...</p>
         </div>
       </main>
     );
