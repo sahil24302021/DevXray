@@ -18,38 +18,60 @@ from typing import Dict, Optional
 # Key: "li_at" → Value: (cookie_string, set_at_timestamp)
 _runtime_cookie_store: dict = {}
 
+def _save_cookie_to_supabase(cookie: str):
+    """Persist li_at to Supabase so it survives server restarts."""
+    try:
+        from lib.supabase_client import get_supabase
+        sb = get_supabase()
+        sb.table("settings").upsert({
+            "key": "linkedin_li_at",
+            "value": cookie,
+            "updated_at": "now()"
+        }).execute()
+        print("[LinkedIn·Config] li_at saved to Supabase")
+    except Exception as e:
+        print(f"[LinkedIn·Config] Supabase save failed: {e}")
+
+
+def _load_cookie_from_supabase() -> str:
+    """Load li_at from Supabase on startup."""
+    try:
+        from lib.supabase_client import get_supabase
+        sb = get_supabase()
+        res = sb.table("settings").select("value").eq("key", "linkedin_li_at").execute()
+        if res.data:
+            return res.data[0]["value"]
+    except Exception as e:
+        print(f"[LinkedIn·Config] Supabase load failed: {e}")
+    return ""
+
+
 def get_li_at() -> str:
-    """
-    Get LinkedIn li_at session cookie.
-    Priority: 1) Runtime store (set via API)  2) Environment variable
-    This allows cookie updates without redeployment.
-    """
-    # Check runtime store first (most recently updated via API)
+    # 1. Runtime store (freshest, set this session)
     stored = _runtime_cookie_store.get("li_at")
     if stored:
         cookie_val, set_at = stored
-        # Use runtime cookie if set within the last 48 hours
-        if time.time() - set_at < 172800:  # 48 hours
+        if time.time() - set_at < 172800:
             return cookie_val.strip()
-        else:
-            # Expired from runtime store — clear it
-            del _runtime_cookie_store["li_at"]
-    
-    # Fall back to environment variable
+        del _runtime_cookie_store["li_at"]
+
+    # 2. Load from Supabase (persists across server restarts)
+    db_cookie = _load_cookie_from_supabase()
+    if db_cookie:
+        _runtime_cookie_store["li_at"] = (db_cookie, time.time())
+        return db_cookie
+
+    # 3. Environment variable fallback
     return os.environ.get("LINKEDIN_LI_AT", "").strip()
 
+
 def set_li_at_runtime(cookie: str) -> bool:
-    """
-    Update the li_at cookie at runtime without redeployment.
-    Called by the admin API endpoint.
-    Returns True if the cookie looks valid (basic format check).
-    """
     cookie = cookie.strip()
     if not cookie or len(cookie) < 20:
         return False
-    # LinkedIn li_at cookies always start with AQE or are a long alphanumeric string
     _runtime_cookie_store["li_at"] = (cookie, time.time())
-    print(f"[LinkedIn·Config] li_at updated via runtime store (length={len(cookie)})")
+    _save_cookie_to_supabase(cookie)  # persist to DB so it survives restarts
+    print(f"[LinkedIn·Config] li_at updated (length={len(cookie)})")
     return True
 
 def get_li_at_status() -> dict:

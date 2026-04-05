@@ -3,7 +3,10 @@ import io
 import os
 import json
 import re
+import hashlib
 from typing import Dict, Any, List
+
+_resume_parse_cache: dict = {}
 
 # PDF Support
 try:
@@ -106,6 +109,11 @@ async def parse_resume_with_gemini(file_content: bytes, filename: str) -> Dict[s
     if not text:
         raise ValueError("Could not extract any text from the uploaded document.")
 
+    cache_key = hashlib.md5(text.encode("utf-8")).hexdigest()
+    if cache_key in _resume_parse_cache:
+        print(f"[ResumeParser] Cache HIT ({cache_key[:8]})")
+        return _resume_parse_cache[cache_key]
+
     # Also do a regex pass to find URLs the AI might miss
     found_urls = _extract_urls(text)
 
@@ -194,7 +202,7 @@ URLs found in resume (for reference): {json.dumps(found_urls)}
 """
 
     try:
-        result = await generate_json(prompt, temperature=0.1)
+        result = await generate_json(prompt, temperature=0)
 
         # ─── FIX 5: Normalize nondeterministic key names ───
         result = _normalize_resume_keys(result)
@@ -275,6 +283,7 @@ URLs found in resume (for reference): {json.dumps(found_urls)}
                 for h in proj.get("highlights", []):
                     result["claims"].append(h)
         
+        _resume_parse_cache[cache_key] = result
         return result
         
     except Exception as e:

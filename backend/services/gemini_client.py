@@ -23,7 +23,7 @@ def get_model(model_name: str = "gemini-2.5-flash"):
     return genai.GenerativeModel(model_name)
 
 
-async def generate_json(prompt: str, temperature: float = 0.1) -> dict:
+async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     """
     Primary: Claude Sonnet 3.5 (better structured JSON).
     Fallback: Gemini (if no ANTHROPIC_API_KEY or Claude fails).

@@ -47,7 +47,7 @@ Estimated Years of Experience: {years_experience}
 }}
 """
     try:
-        result = await generate_json(prompt, temperature=0.1)
+        result = await generate_json(prompt, temperature=0)
         
         # Ensure safe defaults
         result.setdefault("match_percentage", 0)

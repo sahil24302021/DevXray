@@ -234,7 +234,7 @@ Analyze and return ONLY a valid JSON object (no markdown, no preamble):
 }}"""
 
     try:
-        ai_review = await generate_json(prompt, temperature=0.2)
+        ai_review = await generate_json(prompt, temperature=0)
         result.update(ai_review)
         result["reviewed"] = True
         result["files_analyzed"] = len(files_content)

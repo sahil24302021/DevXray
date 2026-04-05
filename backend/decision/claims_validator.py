@@ -261,7 +261,7 @@ is 3 months old and has 2 repos).
 """
 
     try:
-        result = await generate_json(prompt, temperature=0.2)
+        result = await generate_json(prompt, temperature=0)
 
         # Ensure required fields with safe defaults
         result.setdefault("authenticity_score", 50)

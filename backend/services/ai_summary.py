@@ -101,7 +101,7 @@ Respond in JSON: {{"summary": "..."}}
 
     try:
         if HAS_GEMINI:
-            result = await generate_json(prompt, temperature=0.7)
+            result = await generate_json(prompt, temperature=0)
             if result and result.get("summary"):
                 return result
     except Exception as e:

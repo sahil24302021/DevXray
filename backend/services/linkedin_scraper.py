@@ -18,6 +18,7 @@ Strategies (tried in order, stops at first success):
 Anti-detection: 40+ rotating UAs, randomized fingerprints,
 human-like delays, proper referer chains, exponential backoff.
 """
+import os
 import re
 import json
 import asyncio
@@ -51,6 +52,48 @@ def _extract_linkedin_username(url: str) -> str:
             return m.group(1).strip("/").strip()
     return ""
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STRATEGY 0: Scrapin API
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _strategy_scrapin(username: str) -> Optional[Dict[str, Any]]:
+    """
+    Strategy 0: Scrapin.io API — residential proxy, most reliable.
+    Set SCRAPIN_API_KEY in your .env to enable.
+    """
+    api_key = os.environ.get("SCRAPIN_API_KEY", "").strip()
+    if not api_key:
+        print("[LinkedIn·S0] Scrapin skipped — no SCRAPIN_API_KEY set")
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(
+                "https://api.scrapin.io/enrichment/profile",
+                params={
+                    "apikey": api_key,
+                    "linkedInUrl": f"https://www.linkedin.com/in/{username}/"
+                }
+            )
+            if r.status_code == 200:
+                data = r.json()
+                person = data.get("person", data)
+                return {
+                    "name": person.get("firstName", "") + " " + person.get("lastName", ""),
+                    "headline": person.get("headline", ""),
+                    "location": person.get("location", ""),
+                    "summary": person.get("summary", ""),
+                    "positions": person.get("positions", []),
+                    "skills": [s.get("name", s) if isinstance(s, dict) else s
+                               for s in person.get("skills", [])],
+                    "education": person.get("schools", []),
+                    "source": "scrapin_api"
+                }
+            else:
+                print(f"[LinkedIn·S0] Scrapin returned {r.status_code}: {r.text[:200]}")
+    except Exception as e:
+        print(f"[LinkedIn·S0] Scrapin error: {e}")
+    return None
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STRATEGY 1: LinkedIn Voyager API (HIGHEST quality — full structured JSON)
@@ -894,7 +937,7 @@ RULES:
 - If a field has no data in the text, use empty string, empty list, or 0.
 - Return ONLY the JSON, no markdown or explanation."""
 
-        result = await generate_json(prompt, temperature=0.1)
+        result = await generate_json(prompt, temperature=0)
         if result and (result.get("full_name") or result.get("experiences") or result.get("skills")):
             # Normalize skills to dict format if they're strings
             raw_skills = result.get("skills", [])
@@ -1145,6 +1188,11 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
     raw_text_for_ai = ""  # Collect raw text for Strategy 10
     _partial_raw_texts = []  # Collect partial text from ALL strategies
     _strategy_log = []  # Track which strategies were tried and their outcome
+
+    result = await _strategy_scrapin(username)
+    if result:
+        return result
+    # ... then continue with existing strategies 1-10
 
     # ─── Strategy 1: Voyager API (BEST quality) ───
     print(f"[LinkedIn] S1: Voyager API for '{username}'...")

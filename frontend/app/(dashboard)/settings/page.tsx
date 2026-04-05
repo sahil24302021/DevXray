@@ -386,6 +386,7 @@ export default function SettingsPage() {
                       style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}
                       rows={3}
                     />
+                    <p className="text-[11px] text-[#555] mt-1 mb-2">Your cookie is saved to the database and survives server restarts.</p>
 
                     <div className="flex gap-3">
                       <button
@@ -418,34 +419,24 @@ export default function SettingsPage() {
                     )}
 
                     {cookieStatus && (
-                      <div className="rounded-xl p-4 border space-y-2" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
-                        <div className="flex justify-between text-[11px]">
-                          <span className="text-[#555]">Cookie present</span>
-                          <span style={{ color: cookieStatus.has_cookie ? "#34d399" : "#fb7185" }}>
-                            {cookieStatus.has_cookie ? "Yes" : "No"}
-                          </span>
-                        </div>
-                        {cookieStatus.source && (
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-[#555]">Source</span>
-                            <span className="text-white">{cookieStatus.source === "runtime_api" ? "Runtime API (recent update)" : cookieStatus.source === "environment_var" ? "Environment Variable" : cookieStatus.source}</span>
+                      <div className="mt-4">
+                        {cookieStatus.has_cookie && cookieStatus.age_hours < 24 && (
+                          <div className="rounded-xl px-4 py-3 text-[12px] font-medium flex items-center" style={{ background: "rgba(52,211,153,0.08)", color: "#34d399", border: "1px solid rgba(52,211,153,0.15)" }}>
+                            <span className="w-2 h-2 rounded-full bg-[#34d399] mr-2"></span> Cookie active — LinkedIn scraping enabled
                           </div>
                         )}
-                        {cookieStatus.age_hours !== null && cookieStatus.age_hours !== undefined && (
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-[#555]">Cookie age</span>
-                            <span style={{ color: cookieStatus.age_hours > 24 ? "#fbbf24" : "#34d399" }}>
-                              {cookieStatus.age_hours}h {cookieStatus.age_hours > 24 ? "(may be expired)" : "(fresh)"}
-                            </span>
+                        {cookieStatus.has_cookie && cookieStatus.age_hours >= 24 && (
+                          <div className="rounded-xl px-4 py-3 text-[12px] font-medium flex items-center" style={{ background: "rgba(251,191,36,0.08)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.15)" }}>
+                            <span className="w-2 h-2 rounded-full bg-[#fbbf24] mr-2"></span> Cookie is old ({cookieStatus.age_hours}h) — paste a fresh one
                           </div>
                         )}
-                        {cookieStatus.recommendation && (
-                          <div className="pt-2 mt-1 border-t text-[11px] text-[#555]" style={{ borderColor: "rgba(255,255,255,0.05)" }}>
-                            {cookieStatus.recommendation}
+                        {!cookieStatus.has_cookie && !cookieStatus.error && (
+                          <div className="rounded-xl px-4 py-3 text-[12px] font-medium flex items-center" style={{ background: "rgba(251,113,133,0.08)", color: "#fb7185", border: "1px solid rgba(251,113,133,0.15)" }}>
+                            <span className="w-2 h-2 rounded-full bg-[#fb7185] mr-2"></span> No cookie — LinkedIn data unavailable
                           </div>
                         )}
                         {cookieStatus.error && (
-                          <div className="text-[11px]" style={{ color: "#fb7185" }}>{cookieStatus.error}</div>
+                          <div className="text-[11px] mt-2" style={{ color: "#fb7185" }}>{cookieStatus.error}</div>
                         )}
                       </div>
                     )}

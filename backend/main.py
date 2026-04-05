@@ -1183,7 +1183,7 @@ Generate a comprehensive JSON report:
 """
 
     try:
-        result = await generate_json(prompt, temperature=0.3)
+        result = await generate_json(prompt, temperature=0)
         return result
     except Exception as e:
         log.warning(f"Deep report generation failed: {e}")
