@@ -18,31 +18,56 @@ from typing import Dict, Optional
 # Key: "li_at" → Value: (cookie_string, set_at_timestamp)
 _runtime_cookie_store: dict = {}
 
+import httpx as _httpx_li
+
+def _get_supabase_creds():
+    url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "").rstrip("/")
+    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    return url, key
+
 def _save_cookie_to_supabase(cookie: str):
-    """Persist li_at to Supabase so it survives server restarts."""
+    url, key = _get_supabase_creds()
+    if not url or not key:
+        print("[LinkedIn·Config] Supabase not configured — skipping cookie persist")
+        return
     try:
-        from lib.supabase_client import get_supabase
-        sb = get_supabase()
-        sb.table("settings").upsert({
-            "key": "linkedin_li_at",
-            "value": cookie,
-            "updated_at": "now()"
-        }).execute()
-        print("[LinkedIn·Config] li_at saved to Supabase")
+        import httpx, time
+        endpoint = f"{url}/rest/v1/settings"
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates",
+        }
+        payload = {"key": "linkedin_li_at", "value": cookie}
+        with httpx.Client(timeout=5.0) as client:
+            r = client.post(endpoint, json=payload, headers=headers)
+            if r.status_code in (200, 201):
+                print("[LinkedIn·Config] li_at saved to Supabase")
+            else:
+                print(f"[LinkedIn·Config] Supabase save failed: {r.status_code} {r.text[:100]}")
     except Exception as e:
-        print(f"[LinkedIn·Config] Supabase save failed: {e}")
+        print(f"[LinkedIn·Config] Supabase save error: {e}")
 
 
 def _load_cookie_from_supabase() -> str:
-    """Load li_at from Supabase on startup."""
+    url, key = _get_supabase_creds()
+    if not url or not key:
+        return ""
     try:
-        from lib.supabase_client import get_supabase
-        sb = get_supabase()
-        res = sb.table("settings").select("value").eq("key", "linkedin_li_at").execute()
-        if res.data:
-            return res.data[0]["value"]
+        import httpx
+        endpoint = f"{url}/rest/v1/settings"
+        params = {"key": "eq.linkedin_li_at", "select": "value", "limit": "1"}
+        headers = {
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+        }
+        with httpx.Client(timeout=5.0) as client:
+            r = client.get(endpoint, params=params, headers=headers)
+            if r.status_code == 200 and r.json():
+                return r.json()[0]["value"]
     except Exception as e:
-        print(f"[LinkedIn·Config] Supabase load failed: {e}")
+        print(f"[LinkedIn·Config] Supabase load error: {e}")
     return ""
 
 
