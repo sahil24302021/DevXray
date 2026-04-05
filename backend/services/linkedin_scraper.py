@@ -1371,10 +1371,22 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
 
     # ─── Process result ───
     strategy_summary = " → ".join(_strategy_log)
+
+    if result is None:
+        result = {
+            "name": "",
+            "headline": "",
+            "location": "",
+            "summary": "",
+            "positions": [],
+            "skills": [],
+            "education": [],
+            "source": "all_strategies_failed",
+            "accessible": False,
+        }
+
     if data:
         normalized = _normalize_linkedin_data(data)
-        if result is None:
-            result = {}
         result["accessible"] = True
         result["name"] = normalized["name"]
         result["headline"] = normalized["headline"]
