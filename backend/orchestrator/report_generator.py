@@ -1,10 +1,36 @@
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
 from scoring.scoring_engine import normalize_authenticity
 from utils.logging_config import get_logger
 
 log = get_logger("report_generator")
+
+
+def compute_experience_display(github_created_at: str, resume_years: int) -> str:
+    """
+    Never show '? years'. Always show something real.
+    Priority: GitHub account age > resume claim > fallback.
+    """
+    if github_created_at:
+        try:
+            dt = datetime.fromisoformat(github_created_at.replace("Z", "+00:00"))
+            now = datetime.now(timezone.utc)
+            delta = now - dt
+            months = delta.days // 30
+            if months < 12:
+                return f"{months} months"
+            years = months // 12
+            remaining_months = months % 12
+            if remaining_months >= 6:
+                return f"{years}.5 years"
+            return f"{years} year{'s' if years > 1 else ''}"
+        except Exception:
+            pass
+    if resume_years and resume_years > 0:
+        return f"{resume_years} years"
+    return "< 1 year"
 
 
 # BUG 9 FIX: _normalize_auth_score() removed — use normalize_authenticity from
@@ -56,6 +82,7 @@ def generate_report(
     pinned_code_reviews: Optional[List[Dict[str, Any]]] = None,
     ai_summary: Optional[Dict[str, Any]] = None,
     jd_match: Optional[Dict[str, Any]] = None,
+    resume_data: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Assemble the complete Developer Intelligence Report.
@@ -239,6 +266,12 @@ def generate_report(
         "verified_skills": [s["skill_name"] for s in skills.get("top_skills", [])[:10]],
         "account_age_years": profile.get("_account_age_years", 0),
         "percentile": benchmark.get("percentile", 0),
+
+        # ─── Experience (FIX 1 + FIX 4: never show "? years") ───
+        "experience": compute_experience_display(
+            profile.get("created_at", ""),
+            (resume_data or {}).get("years_of_experience", 0),
+        ),
 
         # ─── JD Matcher ───
         "jd_match": jd_match or {},

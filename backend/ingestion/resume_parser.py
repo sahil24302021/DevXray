@@ -207,6 +207,10 @@ URLs found in resume (for reference): {json.dumps(found_urls)}
         # ─── FIX 5: Normalize nondeterministic key names ───
         result = _normalize_resume_keys(result)
 
+        # If resume gives 0 or missing experience, calculate from GitHub account age
+        if not result.get("years_of_experience") or result.get("years_of_experience") == 0:
+            result["years_of_experience"] = 0  # will be overridden by GitHub data
+
         # Post-process: ensure github_username is clean
         gh_username = result.get("github_username", "")
         gh_url = result.get("github_url", "")

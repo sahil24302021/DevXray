@@ -896,6 +896,7 @@ async def analyze_resume_endpoint(
             pinned_code_reviews=pinned_code_reviews,
             ai_summary=ai_summary,
             jd_match=jd_match,
+            resume_data=resume_data,
         )
 
         github_report["confidence_score"] = pipeline_meta.get("confidence_score", 0)
@@ -1050,6 +1051,7 @@ async def _generate_deep_report(
     are all injected into the prompt so the LLM cannot misclassify dates or
     claim that repos don't exist.
     """
+    from orchestrator.report_generator import compute_experience_display
     today = _get_today_str()
 
     # Build date context block — this is the #1 fix for wrong verdicts
@@ -1126,7 +1128,7 @@ primary source of truth — they are computed from actual code analysis, not AI 
 === RESUME DATA ===
 Name: {resume_data.get('name')}
 Current Role: {resume_data.get('current_role')}
-Experience: {resume_data.get('years_of_experience')} years
+Experience: {compute_experience_display(profile.get('created_at', '') if profile else '', resume_data.get('years_of_experience', 0))} (GitHub account age)
 Skills: {json.dumps(resume_data.get('technical_skills', {}))}
 Projects: {json.dumps(resume_data.get('projects', [])[:5])}
 Education: {json.dumps(resume_data.get('education', []))}

@@ -824,6 +824,66 @@ def analyze_external_prs(
 
 
 # ═══════════════════════════════════════════════════════
+#  COMMIT BURST DETECTION (AI-WRITTEN CODE FLAG)
+# ═══════════════════════════════════════════════════════
+
+def detect_commit_burst(commits: list) -> dict:
+    """
+    Detect suspiciously large commit bursts — a key fraud signal.
+    Organic developers commit steadily.
+    Resume padding = 50 commits pushed in one night.
+    """
+    if not commits:
+        return {"burst_detected": False, "burst_score": 0, "details": ""}
+
+    from collections import defaultdict
+
+    # Group commits by date
+    daily_counts = defaultdict(int)
+    for c in commits:
+        date_str = str(c.get("date", ""))[:10]  # YYYY-MM-DD
+        if date_str and date_str != "None":
+            daily_counts[date_str] += 1
+
+    if not daily_counts:
+        return {"burst_detected": False, "burst_score": 0, "details": ""}
+
+    max_day = max(daily_counts, key=daily_counts.get)
+    max_count = daily_counts[max_day]
+    total_commits = sum(daily_counts.values())
+    active_days = len(daily_counts)
+
+    avg_per_day = total_commits / max(active_days, 1)
+
+    burst_ratio = max_count / max(avg_per_day, 1)
+    burst_detected = max_count >= 20 and burst_ratio >= 5.0
+
+    burst_score = 0
+    if max_count >= 50:
+        burst_score = 10
+    elif max_count >= 30:
+        burst_score = 7
+    elif max_count >= 20:
+        burst_score = 5
+    elif max_count >= 10 and burst_ratio >= 4:
+        burst_score = 3
+
+    details = ""
+    if burst_detected:
+        details = f"{max_count} commits on {max_day} (avg: {avg_per_day:.1f}/day)"
+
+    return {
+        "burst_detected": burst_detected,
+        "burst_score": burst_score,
+        "max_single_day": max_count,
+        "max_day_date": max_day,
+        "avg_commits_per_day": round(avg_per_day, 2),
+        "burst_ratio": round(burst_ratio, 2),
+        "details": details,
+    }
+
+
+# ═══════════════════════════════════════════════════════
 #  MASTER AUTHENTICITY SCORE
 # ═══════════════════════════════════════════════════════
 
@@ -900,6 +960,7 @@ def run_authenticity_engine(
 
     commit_size_dist = analyze_commit_size_distribution(commits, proof)
     ext_prs = analyze_external_prs(events, username, proof)
+    commit_burst = detect_commit_burst(commits)
 
     # ─── Authenticity Score (0-100 before floor) ───
     score = 60.0
@@ -964,6 +1025,10 @@ def run_authenticity_engine(
         score -= 8
     elif commit_size_dist["oversized_ratio"] > 0.3:
         score -= 4
+
+    # Commit burst penalty (FIX 3: detect suspicious single-day spikes)
+    if commit_burst["burst_detected"]:
+        score -= min(commit_burst["burst_score"], 10)
 
     score = max(0, min(100, round(score)))
 
@@ -1031,6 +1096,14 @@ def run_authenticity_engine(
             "severity": similarity["risk"],
         })
 
+    # Commit burst flag (FIX 3)
+    if commit_burst["burst_detected"]:
+        all_flags.append({
+            "flag": f"Commit burst detected: {commit_burst['details']}",
+            "type": "commit_burst",
+            "severity": "HIGH" if commit_burst["burst_score"] >= 7 else "MEDIUM",
+        })
+
     # Only add CRITICAL flag if score is genuinely very low AND we have enough data
     if score < 25 and len(commits) >= 10:
         all_flags.append({
@@ -1077,6 +1150,7 @@ def run_authenticity_engine(
         "commit_quality": commit_quality,
         "ai_code_detection": ai_detection,
         "commit_size_distribution": commit_size_dist,
+        "commit_burst": commit_burst,
         "evidence_floor_applied": score == floor and floor > 0,
         "code_repetition": {
             "repetition_detected": similarity["risk"] in ("HIGH", "MEDIUM"),

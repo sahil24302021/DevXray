@@ -250,14 +250,23 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
     SKIP_DIRS = {"node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".git"}
     MAX_FILE_SIZE = 50_000  # 50KB
     MAX_FILES_PER_REPO = 15
-    TOP_REPOS_FOR_FILES = 5
-    TOP_REPOS_FOR_LANG = 10
+    TOP_REPOS_FOR_FILES = 12
+    TOP_REPOS_FOR_LANG = 20
 
     # Pick top non-fork repos by composite score (Rule 3)
     originals = [r for r in repos if not r.get("is_fork", False)]
     if not originals:
         originals = repos
-        
+
+    # Try to get pinned repo names (already fetched earlier in pipeline)
+    # They get a strong bonus — developer chose to showcase these
+    pinned_names = set()
+    try:
+        pinned = await fetch_pinned_repos(username)
+        pinned_names = {p["name"] for p in pinned}
+    except Exception:
+        pass
+
     from datetime import datetime, timezone
     import math
     now_dt = datetime.now(timezone.utc)
@@ -280,7 +289,16 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
         
         star_score = math.log10(stars + 1) * 10
         size_score = math.log10(size + 1) * 2
-        return star_score + size_score + recent_bonus
+        
+        weight = star_score + size_score + recent_bonus
+        if r.get("language", "").lower() == "python":
+            weight += 2.0
+
+        # Pinned repo bonus — developer chose to showcase this
+        if r.get("name", "") in pinned_names:
+            weight += 5.0
+
+        return weight
 
     top_repos = sorted(originals, key=_repo_score, reverse=True)[:TOP_REPOS_FOR_LANG]
     top_repos_for_files = top_repos[:TOP_REPOS_FOR_FILES]
