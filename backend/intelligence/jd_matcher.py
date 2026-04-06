@@ -1,68 +1,82 @@
-
-from typing import Dict, Any, List
 from services.gemini_client import generate_json
+from utils.logging_config import get_logger
+
+log = get_logger("jd_matcher")
+
 
 async def match_jd(
     job_description: str,
-    candidate_skills: List[str],
+    candidate_skills: list,
     candidate_tier: str = "Unknown",
-    years_experience: int = 0
-) -> Dict[str, Any]:
+    years_experience: int = 0,
+    github_repos_summary: str = "",
+    commit_forensics: dict = None,
+) -> dict:
     """
-    Match candidate profile against a job description.
+    Match a candidate against a specific job description.
+    
+    This is how HRs actually think:
+    - Does this person have the required skills?
+    - Are the skills verified by actual code or just claimed?
+    - What's missing?
+    - Should I interview them for THIS role?
     """
-    if not job_description or not job_description.strip():
-        return {
-            "match_percentage": 0,
-            "role_fit": "No JD provided",
-            "skill_gaps": [],
-            "matched_skills": [],
-            "recommendation": "Cannot compute without JD"
-        }
+    if not job_description:
+        return {"error": "No job description provided"}
 
-    prompt = f"""You are an expert technical recruiter and hiring manager.
-Analyze the following Job Description and compare it against the verified Candidate Profile.
+    forensics_context = ""
+    if commit_forensics and commit_forensics.get("stuffer_detected"):
+        forensics_context = f"""
+WARNING: Commit burst detected — {commit_forensics.get('stuffer_evidence', {}).get('commits', 0)} commits 
+on a single day. Developer may have padded GitHub before applying.
+"""
 
-=== JOB DESCRIPTION ===
+    prompt = f"""You are a senior technical recruiter with 15 years experience.
+
+JOB DESCRIPTION:
 {job_description[:3000]}
 
-=== CANDIDATE PROFILE ===
-Verified Skills: {', '.join(candidate_skills) if candidate_skills else 'None detected'}
-Developer Tier: {candidate_tier}
-Estimated Years of Experience: {years_experience}
+CANDIDATE DATA:
+- Verified Skills (from GitHub code analysis): {candidate_skills}
+- Developer Tier: {candidate_tier}
+- Years of experience: {years_experience}
+- GitHub repos summary: {github_repos_summary[:500] if github_repos_summary else "Not provided"}
+{forensics_context}
 
-=== TASK ===
-1. Extract the core required skills and nice-to-have skills from the JD.
-2. Cross-reference them with the Candidate Profile's Verified Skills.
-3. Determine a match percentage (0-100) based on how well the candidate meets the core requirements.
-4. Provide a clear role fit summary and recommendation.
+Analyze this candidate against this specific job. Be precise and honest.
+Do NOT be generous — if skills are missing, say so clearly.
 
-=== GENERATE JSON OUTPUT ===
+Return ONLY this JSON, no markdown:
 {{
-    "match_percentage": 85,
-    "role_fit": "Highly aligned / Moderately aligned / Poorly aligned",
-    "matched_skills": ["List of JD skills the candidate has"],
-    "skill_gaps": ["List of core JD skills the candidate is missing"],
-    "recommendation": "1-2 sentence recommendation for the hiring manager regarding this candidate for this specific role."
-}}
-"""
+    "overall_fit": "STRONG FIT / GOOD FIT / PARTIAL FIT / WEAK FIT / NOT A FIT",
+    "hire_recommendation": "YES / MAYBE / NO",
+    "match_percentage": 0-100,
+    "required_skills_found": ["skills from JD that candidate has — verified"],
+    "required_skills_missing": ["skills from JD that candidate lacks"],
+    "nice_to_have_found": ["bonus skills candidate has"],
+    "experience_match": "EXCEEDS / MEETS / BELOW / FAR BELOW",
+    "red_flags_for_this_role": ["specific concerns for THIS job"],
+    "strengths_for_this_role": ["why they'd be good for THIS specific role"],
+    "suggested_interview_questions": [
+        {{
+            "question": "specific technical question for this role",
+            "tests_for": "what skill/gap this question probes"
+        }}
+    ],
+    "salary_fit": "ABOVE BUDGET / WITHIN RANGE / BELOW RANGE / UNKNOWN",
+    "one_line_verdict": "One sentence: hire or not and why"
+}}"""
+
     try:
         result = await generate_json(prompt, temperature=0)
-        
-        # Ensure safe defaults
-        result.setdefault("match_percentage", 0)
-        result.setdefault("role_fit", "Unknown")
-        result.setdefault("matched_skills", [])
-        result.setdefault("skill_gaps", [])
-        result.setdefault("recommendation", "Analysis incomplete")
-        
+        result["jd_analyzed"] = True
         return result
     except Exception as e:
-        print(f"[JD Matcher] AI Error: {e}")
+        log.warning(f"JD matching failed: {e}")
         return {
+            "overall_fit": "UNKNOWN",
+            "hire_recommendation": "MAYBE",
             "match_percentage": 0,
-            "role_fit": "Analysis failed",
-            "skill_gaps": [],
-            "matched_skills": [],
-            "recommendation": "AI analysis failed."
+            "error": str(e),
+            "jd_analyzed": False
         }

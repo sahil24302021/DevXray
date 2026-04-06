@@ -884,6 +884,147 @@ def detect_commit_burst(commits: list) -> dict:
 
 
 # ═══════════════════════════════════════════════════════
+#  COMMIT TIMELINE FORENSICS (KILLER FEATURE)
+# ═══════════════════════════════════════════════════════
+
+def build_commit_timeline_forensics(commits: list, repos: list) -> dict:
+    """
+    Build a full timeline forensics report that visualizes:
+    - Daily commit counts across all time
+    - Pre-interview burst detection (spike right before application date)
+    - Weekend vs weekday patterns (humans work weekends organically)
+    - Night vs day coding patterns
+    - Dead periods (gaps > 30 days = not actively coding)
+    - Velocity trend: is the developer speeding up or slowing down?
+
+    This is the feature HRs cannot get anywhere else.
+    Recruiters use this to catch "GitHub stuffers" who push 100 commits
+    right before applying for a job.
+    """
+    from collections import defaultdict
+    from datetime import datetime, timezone
+
+    if not commits:
+        return {"timeline": [], "forensics": {}, "verdict": "insufficient_data"}
+
+    # Build daily commit map
+    daily_map = defaultdict(int)
+    hourly_map = defaultdict(int)
+    weekday_map = defaultdict(int)
+
+    for c in commits:
+        date_str = str(c.get("date", ""))
+        if not date_str or date_str == "None":
+            continue
+        try:
+            dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+            day = date_str[:10]
+            daily_map[day] += 1
+            hourly_map[dt.hour] += 1
+            weekday_map[dt.weekday()] += 1  # 0=Mon, 6=Sun
+        except Exception:
+            continue
+
+    if not daily_map:
+        return {"timeline": [], "forensics": {}, "verdict": "no_dated_commits"}
+
+    sorted_days = sorted(daily_map.keys())
+    total_commits = sum(daily_map.values())
+    active_days = len(daily_map)
+
+    # Build timeline array for frontend chart
+    timeline = [
+        {"date": day, "commits": daily_map[day]}
+        for day in sorted_days
+    ]
+
+    # Burst detection: find top 5 single-day spikes
+    top_days = sorted(daily_map.items(), key=lambda x: x[1], reverse=True)[:5]
+    avg_per_active_day = total_commits / max(active_days, 1)
+
+    spikes = []
+    for day, count in top_days:
+        ratio = count / max(avg_per_active_day, 0.1)
+        if ratio >= 3.0:
+            spikes.append({
+                "date": day,
+                "commits": count,
+                "ratio_vs_avg": round(ratio, 1),
+                "severity": "CRITICAL" if ratio >= 10 else "HIGH" if ratio >= 5 else "MEDIUM"
+            })
+
+    # Dead period detection (gaps > 30 days)
+    dead_periods = []
+    for i in range(1, len(sorted_days)):
+        try:
+            d1 = datetime.fromisoformat(sorted_days[i - 1])
+            d2 = datetime.fromisoformat(sorted_days[i])
+            gap = (d2 - d1).days
+            if gap > 30:
+                dead_periods.append({
+                    "from": sorted_days[i - 1],
+                    "to": sorted_days[i],
+                    "gap_days": gap
+                })
+        except Exception:
+            continue
+
+    # Coding time pattern
+    night_commits = sum(hourly_map.get(h, 0) for h in range(0, 6))     # 0-6am
+    day_commits = sum(hourly_map.get(h, 0) for h in range(6, 20))      # 6am-8pm
+    late_commits = sum(hourly_map.get(h, 0) for h in range(20, 24))    # 8pm-midnight
+    total_timed = night_commits + day_commits + late_commits
+
+    coding_pattern = "balanced"
+    if total_timed > 0:
+        night_pct = night_commits / total_timed
+        if night_pct > 0.4:
+            coding_pattern = "night_owl"
+        elif day_commits / total_timed > 0.7:
+            coding_pattern = "business_hours"
+
+    # Weekend ratio (organic devs code weekends)
+    weekend_commits = weekday_map.get(5, 0) + weekday_map.get(6, 0)
+    weekend_ratio = weekend_commits / max(total_commits, 1)
+
+    # Velocity trend: compare first half vs second half
+    mid = len(sorted_days) // 2
+    first_half = sum(daily_map[d] for d in sorted_days[:mid])
+    second_half = sum(daily_map[d] for d in sorted_days[mid:])
+    velocity_trend = "accelerating" if second_half > first_half * 1.2 else \
+                     "decelerating" if second_half < first_half * 0.8 else "stable"
+
+    # Overall forensics verdict
+    is_stuffer = len(spikes) >= 1 and spikes[0].get("ratio_vs_avg", 0) >= 8
+    verdict = "STUFFER_DETECTED" if is_stuffer else \
+              "SUSPICIOUS" if len(spikes) >= 2 else \
+              "ORGANIC" if len(dead_periods) == 0 and avg_per_active_day >= 2 else \
+              "NORMAL"
+
+    return {
+        "timeline": timeline,
+        "forensics": {
+            "total_commits_analyzed": total_commits,
+            "active_coding_days": active_days,
+            "avg_commits_per_active_day": round(avg_per_active_day, 2),
+            "spikes": spikes,
+            "dead_periods": dead_periods,
+            "dead_period_count": len(dead_periods),
+            "longest_gap_days": max((p["gap_days"] for p in dead_periods), default=0),
+            "coding_pattern": coding_pattern,
+            "night_coding_pct": round(night_commits / max(total_timed, 1) * 100, 1),
+            "weekend_ratio": round(weekend_ratio * 100, 1),
+            "velocity_trend": velocity_trend,
+            "first_commit_date": sorted_days[0] if sorted_days else "",
+            "last_commit_date": sorted_days[-1] if sorted_days else "",
+        },
+        "verdict": verdict,
+        "stuffer_detected": is_stuffer,
+        "stuffer_evidence": spikes[0] if is_stuffer else None,
+    }
+
+
+# ═══════════════════════════════════════════════════════
 #  MASTER AUTHENTICITY SCORE
 # ═══════════════════════════════════════════════════════
 
@@ -961,6 +1102,7 @@ def run_authenticity_engine(
     commit_size_dist = analyze_commit_size_distribution(commits, proof)
     ext_prs = analyze_external_prs(events, username, proof)
     commit_burst = detect_commit_burst(commits)
+    timeline_forensics = build_commit_timeline_forensics(commits, repos)
 
     # ─── Authenticity Score (0-100 before floor) ───
     score = 60.0
@@ -1029,6 +1171,10 @@ def run_authenticity_engine(
     # Commit burst penalty (FIX 3: detect suspicious single-day spikes)
     if commit_burst["burst_detected"]:
         score -= min(commit_burst["burst_score"], 10)
+
+    # Timeline forensics stuffer penalty (FEATURE 1)
+    if timeline_forensics.get("stuffer_detected"):
+        score -= 15
 
     score = max(0, min(100, round(score)))
 
@@ -1104,6 +1250,15 @@ def run_authenticity_engine(
             "severity": "HIGH" if commit_burst["burst_score"] >= 7 else "MEDIUM",
         })
 
+    # Timeline stuffer flag (FEATURE 1)
+    if timeline_forensics.get("stuffer_detected"):
+        ev = timeline_forensics.get("stuffer_evidence", {})
+        all_flags.append({
+            "flag": f"GITHUB STUFFER DETECTED — {ev.get('commits', 0)} commits on {ev.get('date', '?')} ({ev.get('ratio_vs_avg', 0)}x avg)",
+            "type": "stuffer",
+            "severity": "CRITICAL",
+        })
+
     # Only add CRITICAL flag if score is genuinely very low AND we have enough data
     if score < 25 and len(commits) >= 10:
         all_flags.append({
@@ -1151,6 +1306,7 @@ def run_authenticity_engine(
         "ai_code_detection": ai_detection,
         "commit_size_distribution": commit_size_dist,
         "commit_burst": commit_burst,
+        "commit_timeline_forensics": timeline_forensics,
         "evidence_floor_applied": score == floor and floor > 0,
         "code_repetition": {
             "repetition_detected": similarity["risk"] in ("HIGH", "MEDIUM"),

@@ -875,6 +875,8 @@ async def analyze_resume_endpoint(
                     candidate_skills=verified_skills_list,
                     candidate_tier=engine_results.get("scoring", {}).get("benchmark", {}).get("tier", "Unknown"),
                     years_experience=years_exp,
+                    github_repos_summary=repo_context_str,
+                    commit_forensics=engine_results.get("authenticity", {}).get("commit_timeline_forensics", {})
                 )
             except Exception as e:
                 log.warning(f"JD matching failed: {e}")
@@ -1029,6 +1031,217 @@ async def analyze_resume_endpoint(
             ] if github_report else [],
         }
     }
+
+
+@app.post("/api/reports/save")
+async def save_report_for_sharing(request: Request):
+    """
+    Save a report and return a public shareable link.
+    No login needed to VIEW the link — only to create one.
+    
+    Body: { "report": {...}, "candidate_name": "John Doe", "expires_hours": 72 }
+    Returns: { "share_url": "https://dev-xray.vercel.app/report/abc123", "token": "abc123" }
+    """
+    import secrets
+    import time
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    report = body.get("report", {})
+    candidate_name = body.get("candidate_name", "Developer")
+    expires_hours = min(body.get("expires_hours", 72), 168)  # max 7 days
+
+    if not report:
+        raise HTTPException(status_code=400, detail="Report data required")
+
+    # Generate a short random token
+    token = secrets.token_urlsafe(8)  # e.g. "xK9mP2qR"
+    expires_at = time.time() + (expires_hours * 3600)
+
+    # Save to Supabase
+    try:
+        import httpx as _hx
+        from services.linkedin_config import _get_supabase_creds
+        url, key = _get_supabase_creds()
+        if url and key:
+            payload = {
+                "token": token,
+                "candidate_name": candidate_name,
+                "report_data": json.dumps(report, default=str),
+                "expires_at": datetime.fromtimestamp(
+                    expires_at, tz=timezone.utc
+                ).isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "view_count": 0,
+            }
+            async with _hx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    f"{url}/rest/v1/shared_reports",
+                    json=payload,
+                    headers={
+                        "apikey": key,
+                        "Authorization": f"Bearer {key}",
+                        "Content-Type": "application/json",
+                        "Prefer": "resolution=merge-duplicates",
+                    }
+                )
+    except Exception as e:
+        log.warning(f"Supabase save for sharing failed: {e}")
+        # Fall back to in-memory
+        _memory_cache[f"shared:{token}"] = (expires_at, report)
+
+    frontend_url = os.environ.get("FRONTEND_URL", "https://dev-xray.vercel.app")
+    return {
+        "success": True,
+        "token": token,
+        "share_url": f"{frontend_url}/report/shared/{token}",
+        "expires_hours": expires_hours,
+        "candidate_name": candidate_name,
+    }
+
+
+@app.get("/api/reports/shared/{token}")
+async def get_shared_report(token: str):
+    """
+    Retrieve a shared report by token. Public endpoint — no auth needed.
+    """
+    import time
+    # Try Supabase first
+    try:
+        import httpx as _hx
+        from services.linkedin_config import _get_supabase_creds
+        url, key = _get_supabase_creds()
+        if url and key:
+            async with _hx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(
+                    f"{url}/rest/v1/shared_reports",
+                    params={
+                        "token": f"eq.{token}",
+                        "select": "report_data,candidate_name,expires_at,view_count",
+                        "limit": "1"
+                    },
+                    headers={"apikey": key, "Authorization": f"Bearer {key}"}
+                )
+                if resp.status_code == 200 and resp.json():
+                    row = resp.json()[0]
+                    # Increment view count
+                    await client.patch(
+                        f"{url}/rest/v1/shared_reports",
+                        params={"token": f"eq.{token}"},
+                        json={"view_count": row["view_count"] + 1},
+                        headers={
+                            "apikey": key,
+                            "Authorization": f"Bearer {key}",
+                            "Content-Type": "application/json",
+                        }
+                    )
+                    return {
+                        "success": True,
+                        "candidate_name": row["candidate_name"],
+                        "report": json.loads(row["report_data"]),
+                        "expires_at": row["expires_at"],
+                    }
+    except Exception as e:
+        log.warning(f"Supabase shared report lookup failed: {e}")
+
+    # Fallback: in-memory
+    entry = _memory_cache.get(f"shared:{token}")
+    if entry:
+        expires_at, report = entry
+        if time.time() < expires_at:
+            return {"success": True, "report": report}
+
+    raise HTTPException(status_code=404, detail="Report not found or expired")
+
+
+@app.post("/api/interview-prep")
+async def generate_interview_prep(request: Request):
+    """
+    Generate a complete interview kit from a DevXray report.
+    HRs use this before every technical interview.
+    
+    Input: { "report": {...}, "role": "Backend Engineer", "difficulty": "senior" }
+    Output: structured interview kit with 15 questions, red flags to probe,
+            technical challenges, and expected answers
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    report = body.get("report", {})
+    role = body.get("role", "Software Engineer")
+    difficulty = body.get("difficulty", "mid")  # junior / mid / senior
+
+    if not report:
+        raise HTTPException(status_code=400, detail="Report required")
+
+    top_skills = [s.get("skill_name", "") for s in report.get("top_skills", [])[:5]]
+    risk_flags = [f.get("flag", "") for f in report.get("risk_flags", [])[:3]]
+    weaknesses = report.get("weaknesses", [])[:3]
+    final_score = report.get("final_score", 0)
+    stuffer = report.get("authenticity", {}).get("commit_timeline_forensics", {}).get("stuffer_detected", False)
+
+    prompt = f"""You are the world's best technical interviewer.
+Generate a complete interview kit for this candidate.
+
+CANDIDATE PROFILE:
+- Role being hired for: {role}
+- Seniority level: {difficulty}
+- DevXray score: {final_score}/100
+- Top verified skills: {top_skills}
+- Risk flags detected: {risk_flags}
+- Weaknesses found: {weaknesses}
+- Commit stuffer detected: {stuffer}
+
+Generate a complete interview kit. Return ONLY this JSON:
+{{
+    "opening_questions": [
+        {{"question": "...", "purpose": "build rapport / assess communication"}}
+    ],
+    "technical_deep_dives": [
+        {{
+            "skill": "which skill this tests",
+            "question": "technical question",
+            "follow_up": "harder follow-up if they answer correctly",
+            "red_flag_answer": "what answer would concern you",
+            "good_answer_looks_like": "what a strong answer covers"
+        }}
+    ],
+    "gap_probing_questions": [
+        {{"question": "...", "probes_for": "which gap/risk this targets"}}
+    ],
+    "system_design_challenge": {{
+        "problem": "a relevant system design problem for this role",
+        "what_to_look_for": ["key concepts they should mention"],
+        "time_allocation": "20 minutes"
+    }},
+    "culture_fit_questions": [
+        {{"question": "...", "good_signal": "...", "red_flag": "..."}}
+    ],
+    "coding_challenge": {{
+        "problem": "a short relevant coding problem",
+        "difficulty": "{difficulty}",
+        "what_it_tests": "..."
+    }},
+    "closing_questions": ["questions candidate should ask you — absence is a red flag"],
+    "overall_interview_strategy": "1 paragraph on how to approach this specific candidate",
+    "time_allocation": {{
+        "technical": "40 min",
+        "behavioral": "15 min",
+        "system_design": "20 min",
+        "q_and_a": "10 min"
+    }}
+}}"""
+
+    try:
+        from services.gemini_client import generate_json
+        result = await generate_json(prompt, temperature=0)
+        return {"success": True, "interview_kit": result, "role": role, "difficulty": difficulty}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Interview prep generation failed: {e}")
 
 
 async def _generate_deep_report(

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useSpring, useMotionValue, useTransform } from "framer-motion";
 import Link from "next/link";
+import { BarChart, Bar, Cell, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 /* --- Status Badge --- */
 function StatusBadge({ status }: { status: string }) {
@@ -201,6 +202,9 @@ export default function ResumeReportPage() {
   // JD Matching display variables
   const jdMatch = github_intelligence?.jd_match;
   const matchPercentage = jdMatch?.match_percentage || 0;
+
+  const forensics = github_intelligence?.authenticity?.commit_timeline_forensics;
+  const isStuffer = forensics?.stuffer_detected;
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#fafafa] font-[family-name:var(--font-dm-sans)] relative overflow-hidden">
@@ -510,6 +514,60 @@ export default function ResumeReportPage() {
           <section className="rounded-2xl border border-white/[0.06] p-8 text-center text-slate-500">
             No GitHub profile linked or found for cross-reference.
           </section>
+        )}
+
+        {/* ═══ COMMIT TIMELINE FORENSICS ═══ */}
+        {forensics && (
+          <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.48 }}
+            className="rounded-2xl border border-white/[0.06] p-6" style={{ background: "rgba(255,255,255,0.02)" }}>
+            <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg mb-4 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-rose-400" /> Commit Timeline Forensics
+            </h2>
+            
+            {isStuffer && (
+              <div className="bg-rose-500/10 border border-rose-500/30 text-rose-500 p-3 rounded-lg mb-5 font-bold flex items-center gap-2 text-sm">
+                ⚠️ GITHUB STUFFER DETECTED — {forensics.stuffer_evidence?.commits} commits on {forensics.stuffer_evidence?.date} ({forensics.stuffer_evidence?.ratio_vs_avg}x avg)
+              </div>
+            )}
+            
+            <div className="h-32 w-full mt-2 mb-6">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={forensics.timeline}>
+                  <XAxis dataKey="date" hide />
+                  <Tooltip cursor={{fill: 'rgba(255,255,255,0.05)'}} contentStyle={{backgroundColor: '#0a0a0a', borderColor: '#333', borderRadius: '8px', fontSize: '12px'}} itemStyle={{color: '#fff'}} />
+                  <Bar dataKey="commits" radius={[2, 2, 0, 0]}>
+                    {forensics.timeline?.map((entry: any, index: number) => {
+                      const spike = forensics.forensics?.spikes?.find((s: any) => s.date === entry.date);
+                      return <Cell key={`cell-${index}`} fill={spike ? '#ef4444' : '#22c55e'} />
+                    })}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="p-3 bg-black/40 rounded-xl border border-white/5 text-center">
+                <span className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Active Days</span>
+                <span className="text-sm font-bold">{forensics.forensics?.active_coding_days}</span>
+              </div>
+              <div className="p-3 bg-black/40 rounded-xl border border-white/5 text-center">
+                <span className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Longest Gap</span>
+                <span className="text-sm font-bold">{forensics.forensics?.longest_gap_days} d</span>
+              </div>
+              <div className="p-3 bg-black/40 rounded-xl border border-white/5 text-center">
+                <span className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Pattern</span>
+                <span className="text-sm font-bold uppercase">{forensics.forensics?.coding_pattern?.replace('_', ' ')}</span>
+              </div>
+              <div className="p-3 bg-black/40 rounded-xl border border-white/5 text-center">
+                <span className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Weekend Ratio</span>
+                <span className="text-sm font-bold">{forensics.forensics?.weekend_ratio}%</span>
+              </div>
+              <div className="p-3 bg-black/40 rounded-xl border border-white/5 text-center">
+                <span className="block text-[10px] text-slate-500 uppercase tracking-wider mb-1">Velocity</span>
+                <span className="text-sm font-bold uppercase">{forensics.forensics?.velocity_trend}</span>
+              </div>
+            </div>
+          </motion.section>
         )}
 
         {/* ═══ TIMELINE ═══ */}
