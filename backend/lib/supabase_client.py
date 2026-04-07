@@ -7,7 +7,7 @@ import json
 import time
 from typing import Optional, Dict, Any
 
-SUPABASE_URL = os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
+SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
 async def save_scan_result(username: str, report: Dict[str, Any]) -> bool:

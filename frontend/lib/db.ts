@@ -22,15 +22,13 @@ export interface CandidateRecord {
   username: string;
   name?: string;
   avatar_url?: string;
-  final_score: number;
-  developer_tier?: string;
+  score: number;
+  tier?: string;
   risk_level?: string;
-  hiring_recommendation?: string;
-  verified_skills?: string[];
-  top_languages?: string[];
-  confidence_score?: number;
+  recommendation_summary?: string;
+  languages?: string[];
   scanned_at: string;
-  report_payload?: object;
+  full_report?: object;
   user_id?: string;  // Links to authenticated user (optional for guest scans)
   [key: string]: unknown;
 }

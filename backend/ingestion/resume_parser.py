@@ -139,7 +139,7 @@ Respond with a JSON object matching this EXACT schema — no extra keys, no mark
     "github_username": "just the username, not URL",
     "github_url": "Extract GitHub profile URL. Look for 'github.com/username' (not github.com/username/reponame). Prepend https:// if missing.",
     "linkedin_url": "Extract the FULL LinkedIn URL. Look for 'linkedin.com/in/...' anywhere in the text. If found as 'linkedin.com/in/xyz' without https://, prepend https://www. Return empty string if not found.",
-    "portfolio_url": "Extract the personal website/portfolio URL. Look for custom domains (anything.online, anything.dev, anything.io, yourname.com), NOT github.com or linkedin.com. If found without https://, prepend https://. Return empty string if not found.",
+    "portfolio_url": "Extract the personal website/portfolio URL. Look for custom domains (anything.online, anything.dev, anything.io, yourname.com), NOT github.com or linkedin.com. If found without https://, prepend https://. IMPORTANT: Do NOT extract degree names (B.Tech, M.Tech, B.Sc, etc.) as portfolio URLs. Only extract actual website URLs that are clearly personal websites or portfolios. Return empty string if not found.",
     "other_links": ["any other URLs found in resume"],
     "github_repo_links": ["any github.com/username/reponame URLs found in resume project descriptions"],
     "location": "city/country if mentioned",
@@ -273,6 +273,13 @@ URLs found in resume (for reference): {json.dumps(found_urls)}
                         break
                 if result.get("portfolio_url"):
                     break
+
+        # Filter out obviously wrong portfolio URLs
+        FAKE_PORTFOLIO_PATTERNS = ["b.tech", "m.tech", "b.sc", "m.sc", "b.e.", "m.e."]
+        portfolio = result.get("portfolio_url", "")
+        if portfolio and any(p in portfolio.lower() for p in FAKE_PORTFOLIO_PATTERNS):
+            result["portfolio_url"] = ""
+            print(f"[ResumeParser] Filtered invalid portfolio URL: {portfolio}")
 
         # Store raw text for downstream fallback matching
         result["_raw_text"] = text[:5000]

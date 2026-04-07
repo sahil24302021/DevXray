@@ -725,7 +725,11 @@ async def analyze_resume_endpoint(
 
             repos = await fetch_user_repos(username, expected_count=profile.get("public_repos", 0))
             events = await fetch_user_events(username)
-            deep_data = await fetch_deep_repo_data(username, repos) if repos else None
+            try:
+                deep_data = await asyncio.wait_for(fetch_deep_repo_data(username, repos), timeout=30.0) if repos else None
+            except Exception as e:
+                log.warning(f"deep_data fetch failed in resume pipeline: {e}")
+                deep_data = None
             return profile, repos, events, deep_data
         except Exception as e:
             log.warning(f"GitHub fetch failed for '{username}': {e}")

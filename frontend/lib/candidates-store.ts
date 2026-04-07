@@ -108,18 +108,16 @@ export function buildCandidateRecord(
     username,
     name: candidateName,
     avatar_url: avatarUrl,
-    final_score: Math.round(rawScore),
-    developer_tier: String((result.developer_tier || (ghReport as any).developer_tier) || ""),
+    score: Math.round(rawScore),
+    tier: String((result.developer_tier || (ghReport as any).developer_tier) || ""),
     risk_level: String((result.risk_level || result.risk_assessment || (ghReport as any).risk_level) || ""),
-    hiring_recommendation: hiringText,
-    verified_skills: skillsArr,
-    top_languages: langsArr,
-    confidence_score: Math.round(Number(result.confidence_score || (ghReport as any).confidence_score || 0)),
+    recommendation_summary: hiringText,
+    languages: langsArr,
     scanned_at: new Date().toISOString(),
     // CRITICAL FIX: Save the FULL result so cached reports retain all data
     // (authenticity_score, organic_commits_percentage, authenticity, etc.)
     // Previously only 5 fields were saved → cached reports showed 0% authenticity.
-    report_payload: ghReport as Record<string, unknown>,
+    full_report: ghReport as Record<string, unknown>,
   };
 }
 

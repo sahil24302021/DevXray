@@ -291,7 +291,7 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
         size_score = math.log10(size + 1) * 2
         
         weight = star_score + size_score + recent_bonus
-        if r.get("language", "").lower() == "python":
+        if (r.get("language") or "").lower() == "python":
             weight += 2.0
 
         # Pinned repo bonus — developer chose to showcase this
