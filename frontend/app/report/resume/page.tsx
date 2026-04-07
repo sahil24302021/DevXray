@@ -278,7 +278,7 @@ export default function ResumeReportPage() {
                 { label: "GitHub Matched", value: analysis_metadata.github_matched ? "✅ Yes" : "❌ No" },
                 { label: "Claims Extracted", value: analysis_metadata.claims_extracted },
                 { label: "Projects Found", value: analysis_metadata.projects_found },
-                { label: "Experience", value: `${resume_data?.years_of_experience || "?"} years` },
+                { label: "Experience", value: github_intelligence?.experience || `${resume_data?.years_of_experience || "<1"} years` },
               ].map((m, i) => (
                 <div key={i} className="flex flex-col">
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">{m.label}</span>

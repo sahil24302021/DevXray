@@ -726,10 +726,16 @@ async def analyze_resume_endpoint(
             repos = await fetch_user_repos(username, expected_count=profile.get("public_repos", 0))
             events = await fetch_user_events(username)
             try:
-                deep_data = await asyncio.wait_for(fetch_deep_repo_data(username, repos), timeout=30.0) if repos else None
+                deep_data = await asyncio.wait_for(
+                    fetch_deep_repo_data(username, repos),
+                    timeout=60.0
+                ) if repos else None
+            except asyncio.TimeoutError:
+                log.warning(f"[{username}] deep_data timed out in resume pipeline — using empty fallback")
+                deep_data = {"language_bytes": {}, "all_commits": [], "repos_analyzed": 0, "repo_data": {}}
             except Exception as e:
-                log.warning(f"deep_data fetch failed in resume pipeline: {e}")
-                deep_data = None
+                log.warning(f"[{username}] deep_data fetch failed in resume pipeline: {e}")
+                deep_data = {"language_bytes": {}, "all_commits": [], "repos_analyzed": 0, "repo_data": {}}
             return profile, repos, events, deep_data
         except Exception as e:
             log.warning(f"GitHub fetch failed for '{username}': {e}")
@@ -968,9 +974,16 @@ async def analyze_resume_endpoint(
 
     if github_report:
         try:
-            claims_validation = await validate_claims(
+            result = await validate_claims(
                 resume_data, github_report, portfolio_text
             )
+            # SAFETY: if AI returned a list instead of dict, wrap it
+            if isinstance(result, list):
+                claims_validation["validations"] = result
+                claims_validation["overall_assessment"] = "Claims validated."
+            elif isinstance(result, dict):
+                claims_validation = result
+            # else keep default
         except Exception as e:
             log.warning(f"Claims validation error: {e}")
             claims_validation["overall_assessment"] = f"Validation error: {e}"
@@ -1351,8 +1364,8 @@ Projects: {json.dumps(resume_data.get('projects', [])[:5])}
 Education: {json.dumps(resume_data.get('education', []))}
 {dip_context}
 === CLAIMS VERIFICATION ===
-Authenticity Score: {claims_validation.get('authenticity_score')}/100
-Red Flags: {json.dumps(claims_validation.get('red_flags', []))}
+Authenticity Score: {claims_validation.get('authenticity_score') if isinstance(claims_validation, dict) else 0}/100
+Red Flags: {json.dumps(claims_validation.get('red_flags', []) if isinstance(claims_validation, dict) else [])}
 {job_context}
 === LINKEDIN DATA ===
 {json.dumps(linkedin_data) if linkedin_data else "Not available"}
@@ -1409,8 +1422,8 @@ Generate a comprehensive JSON report:
         return {
             "executive_summary": "Deep report generation was not available.",
             "candidate_tier": "?",
-            "overall_score": claims_validation.get("authenticity_score", 0),
-            "hire_decision": claims_validation.get("hiring_recommendation", "N/A"),
+            "overall_score": claims_validation.get("authenticity_score", 0) if isinstance(claims_validation, dict) else 0,
+            "hire_decision": claims_validation.get("hiring_recommendation", "N/A") if isinstance(claims_validation, dict) else "N/A",
             "confidence_level": "Low",
         }
 
