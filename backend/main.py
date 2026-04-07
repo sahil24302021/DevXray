@@ -1341,7 +1341,7 @@ primary source of truth — they are computed from actual code analysis, not AI 
 === RESUME DATA ===
 Name: {resume_data.get('name')}
 Current Role: {resume_data.get('current_role')}
-Experience: {compute_experience_display(profile.get('created_at', '') if profile else '', resume_data.get('years_of_experience', 0))} (GitHub account age)
+Experience: {compute_experience_display(account_age_ctx.get('created_at', '') if account_age_ctx else '', resume_data.get('years_of_experience', 0))} (GitHub account age)
 Skills: {json.dumps(resume_data.get('technical_skills', {}))}
 Projects: {json.dumps(resume_data.get('projects', [])[:5])}
 Education: {json.dumps(resume_data.get('education', []))}
