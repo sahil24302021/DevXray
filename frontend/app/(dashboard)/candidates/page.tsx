@@ -137,11 +137,11 @@ export default function CandidatesPage() {
     );
     if (tierFilter !== "all") {
       arr = arr.filter(c => {
-        const tier = scoreToTier(c.final_score);
+        const tier = scoreToTier(Number(c.final_score ?? 0));
         return tier === tierFilter;
       });
     }
-    if (sortBy === "score") arr.sort((a, b) => b.final_score - a.final_score);
+    if (sortBy === "score") arr.sort((a, b) => Number(b.final_score ?? 0) - Number(a.final_score ?? 0));
     else if (sortBy === "name") arr.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
     else arr.sort((a, b) => new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime());
     return arr;
@@ -164,9 +164,9 @@ export default function CandidatesPage() {
   // Stats derived from real data
   const strongHires = candidates.filter(c => String(c.hiring_recommendation ?? "").toLowerCase().includes("strong")).length;
   const avgScore = candidates.length > 0
-    ? Math.round(candidates.reduce((s, c) => s + c.final_score, 0) / candidates.length)
+    ? Math.round(candidates.reduce((s, c) => s + Number(c.final_score ?? 0), 0) / candidates.length)
     : 0;
-  const highRisk = candidates.filter(c => (c.risk_level as string) === "High" || c.final_score < 50).length;
+  const highRisk = candidates.filter(c => (c.risk_level as string) === "High" || Number(c.final_score ?? 0) < 50).length;
 
   // Get selected usernames for compare link
   const selectedUsernames = candidates
@@ -309,9 +309,9 @@ export default function CandidatesPage() {
           </div>
 
           {paginated.map((c) => {
-            const tier = (c.developer_tier as string) || scoreToTier(c.final_score);
-            const risk = (c.risk_level as string) || scoreToRisk(c.final_score);
-            const rec = (c.hiring_recommendation as string) || (c.final_score >= 80 ? "Strong Hire" : c.final_score >= 65 ? "Likely Hire" : c.final_score >= 50 ? "Conditional" : "Not Recommended");
+            const tier = (c.developer_tier as string) || scoreToTier(Number(c.final_score ?? 0));
+            const risk = (c.risk_level as string) || scoreToRisk(Number(c.final_score ?? 0));
+            const rec = (c.hiring_recommendation as string) || (Number(c.final_score ?? 0) >= 80 ? "Strong Hire" : Number(c.final_score ?? 0) >= 65 ? "Likely Hire" : Number(c.final_score ?? 0) >= 50 ? "Conditional" : "Not Recommended");
             const langs = (c.top_languages as string[]) ?? [];
 
             return (
@@ -342,7 +342,7 @@ export default function CandidatesPage() {
                 </div>
 
                 {/* Score */}
-                <ScoreBadge score={c.final_score} tier={tier} />
+                <ScoreBadge score={Number(c.final_score ?? 0)} tier={tier} />
 
                 {/* Risk */}
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full inline-block"

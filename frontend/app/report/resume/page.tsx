@@ -188,10 +188,17 @@ export default function ResumeReportPage() {
   );
 
   const { resume_data, github_intelligence, claims_validation, analysis_metadata, deep_report, linkedin_data, job_requirements } = data;
-  const score = deep_report?.overall_score ?? claims_validation?.authenticity_score ?? 0;
+  const score = github_intelligence?.final_score 
+    ?? github_intelligence?.score 
+    ?? deep_report?.overall_score 
+    ?? claims_validation?.authenticity_score 
+    ?? 0;
   
   // Extract simple recommendation string if it's an object now
-  let rec = deep_report?.hire_decision || claims_validation?.hiring_recommendation;
+  let rec = github_intelligence?.hiring_recommendation?.summary
+    || github_intelligence?.hiring_recommendation
+    || deep_report?.hire_decision 
+    || claims_validation?.hiring_recommendation;
   if (typeof rec === 'object' && rec !== null) {
       rec = rec.recommendation || "N/A";
   }
@@ -268,7 +275,7 @@ export default function ResumeReportPage() {
             </div>
             <div className="flex flex-col items-center">
               <ScoreRing score={score} />
-              <span className="text-[10px] text-slate-500 uppercase tracking-widest mt-2">Authenticity</span>
+              <span className="text-[10px] text-slate-500 uppercase tracking-widest mt-2">DIP Score</span>
             </div>
           </div>
           {/* Metadata bar */}
@@ -278,7 +285,7 @@ export default function ResumeReportPage() {
                 { label: "GitHub Matched", value: analysis_metadata.github_matched ? "✅ Yes" : "❌ No" },
                 { label: "Claims Extracted", value: analysis_metadata.claims_extracted },
                 { label: "Projects Found", value: analysis_metadata.projects_found },
-                { label: "Experience", value: github_intelligence?.experience || `${resume_data?.years_of_experience || "<1"} years` },
+                { label: "Experience", value: github_intelligence?.experience || (resume_data?.years_of_experience ? `${resume_data.years_of_experience} years` : "< 1 year") },
               ].map((m, i) => (
                 <div key={i} className="flex flex-col">
                   <span className="text-[10px] text-slate-500 uppercase tracking-wider">{m.label}</span>

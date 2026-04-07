@@ -23,9 +23,15 @@ export interface CandidateRecord {
   name?: string;
   avatar_url?: string;
   score: number;
+  final_score?: number;
   tier?: string;
+  developer_tier?: string;
   risk_level?: string;
+  hiring_recommendation?: any;
   recommendation_summary?: string;
+  verified_skills?: string[];
+  top_languages?: string[];
+  confidence_score?: number;
   languages?: string[];
   scanned_at: string;
   full_report?: object;
