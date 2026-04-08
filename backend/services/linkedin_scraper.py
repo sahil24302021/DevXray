@@ -1189,12 +1189,23 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
     _partial_raw_texts = []  # Collect partial text from ALL strategies
     _strategy_log = []  # Track which strategies were tried and their outcome
 
-    result = await _strategy_scrapin(username)
-    if result:
-        return result
-    # ... then continue with existing strategies 1-10
+    # ─── Strategy 0: Scrapin API (ONLY if paid key is configured) ───
+    import os
+    scrapin_key = (os.getenv("SCRAPIN_API_KEY") or "").strip()
+    _scrapin_skip_values = {"", "trial", "test", "none", "placeholder", "your_key_here"}
+    if scrapin_key and scrapin_key.lower() not in _scrapin_skip_values and len(scrapin_key) > 10:
+        print(f"[LinkedIn] S0: Scrapin API (paid key detected)...")
+        scrapin_result = await _strategy_scrapin(username)
+        if scrapin_result:
+            _strategy_log.append("S0:Scrapin ✓")
+            return scrapin_result
+        _strategy_log.append("S0:Scrapin ✗")
+    else:
+        _strategy_log.append("S0:Scrapin SKIP(no paid key)")
+        if scrapin_key:
+            print(f"[LinkedIn] Skipping Scrapin — key appears to be trial/test/placeholder ('{scrapin_key[:8]}...')")
 
-    # ─── Strategy 1: Voyager API (BEST quality) ───
+    # ─── Strategy 1: Voyager API (BEST quality — always first) ───
     print(f"[LinkedIn] S1: Voyager API for '{username}'...")
     data = await _strategy_voyager_api(username)
     if data:
@@ -1202,6 +1213,7 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
         _strategy_log.append("S1:Voyager ✓")
     else:
         _strategy_log.append("S1:Voyager ✗" if get_li_at() else "S1:Voyager SKIP(no cookie)")
+
 
     # ─── Strategy 2: Authenticated Render ───
     if not data:

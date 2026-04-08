@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, useSpring, useMotionValue, useTransform } from "framer-motion";
 import Link from "next/link";
 import { BarChart, Bar, Cell, XAxis, Tooltip, ResponsiveContainer } from "recharts";
+import InterviewKit from "@/components/report/InterviewKit";
 
 /* --- Status Badge --- */
 function StatusBadge({ status }: { status: string }) {
@@ -238,6 +239,7 @@ export default function ResumeReportPage() {
             </span>
           </Link>
           <div className="flex items-center gap-2">
+            <InterviewKit reportData={data} candidateName={resume_data?.name || "Candidate"} />
             <button
               onClick={handleExportPDF}
               disabled={isExporting}

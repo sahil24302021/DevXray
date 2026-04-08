@@ -170,7 +170,20 @@ def generate_report(
         "score_breakdown": breakdown,
         "feature_importance": scoring.get("feature_importance", []),
         "decision_trace": scoring.get("decision_trace", []),
-        "developer_tier": scoring.get("developer_tier", "Unknown"),
+        "developer_tier": (
+            # Ensure developer_tier is always a structured dict with 'tier' + 'tier_description'
+            scoring.get("developer_tier")
+            if isinstance(scoring.get("developer_tier"), dict)
+            else {
+                "tier": (
+                    scoring.get("developer_tier")
+                    or benchmark.get("tier")
+                    or scoring.get("tier")
+                    or "Unknown"
+                ),
+                "tier_description": benchmark.get("tier_description", ""),
+            }
+        ),
         "benchmark": benchmark,
         "confidence_score": 0,   # Overridden by orchestrator
         "is_low_confidence": False,
@@ -278,6 +291,14 @@ def generate_report(
 
         # ─── Pinned Code Reviews ───
         "pinned_code_reviews": pinned_code_reviews or [],
+
+        # ─── Auto-Generated Interview Questions (FEATURE 5) ───
+        "auto_interview_questions": generate_red_flag_interview_questions(
+            risk_flags=all_risk_flags,
+            breakdown=breakdown,
+            skills=skills,
+            auth_score=auth_pct,
+        ),
 
         # Deep analysis data
         "repos_deep_analyzed": deep_data.get("repos_analyzed", 0) if deep_data else 0,
@@ -534,3 +555,155 @@ def _generate_risk_analysis(score: float, flags: List[Dict]) -> str:
         return "Moderate risk. Decent fundamentals with some areas needing verification."
     else:
         return "High risk. Multiple concerns detected. Thorough vetting recommended."
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  FEATURE 5: Red Flag → Interview Question Auto-Mapping
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_RED_FLAG_QUESTION_MAP = {
+    # Flag keyword → (category, question, what_good_answer_looks_like)
+    "fork": (
+        "Originality",
+        "Most of your repos appear to be forks. Walk me through a project you built from scratch — what was the hardest technical decision?",
+        "Candidate describes a real architectural choice with trade-offs, not just 'I followed a tutorial.'"
+    ),
+    "template": (
+        "Originality",
+        "We detected template/boilerplate origins in some projects. How did you customize the template and what did you add beyond the starter code?",
+        "Candidate can name specific features, modules, or integrations they built on top."
+    ),
+    "ai_generated": (
+        "Authenticity",
+        "Some code patterns suggest AI-assisted generation. How do you use AI tools in your workflow, and how do you ensure you understand the code it produces?",
+        "Candidate acknowledges AI usage, describes review process, can explain generated code in detail."
+    ),
+    "inconsisten": (
+        "Consistency",
+        "Your GitHub activity shows long periods of inactivity followed by bursts. What drives your coding cadence — and how would you maintain consistency in a team?",
+        "Candidate explains real-world context (exams, job transitions) and describes habits for sustained output."
+    ),
+    "commit spike": (
+        "Authenticity",
+        "We noticed a very large number of commits on a single day. Can you walk me through what you were working on and why the burst?",
+        "Candidate gives specific context (hackathon, deadline, migration) rather than vague answers."
+    ),
+    "stuffer": (
+        "Authenticity",
+        "Your commit timeline shows patterns sometimes associated with contribution padding. Can you explain your typical commit workflow?",
+        "Candidate describes meaningful commit practices, not just 'I commit whenever I can.'"
+    ),
+    "no test": (
+        "Engineering Practices",
+        "We didn't find test files in your repositories. How do you approach testing in your personal projects vs. production code?",
+        "Candidate distinguishes between personal project trade-offs and production testing strategy."
+    ),
+    "readme": (
+        "Documentation",
+        "Several of your repos lack README files or documentation. How do you approach documentation for a team project?",
+        "Candidate describes docs-as-code, README templates, or API documentation practices."
+    ),
+    "single language": (
+        "Breadth",
+        "Your projects are primarily in one language. If you needed to build a microservice in Go or Rust tomorrow, how would you approach the learning curve?",
+        "Candidate shows learning methodology and willingness to explore, not defensiveness."
+    ),
+    "low complexity": (
+        "Depth",
+        "Your projects appear to be relatively straightforward. Tell me about the most technically complex problem you've solved — what made it challenging?",
+        "Candidate identifies genuine complexity (concurrency, scale, algorithms) not just 'it was a big project.'"
+    ),
+    "claim": (
+        "Verification",
+        "Your resume claims expertise in technologies we couldn't fully verify from your GitHub. Can you live-code or whiteboard a solution using those technologies?",
+        "Candidate demonstrates real fluency, not just awareness of syntax."
+    ),
+    "gap": (
+        "Career Continuity",
+        "There appears to be a gap in your development activity. What were you focused on during that period?",
+        "Candidate gives concrete answer: employed at closed-source company, studying, personal reasons."
+    ),
+}
+
+
+def generate_red_flag_interview_questions(
+    risk_flags: List[Dict],
+    breakdown: Dict[str, Any],
+    skills: Dict[str, Any],
+    auth_score: float = 100.0,
+) -> List[Dict[str, str]]:
+    """
+    Auto-generate targeted interview questions from detected red flags and
+    score weaknesses. Zero AI cost — pure rule-based template matching.
+
+    Returns list of:
+    {
+        "category": "Originality", 
+        "question": "...",
+        "good_answer": "...",
+        "triggered_by": "fork ratio flag"
+    }
+    """
+    questions: List[Dict[str, str]] = []
+    used_categories: set = set()
+
+    # 1. Map from risk flags
+    for flag in risk_flags:
+        flag_text = (
+            flag.get("detail", "") + " " +
+            flag.get("flag", "") + " " +
+            flag.get("type", "")
+        ).lower()
+
+        for keyword, (category, question, good_answer) in _RED_FLAG_QUESTION_MAP.items():
+            if keyword in flag_text and category not in used_categories:
+                questions.append({
+                    "category": category,
+                    "question": question,
+                    "good_answer": good_answer,
+                    "triggered_by": flag.get("flag", flag.get("type", keyword)),
+                    "severity": flag.get("severity", "MEDIUM"),
+                })
+                used_categories.add(category)
+
+    # 2. Score-based questions (for weak dimensions)
+    if breakdown.get("code_quality", 100) < 40 and "Engineering Practices" not in used_categories:
+        questions.append({
+            "category": "Engineering Practices",
+            "question": "Your code quality metrics are below average. Walk me through how you would refactor a messy codebase — what's your process?",
+            "good_answer": "Candidate describes incremental refactoring, SOLID principles, or specific tools they use.",
+            "triggered_by": f"code_quality score: {breakdown.get('code_quality', 0):.0f}",
+            "severity": "MEDIUM",
+        })
+
+    if breakdown.get("authenticity", 100) < 40 and "Authenticity" not in used_categories:
+        questions.append({
+            "category": "Authenticity",
+            "question": "Let's do a live coding exercise: implement [relevant algorithm from their stack] while explaining your thought process.",
+            "good_answer": "Candidate can code fluently without copy-pasting, explains trade-offs as they go.",
+            "triggered_by": f"authenticity score: {auth_score:.0f}",
+            "severity": "HIGH",
+        })
+
+    if breakdown.get("growth", 100) < 30 and "Growth" not in used_categories:
+        questions.append({
+            "category": "Growth",
+            "question": "Your GitHub activity doesn't show a clear growth trajectory. What have you been learning recently, and how do you stay current with technology?",
+            "good_answer": "Candidate names specific technologies, courses, books, or side projects from the last 6 months.",
+            "triggered_by": f"growth score: {breakdown.get('growth', 0):.0f}",
+            "severity": "LOW",
+        })
+
+    # 3. Always include a positive deep-dive if they have strong areas
+    top_skills = skills.get("top_skills", [])
+    if top_skills and len(questions) < 6:
+        best_skill = top_skills[0].get("skill_name", "your strongest technology")
+        questions.append({
+            "category": "Technical Depth",
+            "question": f"You show strong signals in {best_skill}. Design a production system using {best_skill} — walk me through your architecture, scaling strategy, and failure modes.",
+            "good_answer": "Candidate discusses real-world concerns: caching, load balancing, error handling, monitoring.",
+            "triggered_by": "strongest verified skill",
+            "severity": "POSITIVE",
+        })
+
+    return questions[:8]  # Cap at 8 questions

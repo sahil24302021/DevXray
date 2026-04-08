@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import re
@@ -10,76 +11,68 @@ def _ensure_configured():
     if not _configured:
         key = os.getenv("GEMINI_API_KEY", "").strip()
         if not key:
-            raise RuntimeError(
-                "GEMINI_API_KEY is not set. Add it to backend/.env"
-            )
+            raise RuntimeError("GEMINI_API_KEY is not set in environment variables. Add it to Render dashboard under Environment.")
         genai.configure(api_key=key)
         _configured = True
 
-
-def get_model(model_name: str = "gemini-2.5-flash"):
-    """Returns a configured GenerativeModel, ensuring API key is set."""
+def get_model(model_name: str = "gemini-1.5-flash"):
     _ensure_configured()
     return genai.GenerativeModel(model_name)
 
-
 async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     """
-    Primary: Claude Sonnet 3.5 (better structured JSON).
-    Fallback: Gemini (if no ANTHROPIC_API_KEY or Claude fails).
+    Gemini-only JSON generation with retry logic.
+    Uses gemini-1.5-flash as primary, gemini-1.5-pro as fallback for complex prompts.
     """
-    # ── Try Claude first ──
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-    if anthropic_key:
-        try:
-            import anthropic
-            client = anthropic.Anthropic(api_key=anthropic_key)
-            response = client.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4096,
-                temperature=temperature,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            content = response.content[0].text
-            if content:
+    _ensure_configured()
+    
+    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
+    last_error = None
+    
+    for attempt in range(3):  # 3 retries total
+        for model_name in models_to_try:
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(
+                    prompt,
+                    generation_config=genai.GenerationConfig(
+                        response_mime_type="application/json",
+                        temperature=temperature,
+                    ),
+                )
+                content = response.text
+                if not content:
+                    continue
                 content = _clean_json(content)
                 return json.loads(content)
-        except Exception as e:
-            print(f"[AI Client] Claude failed, falling back to Gemini: {e}")
-
-    # ── Fallback: Gemini ──
-    _ensure_configured()
-    model = genai.GenerativeModel("gemini-2.5-flash")
-
-    response = model.generate_content(
-        prompt,
-        generation_config=genai.GenerationConfig(
-            response_mime_type="application/json",
-            temperature=temperature,
-        ),
-    )
-
-    content = response.text
-    if not content:
-        raise ValueError("Gemini returned an empty response.")
-
-    content = _clean_json(content)
-
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError as e:
-        print(f"[Gemini Client] Broken JSON snippet: {content[max(0, e.pos-50):e.pos+50]}")
-        raise
-
+            except Exception as e:
+                error_str = str(e).lower()
+                last_error = e
+                print(f"[GeminiClient] {model_name} attempt {attempt+1} failed: {e}")
+                
+                if "quota" in error_str or "429" in error_str or "resource_exhausted" in error_str:
+                    # Quota hit — wait before retry
+                    wait_time = (attempt + 1) * 5  # 5s, 10s, 15s
+                    print(f"[GeminiClient] Quota hit. Waiting {wait_time}s before retry...")
+                    await asyncio.sleep(wait_time)
+                    break  # Break model loop, retry with same model after wait
+                elif "403" in error_str or "denied" in error_str:
+                    raise RuntimeError(f"Gemini API access denied. Check your GEMINI_API_KEY in Render environment variables. Error: {e}")
+                # Other errors — try next model
+                continue
+        
+    raise RuntimeError(f"All Gemini models failed after 3 attempts. Last error: {last_error}")
 
 def _clean_json(content: str) -> str:
     """Strip markdown fences and fix trailing commas."""
+    content = content.strip()
     if content.startswith("```json"):
         content = content[7:]
-    if content.startswith("```"):
+    elif content.startswith("```"):
         content = content[3:]
     if content.endswith("```"):
         content = content[:-3]
     content = content.strip()
+    # Fix trailing commas before } or ]
     content = re.sub(r',(\s*[}\]])', r'\1', content)
     return content

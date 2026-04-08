@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from utils.logging_config import setup_logging, get_logger
 from ingestion.github_fetcher import (
@@ -557,17 +558,32 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
         pipeline_meta["data_source_confidence"] = "MODERATE"
     else:
         pipeline_meta["data_source_confidence"] = "LOW"
-        # FIX 12: Cap confidence if GitHub-only (tightened 0.7→0.60)
-        if pipeline_meta.get("confidence_score", 0) > 0.60:
-            pipeline_meta["confidence_score"] = min(pipeline_meta["confidence_score"], 0.60)
+        # Dynamic confidence cap based on how much GitHub data we actually have
+        repo_count = len([r for r in repos if not r.get("is_fork", False)])
+        if repo_count >= 15:
+            confidence_cap = 0.80  # Lots of repos = high confidence even without multi-source
+        elif repo_count >= 5:
+            confidence_cap = 0.70
+        else:
+            confidence_cap = 0.55  # Only cap hard when very few repos
+        if pipeline_meta.get("confidence_score", 0) > confidence_cap:
+            pipeline_meta["confidence_score"] = min(pipeline_meta["confidence_score"], confidence_cap)
 
-    # AI Summary (best-effort)
+    # AI Summary (best-effort) — pass scoring data for richer intelligence
     ai_summary = None
+    _scoring = engine_results.get("scoring", {})
+    _benchmark = _scoring.get("benchmark", {})
     try:
         ai_summary = await generate_ai_summary(
             profile=profile,
             repos=repos,
             events=events,
+            score=int(_scoring.get("final_score", 0)),
+            verdict=_scoring.get("hiring_recommendation", {}).get("reasoning", [""])[0] if isinstance(_scoring.get("hiring_recommendation"), dict) else None,
+            risk_level=_benchmark.get("comparable_to", ""),
+            strengths=_scoring.get("score_breakdown", {}).get("strengths", []),
+            weaknesses=_scoring.get("score_breakdown", {}).get("weaknesses", []),
+            tier=_benchmark.get("tier", "Unknown"),
         )
     except Exception as e:
         log.warning(f"AI summary failed: {e}")
@@ -683,14 +699,74 @@ async def analyze_resume_endpoint(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Resume parsing failed: {e}")
 
-    # Extract GitHub username
-    username = resume_data.get("github_username", "")
-    if not username:
-        github_url = resume_data.get("github_url", "")
-        if github_url:
-            parts = [p for p in github_url.rstrip("/").split("/") if p]
+    # ═══ Extract GitHub username — 5-fallback cascade ═══
+    import re as _re_username
+
+    username = ""
+
+    # Source 1: Direct github_username field from resume parser
+    raw_username = (resume_data.get("github_username") or "").strip()
+    if raw_username:
+        # Handle full URL stored in username field (common parser bug)
+        if "github.com" in raw_username or "/" in raw_username:
+            # Strip protocol, www, github.com, trailing slashes
+            cleaned = raw_username.replace("https://", "").replace("http://", "").replace("www.", "")
+            parts = [p for p in cleaned.rstrip("/").split("/") if p and p.lower() != "github.com"]
             if parts:
-                username = parts[-1].strip()
+                username = parts[0].strip()
+        else:
+            # Plain username — accept as-is (handles sahil24302021, dashes, underscores)
+            username = raw_username
+
+    # Source 2: github_url field — extract username from URL
+    if not username:
+        github_url = (resume_data.get("github_url") or "").strip()
+        if github_url:
+            # Normalize: ensure it starts with protocol for consistent parsing
+            if not github_url.startswith("http"):
+                github_url = "https://" + github_url
+            # Extract: github.com/USERNAME (handles http, https, www, trailing paths)
+            m = _re_username.search(r'github\.com/([a-zA-Z0-9][\w-]{0,38})(?:[/?#]|$)', github_url)
+            if m:
+                username = m.group(1)
+
+    # Source 3: Scan other_links for any github.com URL
+    if not username:
+        all_links = (resume_data.get("other_links") or []) + [resume_data.get("github_url", "")]
+        for link in all_links:
+            link_str = str(link or "").strip()
+            if link_str and "github.com" in link_str.lower():
+                m = _re_username.search(r'github\.com/([a-zA-Z0-9][\w-]{0,38})(?:[/?#]|$)', link_str)
+                if m:
+                    candidate = m.group(1).lower()
+                    # Skip common non-username paths
+                    if candidate not in ("settings", "notifications", "pulls", "issues",
+                                         "marketplace", "explore", "topics", "trending",
+                                         "collections", "events", "sponsors", "orgs"):
+                        username = m.group(1)
+                        break
+
+    # Source 4: Email prefix as GitHub handle guess
+    if not username:
+        email = (resume_data.get("email") or "").strip()
+        if email and "@" in email:
+            prefix = email.split("@")[0]
+            # Only use if it looks like a plausible username (no dots, reasonable length)
+            clean_prefix = prefix.replace(".", "").replace("-", "").replace("_", "")
+            if 3 <= len(clean_prefix) <= 39 and clean_prefix.isalnum():
+                username = prefix.replace(".", "")
+                log.info(f"[ResumeParser] Using email prefix as GitHub username guess: '{username}'")
+
+    # Source 5: Regex scan the full resume text (last resort)
+    if not username:
+        raw_text = resume_data.get("_raw_text", "") or resume_data.get("raw_text", "")
+        if raw_text:
+            m = _re_username.search(r'github\.com/([a-zA-Z0-9][\w-]{0,38})(?:[/?#\s]|$)', raw_text)
+            if m:
+                username = m.group(1)
+                log.info(f"[ResumeParser] Extracted username from raw resume text: '{username}'")
+
+    log.info(f"[ResumeParser] Final GitHub username: '{username}'")
 
     portfolio_url = resume_data.get("portfolio_url", "")
     linkedin_url = resume_data.get("linkedin_url", "")
@@ -865,9 +941,17 @@ async def analyze_resume_endpoint(
         )
 
         ai_summary = None
+        _scoring_r = engine_results.get("scoring", {})
+        _benchmark_r = _scoring_r.get("benchmark", {})
         try:
             ai_summary = await generate_ai_summary(
                 profile=profile, repos=repos, events=events,
+                score=int(_scoring_r.get("final_score", 0)),
+                verdict=_scoring_r.get("hiring_recommendation", {}).get("reasoning", [""])[0] if isinstance(_scoring_r.get("hiring_recommendation"), dict) else None,
+                risk_level=_benchmark_r.get("comparable_to", ""),
+                strengths=_scoring_r.get("score_breakdown", {}).get("strengths", []),
+                weaknesses=_scoring_r.get("score_breakdown", {}).get("weaknesses", []),
+                tier=_benchmark_r.get("tier", "Unknown"),
             )
         except Exception as e:
             log.warning(f"AI summary failed: {e}")
@@ -1576,6 +1660,86 @@ async def health():
         "platform": "Developer Intelligence Platform",
         "today": _get_today_str(),
         "linkedin_scraper": "10-strategy cascade",
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PUBLIC BADGE ENDPOINT — embeddable SVG for GitHub READMEs
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Simple in-memory badge cache (username -> {score, tier, timestamp})
+_badge_cache: Dict[str, Dict[str, Any]] = {}
+
+@app.get("/badge/{username}")
+async def get_badge(username: str):
+    """
+    Returns an SVG badge showing the developer's DIP score.
+    
+    Usage in GitHub README:
+      ![DevXray](https://devxray-backend.onrender.com/badge/username)
+    """
+
+    # Check cache first
+    cached = _badge_cache.get(username.lower())
+    score = 0
+    tier = "Unrated"
+    if cached:
+        score = cached.get("score", 0)
+        tier = cached.get("tier", "Unrated")
+
+    # Color logic
+    if score >= 80:
+        color = "#22c55e"  # green
+    elif score >= 60:
+        color = "#eab308"  # yellow
+    elif score >= 40:
+        color = "#f97316"  # orange
+    elif score > 0:
+        color = "#ef4444"  # red
+    else:
+        color = "#6b7280"  # gray (unrated)
+
+    label = "DevXray"
+    value = f"{score}/100 {tier}" if score > 0 else "Unrated"
+    label_width = len(label) * 7 + 12
+    value_width = len(value) * 6.5 + 12
+    total_width = label_width + value_width
+
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="20" role="img" aria-label="{label}: {value}">
+  <title>{label}: {value}</title>
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r"><rect width="{total_width}" height="20" rx="3" fill="#fff"/></clipPath>
+  <g clip-path="url(#r)">
+    <rect width="{label_width}" height="20" fill="#555"/>
+    <rect x="{label_width}" width="{value_width}" height="20" fill="{color}"/>
+    <rect width="{total_width}" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="11">
+    <text x="{label_width/2}" y="14">{label}</text>
+    <text x="{label_width + value_width/2}" y="14">{value}</text>
+  </g>
+</svg>"""
+
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+
+def update_badge_cache(username: str, score: float, tier: str):
+    """Update the badge cache after a successful analysis. Called from pipelines."""
+    import time
+    _badge_cache[username.lower()] = {
+        "score": int(score),
+        "tier": tier,
+        "timestamp": time.time(),
     }
 
 

@@ -119,14 +119,43 @@ async def validate_claims(
     today = _get_today_str()
     claims = resume_data.get("claims", [])
 
+    # If claims are empty, auto-generate them from projects and skills
     if not claims:
+        projects = resume_data.get("projects", [])
+        skills = resume_data.get("technical_skills", {})
+
+        auto_claims = []
+        for proj in projects[:5]:
+            name = proj.get("name", "")
+            desc = proj.get("description", "")
+            techs = proj.get("technologies", [])
+            if name and desc:
+                auto_claims.append(f"Built {name}: {desc}")
+            if techs:
+                auto_claims.append(f"Used {', '.join(techs[:4])} in {name or 'a project'}")
+
+        # Add skill claims
+        all_skills: list = []
+        if isinstance(skills, dict):
+            for v in skills.values():
+                if isinstance(v, list):
+                    all_skills.extend(v[:3])
+        if all_skills:
+            auto_claims.append(f"Proficient in: {', '.join(all_skills[:6])}")
+
+        claims = auto_claims
+        if claims:
+            print(f"[ClaimsValidator] Auto-generated {len(claims)} claims from projects/skills")
+
+    if not claims:
+        # Truly nothing to validate
         return {
-            "authenticity_score": 100,
-            "overall_assessment": "No verifiable claims found in resume.",
+            "authenticity_score": 50,
+            "overall_assessment": "No verifiable claims found. GitHub data used for baseline assessment.",
             "validations": [],
-            "red_flags": [],
+            "red_flags": ["No specific technical claims found in resume to cross-reference"],
             "strengths_confirmed": [],
-            "hiring_recommendation": "Insufficient data for recommendation."
+            "hiring_recommendation": "MAYBE — Insufficient resume detail for automated verification"
         }
 
     # ── Build account age context ──
