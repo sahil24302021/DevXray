@@ -2,40 +2,41 @@ import asyncio
 import os
 import json
 import re
-import google.generativeai as genai
 
-_configured = False
+_client = None
 
-def _ensure_configured():
-    global _configured
-    if not _configured:
+def _get_client():
+    global _client
+    if _client is None:
+        from google import genai
         key = os.getenv("GEMINI_API_KEY", "").strip()
         if not key:
-            raise RuntimeError("GEMINI_API_KEY is not set in environment variables. Add it to Render dashboard under Environment.")
-        genai.configure(api_key=key)
-        _configured = True
-
-def get_model(model_name: str = "gemini-1.5-flash"):
-    _ensure_configured()
-    return genai.GenerativeModel(model_name)
+            raise RuntimeError("GEMINI_API_KEY is not set. Add it to Render dashboard under Environment.")
+        _client = genai.Client(api_key=key)
+    return _client
 
 async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     """
-    Gemini-only JSON generation with retry logic.
-    Uses gemini-1.5-flash as primary, gemini-1.5-pro as fallback for complex prompts.
+    Gemini JSON generation using new google-genai SDK.
+    Tries gemini-2.0-flash first (fast + free), falls back to gemini-1.5-flash-latest.
     """
-    _ensure_configured()
+    from google.genai import types
     
-    models_to_try = ["gemini-1.5-flash", "gemini-1.5-pro"]
+    models_to_try = [
+        "gemini-2.0-flash",
+        "gemini-1.5-flash-latest", 
+        "gemini-1.5-flash-8b",
+    ]
     last_error = None
-    
-    for attempt in range(3):  # 3 retries total
+
+    for attempt in range(3):
         for model_name in models_to_try:
             try:
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content(
-                    prompt,
-                    generation_config=genai.GenerationConfig(
+                client = _get_client()
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                         temperature=temperature,
                     ),
@@ -49,22 +50,20 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                 error_str = str(e).lower()
                 last_error = e
                 print(f"[GeminiClient] {model_name} attempt {attempt+1} failed: {e}")
-                
+
                 if "quota" in error_str or "429" in error_str or "resource_exhausted" in error_str:
-                    # Quota hit — wait before retry
-                    wait_time = (attempt + 1) * 5  # 5s, 10s, 15s
-                    print(f"[GeminiClient] Quota hit. Waiting {wait_time}s before retry...")
+                    wait_time = (attempt + 1) * 5
+                    print(f"[GeminiClient] Quota hit. Waiting {wait_time}s...")
                     await asyncio.sleep(wait_time)
-                    break  # Break model loop, retry with same model after wait
+                    break
                 elif "403" in error_str or "denied" in error_str:
-                    raise RuntimeError(f"Gemini API access denied. Check your GEMINI_API_KEY in Render environment variables. Error: {e}")
-                # Other errors — try next model
+                    raise RuntimeError(f"Gemini API key denied. Check GEMINI_API_KEY in Render. Error: {e}")
+                # 404 or other — try next model
                 continue
-        
+
     raise RuntimeError(f"All Gemini models failed after 3 attempts. Last error: {last_error}")
 
 def _clean_json(content: str) -> str:
-    """Strip markdown fences and fix trailing commas."""
     content = content.strip()
     if content.startswith("```json"):
         content = content[7:]
@@ -73,6 +72,5 @@ def _clean_json(content: str) -> str:
     if content.endswith("```"):
         content = content[:-3]
     content = content.strip()
-    # Fix trailing commas before } or ]
     content = re.sub(r',(\s*[}\]])', r'\1', content)
     return content
