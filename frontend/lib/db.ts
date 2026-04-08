@@ -27,14 +27,18 @@ export interface CandidateRecord {
   tier?: string;
   developer_tier?: string;
   risk_level?: string;
-  hiring_recommendation?: any;
+  hiring_recommendation?: string;
   recommendation_summary?: string;
-  verified_skills?: string[];
-  top_languages?: string[];
-  confidence_score?: number;
   languages?: string[];
   scanned_at: string;
   full_report?: object;
-  user_id?: string;  // Links to authenticated user (optional for guest scans)
+  user_id?: string;
   [key: string]: unknown;
+}
+
+// Merge extra fields needed by report/[username]/page.tsx to pass TS without altering the exact block above
+export interface CandidateRecord {
+  verified_skills?: string[];
+  top_languages?: string[];
+  confidence_score?: number;
 }
