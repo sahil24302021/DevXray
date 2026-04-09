@@ -60,7 +60,6 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     models_to_try = [
         "gemini-2.5-flash",
         "gemini-2.5-pro",
-        "gemini-1.5-pro",
     ]
     last_error = None
 
