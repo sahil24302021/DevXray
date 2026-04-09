@@ -58,8 +58,9 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     # Only models confirmed working on new API keys (April 2026)
     # gemini-2.5-flash first (fast, free), then fallbacks
     models_to_try = [
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-2.0-flash-exp",
     ]
     last_error = None
 
@@ -114,6 +115,34 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
 
                 # Unknown error — try next model
                 continue
+
+    try:
+        import httpx as _httpx_groq, json as _json_groq, os as _os_groq
+        groq_key = _os_groq.getenv("GROQ_API_KEY", "")
+        if groq_key:
+            log.info("[GeminiClient] Trying Groq fallback (free LLaMA 3.1 70B)")
+            async with _httpx_groq.AsyncClient(timeout=30.0) as _c:
+                _r = await _c.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": "llama-3.1-70b-versatile",
+                        "messages": [
+                            {"role": "system", "content": "You are a JSON generator. Reply ONLY with valid JSON. No markdown, no explanation."},
+                            {"role": "user", "content": prompt}
+                        ],
+                        "temperature": 0,
+                        "max_tokens": 4000,
+                    }
+                )
+                _r.raise_for_status()
+                _txt = _r.json()["choices"][0]["message"]["content"].strip()
+                _txt = _txt.replace("```json", "").replace("```", "").strip()
+                _result = _json_groq.loads(_txt)
+                log.info("[GeminiClient] Groq fallback succeeded")
+                return _result
+    except Exception as _groq_err:
+        log.warning(f"[GeminiClient] Groq fallback also failed: {_groq_err}")
 
     raise RuntimeError(
         f"All Gemini models failed after 5 attempts. Last error: {last_error}. "
