@@ -1361,8 +1361,76 @@ Generate a complete interview kit. Return ONLY this JSON:
         result = await generate_json(prompt, temperature=0)
         return {"success": True, "interview_kit": result, "role": role, "difficulty": difficulty}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Interview prep generation failed: {e}")
-
+        log.warning(f"Interview prep AI generation failed (likely quota issue): {e}")
+        # Generate a structured fallback kit from the raw report data
+        fallback_kit = {
+            "opening_questions": [
+                {"question": "Can you walk me through your most complex project?", "purpose": "Assess communication and project ownership"}
+            ],
+            "technical_deep_dives": [
+                {
+                    "skill": s,
+                    "question": f"How have you used {s} in production? What were the hardest scaling issues?",
+                    "follow_up": "How did you monitor or debug it in production?",
+                    "red_flag_answer": "Only describes tutorial-level usage or lacks understanding of failure modes.",
+                    "good_answer_looks_like": "Discusses real-world trade-offs, architecture decisions, and edge cases."
+                } for s in top_skills
+            ] if top_skills else [
+                {
+                    "skill": "Software Architecture",
+                    "question": "Describe a time you had to refactor a significant part of a codebase. What was your approach?",
+                    "follow_up": "How did you ensure you didn't break existing functionality?",
+                    "red_flag_answer": "Never refactored code or did it without tests/planning.",
+                    "good_answer_looks_like": "Mentions adding tests first, gradual rollouts, and defining clear boundaries."
+                }
+            ],
+            "gap_probing_questions": [
+                {
+                    "question": f"Our analysis flagged a potential gap in: {w}. Can you speak to your experience with this?",
+                    "probes_for": f"Self-awareness and plan to improve {w}"
+                } for w in weaknesses
+            ] if weaknesses else [
+                {
+                    "question": "What is an area of backend development you feel you are currently weak in and trying to improve?",
+                    "probes_for": "Self-awareness and continuous learning"
+                }
+            ],
+            "system_design_challenge": {
+                "problem": "Design a highly available URL shortener (like bit.ly) or a rate-limiter suitable for this role's level.",
+                "what_to_look_for": ["Data modeling", "Caching strategies", "Database partitioning", "Latency vs throughput trade-offs"],
+                "time_allocation": "20 minutes"
+            },
+            "culture_fit_questions": [
+                {
+                    "question": "Tell me about a time you strongly disagreed with a technical decision made by your team or manager.",
+                    "good_signal": "Approached the disagreement with data, communicated respectfully, and committed to the team's final decision.",
+                    "red_flag": "Became defensive, undermined the decision, or just gave up without explaining their technical stance."
+                }
+            ],
+            "coding_challenge": {
+                "problem": "Implement a function that finds the longest substring without repeating characters.",
+                "difficulty": difficulty,
+                "what_it_tests": "Algorithmic thinking and edge-case handling (empty strings, all identical characters)"
+            },
+            "closing_questions": ["What does your deployment pipeline typically look like?", "How do you handle technical debt?"],
+            "overall_interview_strategy": "This is a fallback interview kit automatically generated from the candidate's top tools because AI generation was unavailable. Focus on probing the depth of their knowledge in their top listed skills.",
+            "time_allocation": {
+                "technical": "30 min",
+                "behavioral": "15 min",
+                "system_design": "20 min",
+                "q_and_a": "10 min"
+            }
+        }
+        # Include risk flag probes if any exist
+        if risk_flags:
+            fallback_kit["gap_probing_questions"].extend([
+                {
+                    "question": f"I noticed an irregularity regarding: {f}. Can you elaborate on your experience here?",
+                    "probes_for": f"Clarifying the risk flag: {f}"
+                } for f in risk_flags
+            ])
+            
+        return {"success": True, "interview_kit": fallback_kit, "role": role, "difficulty": difficulty, "is_fallback": True}
 
 async def _generate_deep_report(
     resume_data: dict,
