@@ -58,9 +58,8 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     # Only models confirmed working on new API keys (April 2026)
     # gemini-2.5-flash first (fast, free), then fallbacks
     models_to_try = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-2.0-flash-exp",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
     ]
     last_error = None
 
