@@ -45,8 +45,24 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
   const [activeTab, setActiveTab] = useState<"auto" | "ai">("auto");
   const [error, setError] = useState("");
 
-  const github = reportData?.github_intelligence;
-  const autoQuestions: InterviewQuestion[] = github?.auto_interview_questions || [];
+  const github = reportData?.github_intelligence || reportData?.github_report;
+  const autoQuestions: InterviewQuestion[] = (
+    github?.auto_interview_questions ||
+    reportData?.auto_interview_questions ||
+    []
+  );
+
+  // Generate fallback questions from weaknesses if auto list is empty
+  const weaknesses: string[] = github?.weaknesses || reportData?.weaknesses || [];
+  const fallbackQuestions: InterviewQuestion[] = weaknesses.slice(0, 3).map((w: string, i: number) => ({
+    category: "Gap Analysis",
+    question: `Your assessment flagged: "${w}". Can you walk me through a specific example where you encountered this challenge and how you handled it?`,
+    good_answer: "Candidate shows self-awareness and describes concrete steps they took or are taking to improve.",
+    triggered_by: w,
+    severity: "MEDIUM"
+  }));
+
+  const displayQuestions = autoQuestions.length > 0 ? autoQuestions : fallbackQuestions;
 
   const generateAIKit = async () => {
     if (aiQuestions) {
@@ -60,7 +76,11 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
       const resp = await fetch(`${backendUrl}/api/interview-prep`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ report: reportData }),
+        body: JSON.stringify({
+          report: reportData?.github_intelligence || reportData?.github_report || reportData,
+          role: "Software Engineer",
+          difficulty: "junior"
+        }),
       });
       if (!resp.ok) throw new Error(`Server error: ${resp.status}`);
       const data = await resp.json();
@@ -81,7 +101,7 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
     <>
       {/* Trigger Button */}
       <motion.button
-        onClick={() => setIsOpen(true)}
+        onClick={() => { setIsOpen(true); if (!aiQuestions && !isLoading) generateAIKit(); }}
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
         className="flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl transition-all cursor-pointer"
@@ -158,7 +178,7 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
                         : "bg-white/5 text-slate-400 border border-white/[0.06] hover:bg-white/10"
                     }`}
                   >
-                    🎯 Auto-Generated ({autoQuestions.length})
+                    🎯 Auto-Generated ({displayQuestions.length})
                   </button>
                   <button
                     onClick={generateAIKit}
@@ -197,7 +217,24 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
                 {/* Auto-Generated Questions Tab */}
                 {activeTab === "auto" && (
                   <div className="space-y-3">
-                    {autoQuestions.length === 0 ? (
+                    {isLoading && activeTab === "auto" && (
+                      <div style={{
+                        display: "flex", flexDirection: "column", alignItems: "center",
+                        justifyContent: "center", padding: "4rem 2rem", gap: "1rem"
+                      }}>
+                        <div style={{
+                          width: 36, height: 36,
+                          border: "2px solid rgba(205,255,0,0.3)",
+                          borderTopColor: "#cdff00",
+                          borderRadius: "50%",
+                          animation: "devxray-spin 0.8s linear infinite"
+                        }} />
+                        <p style={{fontSize: 13, color: "rgba(255,255,255,0.5)", margin: 0}}>
+                          Analyzing code forensics and generating interview questions...
+                        </p>
+                      </div>
+                    )}
+                    {displayQuestions.length === 0 ? (
                       <div className="text-center py-12 text-slate-500">
                         <p className="text-lg mb-2">No auto-generated questions</p>
                         <p className="text-sm">No specific red flags or weak dimensions detected. Try the AI deep-dive instead.</p>
@@ -207,7 +244,7 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
                         <p className="text-xs text-slate-500 mb-4">
                           These questions are auto-generated from detected red flags and score weaknesses — zero AI cost.
                         </p>
-                        {autoQuestions.map((q, i) => {
+                        {displayQuestions.map((q, i) => {
                           const sev = SEVERITY_CONFIG[q.severity || "MEDIUM"] || SEVERITY_CONFIG["MEDIUM"];
                           const icon = CATEGORY_ICONS[q.category] || "❓";
                           return (
@@ -254,6 +291,23 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
                 )}
 
                 {/* AI Deep-Dive Tab */}
+                {activeTab === "ai" && isLoading && (
+                  <div style={{
+                    display: "flex", flexDirection: "column", alignItems: "center",
+                    justifyContent: "center", padding: "4rem 2rem", gap: "1rem"
+                  }}>
+                    <div style={{
+                      width: 36, height: 36,
+                      border: "2px solid rgba(168,85,247,0.3)",
+                      borderTopColor: "#a855f7",
+                      borderRadius: "50%",
+                      animation: "devxray-spin 0.8s linear infinite"
+                    }} />
+                    <p style={{fontSize: 13, color: "rgba(255,255,255,0.5)", margin: 0}}>
+                      Generating AI deep-dive questions...
+                    </p>
+                  </div>
+                )}
                 {activeTab === "ai" && aiQuestions && (
                   <div className="space-y-4">
                     <p className="text-xs text-slate-500 mb-2">
@@ -298,3 +352,15 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
     </>
   );
 }
+
+/* Spin animation for the loading spinner */
+const spinStyle = typeof document !== 'undefined' ? (() => {
+  const id = 'devxray-spin-keyframes';
+  if (!document.getElementById(id)) {
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = '@keyframes devxray-spin { to { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
+  }
+  return null;
+})() : null;

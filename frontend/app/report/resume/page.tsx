@@ -474,7 +474,42 @@ export default function ResumeReportPage() {
           </motion.section>
         )}
 
-        {/* ═══ GITHUB INTELLIGENCE ═══ */}
+        {/* ═══ GITHUB-DISCOVERED PROJECTS (Not in Resume) ═══ */}
+        {github_intelligence?.github_discovered_projects?.length > 0 && (
+          <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.42 }}
+            className="rounded-2xl border border-cyan-500/20 p-6" style={{ background: "rgba(6,182,212,0.03)" }}>
+            <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg mb-1 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-400" /> More Projects on GitHub
+            </h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Found on GitHub but not mentioned in the resume — {github_intelligence.github_discovered_projects.length} additional projects
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {github_intelligence.github_discovered_projects.map((p: any, i: number) => (
+                <div key={i} className="p-4 rounded-xl bg-black/40 border border-cyan-500/10 hover:border-cyan-500/30 transition-colors">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-sm font-bold text-white">{p.name}</h3>
+                    <div className="flex items-center gap-2">
+                      {p.language && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                          {p.language}
+                        </span>
+                      )}
+                      {p.stars > 0 && <span className="text-[10px] text-slate-500">⭐{p.stars}</span>}
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-2">{p.description}</p>
+                  {p.url && (
+                    <a href={p.url} target="_blank" rel="noopener noreferrer"
+                       className="text-[10px] text-cyan-400 hover:underline">
+                      View on GitHub →
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.section>
+        )}
         {github_intelligence ? (
           <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }}
             className="rounded-2xl border border-[#cdff00]/20 p-6" style={{ background: "rgba(205,255,0,0.02)" }}>

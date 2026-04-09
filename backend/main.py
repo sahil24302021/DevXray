@@ -993,6 +993,7 @@ async def analyze_resume_endpoint(
             ai_summary=ai_summary,
             jd_match=jd_match,
             resume_data=resume_data,
+            repos_param=repos,
         )
 
         github_report["confidence_score"] = pipeline_meta.get("confidence_score", 0)
@@ -1388,8 +1389,35 @@ Only flag date issues if is_future=True.
 """
 
     # Build repo context block — prevents "top_repos empty" hallucination
+    # Build accurate counts from actual fetched data
+    actual_repo_count = 0
+    non_fork_count = 0
+    if github_report and github_report.get("public_repos"):
+        actual_repo_count = github_report.get("public_repos", 0)
+    if github_report and github_report.get("repos_deep_analyzed"):
+        non_fork_count = github_report.get("repos_deep_analyzed", 0)
+
+    # Build language breakdown from actual data
+    lang_summary = ""
+    if github_report and github_report.get("top_languages"):
+        langs = github_report["top_languages"]
+        if isinstance(langs, list):
+            lang_summary = "Primary languages (by code volume): " + ", ".join(
+                f"{l}" if isinstance(l, str) else f"{l.get('language','?')} ({l.get('percentage','?')}%)"
+                for l in langs[:5]
+            )
+        elif isinstance(langs, dict):
+            sorted_langs = sorted(langs.items(), key=lambda x: x[1], reverse=True)
+            lang_summary = "Primary languages (by code volume): " + ", ".join(
+                f"{k}" for k, v in sorted_langs[:5]
+            )
+
     repo_block = f"""
 === VERIFIED REPOSITORY DATA ===
+Total repos on profile: {actual_repo_count}
+Repos fetched and analyzed: {non_fork_count} original (non-fork)
+{lang_summary}
+
 {repo_context_str if repo_context_str else "No repositories found."}
 ================================
 """

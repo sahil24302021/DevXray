@@ -37,7 +37,7 @@ def match_projects(
      - Uses repo file contents + README for deeper verification
      - Checks actual imports/class names in fetched files
     """
-    MATCH_THRESHOLD = 0.55
+    MATCH_THRESHOLD = 0.42  # More lenient — better to match than miss a real project
     claims: List[Dict[str, Any]] = []
     matched_repos: set = set()
     if repo_data is None:
@@ -116,7 +116,41 @@ def match_projects(
                     kw_overlap = len(proj_keywords & repo_keywords) / len(proj_keywords | repo_keywords)
                     desc_score = max(desc_score, kw_overlap)
 
-            combined = name_score * 0.6 + desc_score * 0.3 + tech_bonus
+            # TECHNOLOGY OVERLAP MATCHING — if resume project and repo share 2+ tech keywords
+            # this is strong evidence they're the same project even if names differ
+            tech_keywords_in_name = []
+            for tech in proj_techs:
+                tech_lower = tech.lower()
+                # Check if tech appears in repo name, description, or topics
+                repo_topics = " ".join(repo.get("topics", [])).lower()
+                if (tech_lower in repo_name or
+                    tech_lower in repo_desc.lower() or
+                    tech_lower in repo_topics or
+                    tech_lower == repo_lang):
+                    tech_keywords_in_name.append(tech)
+
+            tech_match_bonus = min(len(tech_keywords_in_name) * 0.12, 0.3)
+
+            # DESCRIPTION KEYWORD OVERLAP — extract key nouns from both descriptions
+            if proj_desc and repo_desc:
+                proj_words = set(re.findall(r'\b[a-z]{4,}\b', proj_desc.lower()))
+                repo_words = set(re.findall(r'\b[a-z]{4,}\b', repo_desc.lower()))
+                # Remove stop words
+                stops = {'that', 'this', 'with', 'from', 'have', 'been', 'they', 'will',
+                         'your', 'more', 'also', 'into', 'some', 'than', 'then', 'when',
+                         'uses', 'used', 'using', 'build', 'built', 'based', 'provides'}
+                proj_words -= stops
+                repo_words -= stops
+                if proj_words and repo_words:
+                    overlap = len(proj_words & repo_words)
+                    keyword_overlap_score = min(overlap / max(len(proj_words), 1) * 0.8, 0.4)
+                    desc_score = max(desc_score, keyword_overlap_score)
+
+            combined = max(
+                name_score,
+                desc_score * 0.6 + name_score * 0.4,
+                name_score * 0.5 + tech_match_bonus,
+            ) + tech_match_bonus
             if combined > best_score:
                 best_score = combined
                 best_match = repo_name

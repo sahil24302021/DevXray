@@ -249,9 +249,9 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
     SOURCE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java"}
     SKIP_DIRS = {"node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".git"}
     MAX_FILE_SIZE = 50_000  # 50KB
-    MAX_FILES_PER_REPO = 15
-    TOP_REPOS_FOR_FILES = 12
-    TOP_REPOS_FOR_LANG = 20
+    MAX_FILES_PER_REPO = 20
+    TOP_REPOS_FOR_FILES = 25
+    TOP_REPOS_FOR_LANG = 50  # Get ALL repos for language analysis
 
     # Pick top non-fork repos by composite score (Rule 3)
     originals = [r for r in repos if not r.get("is_fork", False)]
@@ -291,8 +291,28 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
         size_score = math.log10(size + 1) * 2
         
         weight = star_score + size_score + recent_bonus
-        if (r.get("language") or "").lower() == "python":
-            weight += 2.0
+
+        lang = (r.get("language") or "").lower()
+        # Language bonuses — ML/AI languages prioritized
+        lang_bonus = {"python": 5.0, "go": 3.0, "rust": 3.0, "java": 2.0, "c++": 2.0}.get(lang, 0)
+        weight += lang_bonus
+
+        # AI/ML/Automation repo detection — these deserve deep analysis
+        ml_keywords = [
+            "ai", "ml", "cv", "opencv", "tensorflow", "keras", "torch", "nlp",
+            "bot", "automation", "scraper", "gesture", "recognition", "detector",
+            "classifier", "gpt", "llm", "vision", "agent", "crawler", "face"
+        ]
+        name_lower = r.get("name", "").lower()
+        desc_lower = (r.get("description") or "").lower()
+        topics_lower = " ".join(r.get("topics", [])).lower()
+        all_text = name_lower + " " + desc_lower + " " + topics_lower
+        if any(kw in all_text for kw in ml_keywords):
+            weight += 6.0  # AI/ML repos ALWAYS get deep analysis
+
+        # Recently updated repos are more relevant
+        if recent_bonus == 5:  # Updated in last 30 days
+            weight += 3.0
 
         # Pinned repo bonus — developer chose to showcase this
         if r.get("name", "") in pinned_names:

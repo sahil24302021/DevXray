@@ -508,6 +508,56 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             {"name": "Webhooks", "patterns": [r"set_webhook", r"webhook", r"bot\.launch\("], "weight": 2, "advanced": True},
         ],
     },
+    # ─── ADDITIONAL AI/ML/AUTOMATION SKILLS (v4.0 accuracy fix) ───
+    "TensorFlow / Keras": {
+        "category": "ai_ml",
+        "file_patterns": [r"\.py$"],
+        "indicators": [
+            {"name": "Import", "patterns": [r"import tensorflow", r"from tensorflow\b", r"import keras", r"from keras\b"], "weight": 3, "advanced": False},
+            {"name": "Model API", "patterns": [r"Sequential\(", r"model\.compile\(", r"model\.fit\(", r"model\.predict\(", r"model\.evaluate\("], "weight": 3, "advanced": True},
+            {"name": "Layers", "patterns": [r"Dense\(", r"Conv2D\(", r"LSTM\(", r"Dropout\(", r"BatchNormalization\(", r"Flatten\("], "weight": 2, "advanced": True},
+            {"name": "Transfer learning", "patterns": [r"MobileNetV2", r"ResNet\d+", r"VGG\d+", r"EfficientNet", r"InceptionV3", r"applications\."], "weight": 4, "advanced": True},
+            {"name": "Data pipeline", "patterns": [r"ImageDataGenerator\(", r"tf\.data\.Dataset", r"flow_from_directory\("], "weight": 3, "advanced": True},
+        ],
+    },
+    "Python Automation": {
+        "category": "tools",
+        "file_patterns": [r"\.py$"],
+        "indicators": [
+            {"name": "System automation", "patterns": [r"import subprocess", r"subprocess\.run\(", r"os\.system\(", r"os\.popen\("], "weight": 2, "advanced": False},
+            {"name": "Web scraping", "patterns": [r"BeautifulSoup\(", r"from bs4", r"selenium\.", r"webdriver\.", r"requests\.get\("], "weight": 2, "advanced": False},
+            {"name": "File/OS automation", "patterns": [r"import shutil", r"shutil\.copy", r"os\.walk\(", r"glob\.glob\(", r"pathlib\.Path"], "weight": 1, "advanced": False},
+            {"name": "GUI automation", "patterns": [r"pyautogui\.", r"from pynput", r"keyboard\.", r"mouse\.", r"import pygetwindow"], "weight": 3, "advanced": True},
+            {"name": "Scheduling", "patterns": [r"schedule\.", r"APScheduler", r"cron", r"asyncio\.sleep\("], "weight": 2, "advanced": False},
+        ],
+    },
+    "Streamlit": {
+        "category": "frontend",
+        "file_patterns": [r"\.py$"],
+        "indicators": [
+            {"name": "Import", "patterns": [r"import streamlit\b", r"from streamlit\b"], "weight": 3, "advanced": False},
+            {"name": "UI elements", "patterns": [r"st\.write\(", r"st\.title\(", r"st\.button\(", r"st\.file_uploader\(", r"st\.dataframe\("], "weight": 1, "advanced": False},
+            {"name": "Advanced", "patterns": [r"st\.session_state", r"st\.cache\b", r"st\.experimental_rerun", r"st\.sidebar"], "weight": 2, "advanced": True},
+        ],
+    },
+    "MediaPipe": {
+        "category": "ai_ml",
+        "file_patterns": [r"\.py$"],
+        "indicators": [
+            {"name": "Import", "patterns": [r"import mediapipe", r"from mediapipe\b", r"mp\.solutions\."], "weight": 3, "advanced": False},
+            {"name": "Hands/Pose/Face", "patterns": [r"Hands\(\)", r"Pose\(\)", r"FaceMesh\(", r"mp_hands", r"mp_pose", r"mp_face"], "weight": 3, "advanced": True},
+            {"name": "Drawing utils", "patterns": [r"mp_drawing", r"draw_landmarks", r"DrawingSpec"], "weight": 2, "advanced": False},
+        ],
+    },
+    "Face Recognition": {
+        "category": "ai_ml",
+        "file_patterns": [r"\.py$"],
+        "indicators": [
+            {"name": "Import", "patterns": [r"import face_recognition", r"from face_recognition\b"], "weight": 3, "advanced": False},
+            {"name": "Encoding", "patterns": [r"face_encodings\(", r"face_locations\(", r"face_landmarks\("], "weight": 3, "advanced": True},
+            {"name": "Comparison", "patterns": [r"compare_faces\(", r"face_distance\("], "weight": 3, "advanced": True},
+        ],
+    },
 }
 
 
@@ -547,6 +597,14 @@ _DEPENDENCY_SKILL_MAP = {
     "kafkajs": "Kafka", "amqplib": "RabbitMQ",
     "graphql": "GraphQL", "@apollo/server": "GraphQL",
     "@grpc/grpc-js": "gRPC",
+    # Python automation / AI extras
+    "pyautogui": "Python Automation", "pynput": "Python Automation",
+    "schedule": "Python Automation", "apscheduler": "Python Automation",
+    "beautifulsoup4": "Python Automation", "bs4": "Python Automation",
+    "selenium": "Python Automation",
+    "streamlit": "Streamlit",
+    "mediapipe": "MediaPipe", "face-recognition": "Face Recognition",
+    "face_recognition": "Face Recognition",
     # Go (go.mod)
     "github.com/gin-gonic/gin": "Go",
     "github.com/gorilla/mux": "Go",

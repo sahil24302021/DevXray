@@ -83,6 +83,7 @@ def generate_report(
     ai_summary: Optional[Dict[str, Any]] = None,
     jd_match: Optional[Dict[str, Any]] = None,
     resume_data: Optional[Dict[str, Any]] = None,
+    repos_param: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Assemble the complete Developer Intelligence Report.
@@ -303,6 +304,46 @@ def generate_report(
         # Deep analysis data
         "repos_deep_analyzed": deep_data.get("repos_analyzed", 0) if deep_data else 0,
     }
+
+    # ─── FIX 8: Discover GitHub projects NOT mentioned in the resume ───
+    resume_matched_names = {
+        p.get("repo_name", p.get("name", "")).lower()
+        for p in projects
+        if p.get("repo_name") or p.get("name")
+    }
+
+    github_extra_projects = []
+    for repo in (repos_param or []):
+        if repo.get("is_fork", False):
+            continue
+        rname = repo.get("name", "")
+        rdesc = repo.get("description") or ""
+        if not rdesc:  # Skip repos with no description — likely test/learning repos
+            continue
+        # Skip already matched to resume
+        if rname.lower() in resume_matched_names:
+            continue
+        # Skip very small repos
+        if repo.get("size", 0) < 50:
+            continue
+        github_extra_projects.append({
+            "name": rname,
+            "description": rdesc,
+            "language": repo.get("language", "Unknown"),
+            "stars": repo.get("stars", 0),
+            "url": repo.get("html_url", ""),
+            "updated_at": (repo.get("updated_at") or "")[:10],
+            "source": "github_only",
+            "note": "Found on GitHub but not mentioned in resume"
+        })
+
+    # Sort by recency
+    github_extra_projects.sort(
+        key=lambda r: r.get("updated_at", ""), reverse=True
+    )
+
+    report["github_discovered_projects"] = github_extra_projects[:12]
+    report["total_projects_count"] = len(projects) + len(github_extra_projects)
 
     # ACCURACY 1 FIX: Add legacy-compatible 'scoring' block that frontend still references
     # in several places. Mirrors the real score_breakdown data for backward compatibility.
@@ -704,6 +745,50 @@ def generate_red_flag_interview_questions(
             "good_answer": "Candidate discusses real-world concerns: caching, load balancing, error handling, monitoring.",
             "triggered_by": "strongest verified skill",
             "severity": "POSITIVE",
+        })
+
+    # ─── FIX 7: ALWAYS include at least 4 questions — even for clean profiles ───
+    # Add skill-depth questions for verified skills
+    top_skills_list = skills.get("top_skills", skills.get("skills", []))
+    if top_skills_list and len(questions) < 4:
+        for skill_obj in top_skills_list[:3]:
+            skill_name = skill_obj.get("skill_name", skill_obj.get("name", ""))
+            skill_score = skill_obj.get("skill_score", skill_obj.get("score", 0))
+            if skill_name and "Technical Depth" not in used_categories:
+                questions.append({
+                    "category": "Technical Depth",
+                    "question": (
+                        f"Walk me through the architecture of your most complex {skill_name} project. "
+                        f"What were the hardest technical decisions you made?"
+                    ),
+                    "good_answer": (
+                        f"Candidate describes specific architectural choices, trade-offs considered, "
+                        f"and shows depth of understanding beyond surface-level usage of {skill_name}."
+                    ),
+                    "triggered_by": f"{skill_name} detected at {skill_score:.1f}/10 — verify genuine depth" if isinstance(skill_score, (int, float)) else f"{skill_name} detected — verify genuine depth",
+                    "severity": "POSITIVE",
+                })
+                used_categories.add("Technical Depth")
+                break
+
+    # Always add one behavioral question
+    if "Career Continuity" not in used_categories and len(questions) < 6:
+        questions.append({
+            "category": "Career Continuity",
+            "question": "What are you working on right now that you're most excited about? What will it look like in 6 months?",
+            "good_answer": "Candidate has a clear answer, shows genuine enthusiasm, and has thought beyond the current state.",
+            "triggered_by": "standard assessment",
+            "severity": "POSITIVE",
+        })
+
+    # Always add a system design question
+    if "System Design" not in used_categories:
+        questions.append({
+            "category": "System Design",
+            "question": "If you had to rebuild your most complex project to handle 10x the current load, what would you change?",
+            "good_answer": "Candidate identifies bottlenecks, mentions caching/queuing/scaling strategies, and shows awareness of production concerns.",
+            "triggered_by": "standard assessment",
+            "severity": "LOW",
         })
 
     return questions[:8]  # Cap at 8 questions

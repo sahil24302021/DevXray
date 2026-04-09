@@ -63,6 +63,16 @@ def _extract_repos_for_llm(github_data: dict) -> List[Dict]:
         for repo_name in github_data["repo_data"].keys():
             repos.append({"name": repo_name})
 
+    # Also try repo_context string that was injected into the report
+    if not repos and github_data.get("repo_context"):
+        # Parse the repo_context string to extract repo names
+        import re as _re
+        context_str = github_data["repo_context"]
+        # Pattern: "  1. RepoName | Python | ⭐0 | ..."
+        found = _re.findall(r'\d+\.\s+(\S+)\s+\|', context_str)
+        for name in found[:10]:
+            repos.append({"name": name})
+
     # Build clean LLM-friendly list
     clean: List[Dict[str, Any]] = []
     safe_repos = repos if isinstance(repos, list) else []
@@ -191,6 +201,14 @@ async def validate_claims(
         ],
         "authenticity_score_raw": github_data.get("authenticity", {}).get("authenticity_score"),
         **skills_ctx,
+        # Inject actual repo count so LLM knows the real scale
+        "total_repos_on_profile": github_data.get("public_repos", repo_count),
+        "note_for_validator": (
+            f"This developer has {github_data.get('public_repos', repo_count)} total repos. "
+            f"We deep-analyzed {repo_count} of them. The remaining repos may contain "
+            f"additional skill evidence not visible here. Do NOT penalize for repos we "
+            f"couldn't analyze — absence of evidence is NOT evidence of absence."
+        ),
     }
 
     resume_skills = resume_data.get("technical_skills", {})
