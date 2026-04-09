@@ -9,11 +9,10 @@ log = logging.getLogger("gemini_client")
 
 _client = None
 
-# ═══ Global rate limiter ═══
-# Free-tier Gemini allows ~15 RPM. We pace to max 10 RPM to be safe.
-_rate_lock = asyncio.Lock() if hasattr(asyncio, 'Lock') else None
+# Rate limiter: free tier = 15 RPM, we pace at 10 RPM to be safe
+_rate_lock = None
 _last_call_time = 0.0
-_MIN_INTERVAL = 4.0  # seconds between calls (= 15 RPM max)
+_MIN_INTERVAL = 4.0  # 4s between calls
 
 
 def _get_client():
@@ -22,13 +21,12 @@ def _get_client():
         from google import genai
         key = os.getenv("GEMINI_API_KEY", "").strip()
         if not key:
-            raise RuntimeError("GEMINI_API_KEY is not set. Add it to Render dashboard under Environment.")
+            raise RuntimeError("GEMINI_API_KEY not set in Render Environment.")
         _client = genai.Client(api_key=key)
     return _client
 
 
 async def _rate_limit():
-    """Enforce minimum interval between Gemini API calls to avoid 429s."""
     global _last_call_time, _rate_lock
     if _rate_lock is None:
         _rate_lock = asyncio.Lock()
@@ -44,25 +42,32 @@ async def _rate_limit():
 
 async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     """
-    Gemini JSON generation using new google-genai SDK.
-    Includes global rate limiting to prevent 429 quota exhaustion on free tier.
-    Tries gemini-2.0-flash first (fast + free), falls back to gemini-1.5-flash-latest.
+    Gemini JSON generation.
+
+    Model strategy (as of April 2026):
+    - gemini-2.5-flash: works on new API keys, sometimes 503 (overloaded) — retry
+    - gemini-2.5-pro:   works on new API keys, slower but more reliable
+    - gemini-1.5-pro:   fallback, stable
+    
+    503 UNAVAILABLE = server overloaded, RETRY (not a key problem)
+    403 PERMISSION_DENIED = wrong key or model not available for this key
+    404 NOT_FOUND = model name wrong or deprecated
     """
     from google.genai import types
-    
+
+    # Only models confirmed working on new API keys (April 2026)
+    # gemini-2.5-flash first (fast, free), then fallbacks
     models_to_try = [
         "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
+        "gemini-2.5-pro",
+        "gemini-1.5-pro",
     ]
     last_error = None
 
-    for attempt in range(3):
+    for attempt in range(5):  # 5 total attempts
         for model_name in models_to_try:
             try:
-                # Rate limit BEFORE making the call
                 await _rate_limit()
-
                 client = _get_client()
                 response = client.models.generate_content(
                     model=model_name,
@@ -76,23 +81,47 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                 if not content:
                     continue
                 content = _clean_json(content)
-                return json.loads(content)
+                result = json.loads(content)
+                log.info(f"[GeminiClient] Success with {model_name} on attempt {attempt+1}")
+                return result
+
             except Exception as e:
                 error_str = str(e).lower()
                 last_error = e
                 log.warning(f"[GeminiClient] {model_name} attempt {attempt+1} failed: {e}")
 
-                if "quota" in error_str or "429" in error_str or "resource_exhausted" in error_str:
-                    wait_time = (attempt + 1) * 15  # More aggressive backoff: 15s, 30s, 45s
+                if "503" in error_str or "unavailable" in error_str or "overload" in error_str:
+                    # 503 = server overloaded, NOT a key issue — retry with backoff
+                    wait_time = min(5 * (attempt + 1), 30)
+                    log.info(f"[GeminiClient] 503 overloaded. Waiting {wait_time}s then retrying...")
+                    await asyncio.sleep(wait_time)
+                    break  # retry from top of models list after wait
+
+                elif "429" in error_str or "quota" in error_str or "resource_exhausted" in error_str:
+                    wait_time = 15 * (attempt + 1)
                     log.info(f"[GeminiClient] Quota hit. Waiting {wait_time}s...")
                     await asyncio.sleep(wait_time)
                     break
-                elif "403" in error_str or "denied" in error_str:
-                    raise RuntimeError(f"Gemini API key denied. Check GEMINI_API_KEY in Render. Error: {e}")
-                # 404 or other — try next model
+
+                elif "403" in error_str or "permission" in error_str or "denied" in error_str:
+                    # This model not available for this key — try next model
+                    log.warning(f"[GeminiClient] {model_name} denied for this key, trying next model")
+                    continue
+
+                elif "404" in error_str or "not_found" in error_str or "not found" in error_str:
+                    # Model deprecated/renamed — try next model
+                    log.warning(f"[GeminiClient] {model_name} not found (deprecated), trying next model")
+                    continue
+
+                # Unknown error — try next model
                 continue
 
-    raise RuntimeError(f"All Gemini models failed after 3 attempts. Last error: {last_error}")
+    raise RuntimeError(
+        f"All Gemini models failed after 5 attempts. Last error: {last_error}. "
+        f"Check GEMINI_API_KEY in Render Environment. "
+        f"Get a new key: https://aistudio.google.com/app/apikey"
+    )
+
 
 def _clean_json(content: str) -> str:
     content = content.strip()

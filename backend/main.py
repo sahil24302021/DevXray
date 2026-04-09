@@ -1048,11 +1048,12 @@ async def analyze_resume_endpoint(
     }
 
     # ═══ STEP 4: Claims Validation ═══
+    # Default: only show "no GitHub" flag if we actually have no GitHub data
     claims_validation = {
         "authenticity_score": 0,
-        "overall_assessment": "No GitHub profile found to cross-reference claims.",
+        "overall_assessment": "GitHub profile not found — claims could not be cross-referenced.",
         "validations": [],
-        "red_flags": ["No GitHub profile linked — cannot verify technical claims."],
+        "red_flags": [] if username else ["No GitHub profile URL found in resume — cannot verify technical claims."],
         "strengths_confirmed": [],
         "hiring_recommendation": "MAYBE — Manual verification recommended."
     }
