@@ -1074,18 +1074,36 @@ async def analyze_resume_endpoint(
             claims_validation["overall_assessment"] = f"Validation error: {e}"
 
     # ═══ STEP 5: Generate Deep AI Report ═══
-    deep_report = await _generate_deep_report(
-        resume_data=resume_data,
-        github_report=github_report,
-        claims_validation=claims_validation,
-        linkedin_data=linkedin_data,
-        portfolio_text=portfolio_text,
-        other_data=other_data,
-        project_code_reviews=[],
-        job_requirements=job_requirements,
-        account_age_ctx=account_age_ctx,
-        repo_context_str=repo_context_str,
-    )
+    deep_report = {}
+    try:
+        deep_report = await _generate_deep_report(
+            resume_data=resume_data,
+            github_report=github_report,
+            claims_validation=claims_validation,
+            linkedin_data=linkedin_data,
+            portfolio_text=portfolio_text,
+            other_data=other_data,
+            project_code_reviews=[],
+            job_requirements=job_requirements,
+            account_age_ctx=account_age_ctx,
+            repo_context_str=repo_context_str,
+        )
+    except Exception as e:
+        log.warning(f"Deep report generation failed (AI unavailable): {e}")
+        # Graceful fallback — use DIP engine data directly
+        deep_report = {
+            "executive_summary": f"AI summary unavailable (quota exceeded). DIP engine score: {github_report.get('final_score', 'N/A')}/100. Tier: {github_report.get('developer_tier', {}).get('tier', 'Unknown') if isinstance(github_report.get('developer_tier'), dict) else github_report.get('developer_tier', 'Unknown')}." if github_report else "AI summary unavailable. No GitHub data found.",
+            "candidate_tier": github_report.get("developer_tier", {}).get("tier", "B") if github_report and isinstance(github_report.get("developer_tier"), dict) else "B",
+            "overall_score": github_report.get("final_score", 0) if github_report else 0,
+            "hire_decision": github_report.get("hiring_recommendation", {}).get("summary", "REVIEW NEEDED") if github_report and isinstance(github_report.get("hiring_recommendation"), dict) else "REVIEW NEEDED",
+            "confidence_level": "Low — AI analysis unavailable",
+            "key_strengths": github_report.get("strengths", []) if github_report else [],
+            "key_concerns": github_report.get("weaknesses", []) if github_report else ["AI analysis unavailable — manual review recommended"],
+            "skill_assessment": {},
+            "interview_focus_areas": [],
+            "growth_trajectory": "",
+            "_ai_unavailable": True,
+        }
 
     # ═══ Build verification sources panel ═══
     verification_sources = _build_verification_sources(

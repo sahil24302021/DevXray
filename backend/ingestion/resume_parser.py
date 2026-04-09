@@ -301,11 +301,129 @@ URLs found in resume (for reference): {json.dumps(found_urls)}
         error_msg = str(e).lower()
         print(f"[ResumeParser] AI Error: {e}")
         
-        if "quota" in error_msg or "429" in error_msg or "exhausted" in error_msg:
-            raise ValueError(
-                "Gemini API quota exceeded. Please wait a minute and try again, "
-                "or upgrade your API key to a paid tier."
-            )
+        if "quota" in error_msg or "429" in error_msg or "exhausted" in error_msg or "denied" in error_msg:
+            # ═══ FALLBACK: Regex-based parsing when Gemini quota is exhausted ═══
+            print("[ResumeParser] Gemini unavailable — using regex fallback parser")
+            fallback = _regex_fallback_parser(text, found_urls)
+            _resume_parse_cache[cache_key] = fallback
+            return fallback
         
         # Re-raise all other errors — no more silent fallback to mock data!
         raise ValueError(f"Resume parsing failed: {e}")
+
+
+def _regex_fallback_parser(text: str, found_urls: list) -> Dict[str, Any]:
+    """
+    Regex-based resume parser — NO AI needed.
+    Extracts the most critical fields so the DIP pipeline can continue.
+    """
+    import re as _re
+
+    # --- Name: first line that looks like a name (2-4 capitalized words) ---
+    name = ""
+    for line in text.split("\n")[:10]:
+        line = line.strip()
+        if line and 2 <= len(line.split()) <= 5 and not any(c in line for c in "@:•–—|/\\"):
+            words = line.split()
+            if all(w[0].isupper() for w in words if len(w) > 1):
+                name = line
+                break
+
+    # --- Email ---
+    email_match = _re.search(r'[\w.+-]+@[\w-]+\.[\w.]+', text)
+    email = email_match.group(0) if email_match else ""
+
+    # --- Phone ---
+    phone_match = _re.search(r'[\+]?[\d\s\-().]{10,15}', text)
+    phone = phone_match.group(0).strip() if phone_match else ""
+
+    # --- GitHub ---
+    github_url = ""
+    github_username = ""
+    gh_match = _re.search(r'(?:https?://)?(?:www\.)?github\.com/([a-zA-Z0-9][\w-]{0,38})(?:[/?#\s]|$)', text)
+    if gh_match:
+        github_username = gh_match.group(1)
+        github_url = f"https://github.com/{github_username}"
+
+    # --- LinkedIn ---
+    linkedin_url = ""
+    li_match = _re.search(r'(?:https?://)?(?:www\.)?linkedin\.com/in/([\w\-]+)', text, _re.I)
+    if li_match:
+        linkedin_url = f"https://www.linkedin.com/in/{li_match.group(1)}"
+
+    # --- Portfolio ---
+    portfolio_url = ""
+    for url in found_urls:
+        if "github.com" not in url and "linkedin.com" not in url:
+            portfolio_url = url
+            break
+
+    # --- Skills extraction ---
+    skills_section = ""
+    skills_match = _re.search(r'(?:technical\s*skills?|skills?|technologies?)[:\s]*(.*?)(?:\n\n|\n[A-Z])', text, _re.I | _re.DOTALL)
+    if skills_match:
+        skills_section = skills_match.group(1)
+    
+    all_skills = _re.findall(r'\b(?:Python|JavaScript|TypeScript|Java|C\+\+|C#|Go|Rust|Ruby|PHP|Swift|Kotlin|'
+                              r'React|Angular|Vue|Next\.?js|Node\.?js|Express|Django|Flask|FastAPI|Spring|'
+                              r'MongoDB|PostgreSQL|MySQL|Redis|Firebase|Supabase|'
+                              r'Docker|Kubernetes|AWS|GCP|Azure|Git|Linux|CI/CD|'
+                              r'TensorFlow|PyTorch|OpenCV|Keras|Pandas|NumPy|Scikit-learn|'
+                              r'HTML|CSS|Tailwind|SASS|Bootstrap|GraphQL|REST|SQL|NoSQL)\b', 
+                              text, _re.I)
+    unique_skills = list(dict.fromkeys(s.strip() for s in all_skills))
+
+    # --- Projects ---
+    projects = []
+    proj_headers = _re.finditer(r'(?:^|\n)\s*(?:•|–|—|\d+\.|\*)\s*(.+?)(?:\n|$)', text)
+    for header in proj_headers:
+        pname = header.group(1).strip()
+        if len(pname) > 5 and len(pname) < 80 and not any(kw in pname.lower() for kw in ["experience", "education", "skill", "certif"]):
+            projects.append({
+                "name": pname,
+                "description": "",
+                "technologies": [],
+            })
+
+    # --- Claims from bullet points ---
+    claims = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if line and (line.startswith(("•", "–", "—", "▪", "►")) or _re.match(r'^\d+\.', line)):
+            claim = line.lstrip("•–—▪►0123456789. ").strip()
+            if len(claim) > 20:
+                claims.append(claim)
+
+    result = {
+        "name": name,
+        "email": email,
+        "phone": phone,
+        "github_username": github_username,
+        "github_url": github_url,
+        "linkedin_url": linkedin_url,
+        "portfolio_url": portfolio_url,
+        "other_links": [u for u in found_urls if "github.com" not in u and "linkedin.com" not in u],
+        "github_repo_links": [u for u in found_urls if "github.com" in u and u.count("/") > 3],
+        "location": "",
+        "current_role": "",
+        "years_of_experience": 0,
+        "education": [],
+        "technical_skills": {
+            "languages": [s for s in unique_skills if s.lower() in ("python", "javascript", "typescript", "java", "c++", "c#", "go", "rust", "ruby", "php", "swift", "kotlin")],
+            "frameworks": [s for s in unique_skills if s.lower() in ("react", "angular", "vue", "nextjs", "next.js", "nodejs", "node.js", "express", "django", "flask", "fastapi", "spring")],
+            "databases": [s for s in unique_skills if s.lower() in ("mongodb", "postgresql", "mysql", "redis", "firebase", "supabase")],
+            "tools": [s for s in unique_skills if s.lower() in ("docker", "kubernetes", "aws", "gcp", "azure", "git", "linux", "ci/cd")],
+            "other": [s for s in unique_skills if s.lower() not in ("python", "javascript", "typescript", "java", "c++", "c#", "go", "rust", "ruby", "php", "swift", "kotlin", "react", "angular", "vue", "nextjs", "next.js", "nodejs", "node.js", "express", "django", "flask", "fastapi", "spring", "mongodb", "postgresql", "mysql", "redis", "firebase", "supabase", "docker", "kubernetes", "aws", "gcp", "azure", "git", "linux", "ci/cd")],
+        },
+        "projects": projects[:10],
+        "work_experience": [],
+        "claims": claims[:20],
+        "certifications": [],
+        "experience_timeline": [],
+        "summary": f"Resume parsed via fallback (AI unavailable). Found {len(unique_skills)} skills, {len(projects)} projects.",
+        "_raw_text": text[:5000],
+        "_parsed_via": "regex_fallback",
+    }
+    
+    print(f"[ResumeParser] Fallback extracted: name='{name}', github='{github_username}', skills={len(unique_skills)}, projects={len(projects)}")
+    return result
