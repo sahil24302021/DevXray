@@ -51,9 +51,9 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     from google.genai import types
     
     models_to_try = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
         "gemini-2.0-flash-lite",
-        "gemini-1.5-flash",
-        "gemini-2.0-flash-exp",
     ]
     last_error = None
 
