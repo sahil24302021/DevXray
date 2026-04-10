@@ -9,6 +9,8 @@ interface Props {
 
 export default function ReportHeader({ data }: Props) {
   const score = (data.final_score ?? data.score ?? 0) as number;
+  const confRaw = (data.confidence_score ?? 0) as number;
+  const confPct = Math.round(confRaw > 1 ? confRaw : confRaw * 100);
   const circumference = 2 * Math.PI * 46;
   const offset = circumference - (score / 100) * circumference;
   const scoreColor =
@@ -92,10 +94,23 @@ export default function ReportHeader({ data }: Props) {
       <div className="flex items-center gap-3 mb-6 flex-wrap justify-center">
         <span className="text-sm font-semibold text-white">{data.verdict}</span>
         <span className="text-slate-500">·</span>
-        <span className="stat-pill text-xs">
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.4)]" />
-          {Math.round(((data.confidence_score ?? 0) > 1 ? (data.confidence_score ?? 0) : (data.confidence_score ?? 0) * 100))}% confidence
-        </span>
+        <div className="relative group">
+          <span className="stat-pill text-xs cursor-help">
+            <span className={`w-1.5 h-1.5 rounded-full shadow-[0_0_6px_rgba(34,211,238,0.4)] ${
+              confPct > 80 ? 'bg-cyan-400' : confPct >= 50 ? 'bg-amber-400' : 'bg-rose-400'
+            }`} />
+            {confPct}% confidence
+          </span>
+          <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-xl text-[11px] text-slate-300 leading-relaxed z-50"
+            style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+            {confPct > 80
+              ? `High confidence (${confPct}%): We analyzed 15+ repos and 3+ external sources.`
+              : confPct >= 50
+              ? `Medium confidence (${confPct}%): Limited repos or external data available.`
+              : `Low confidence (${confPct}%): Very few data points — treat report as preliminary.`}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 rotate-45" style={{ background: '#1a1a1a', borderRight: '1px solid rgba(255,255,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.1)' }} />
+          </div>
+        </div>
       </div>
 
       {/* Stats Pills */}

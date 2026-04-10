@@ -6,6 +6,7 @@ import { motion, useSpring, useMotionValue, useTransform } from "framer-motion";
 import Link from "next/link";
 import { BarChart, Bar, Cell, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import InterviewKit from "@/components/report/InterviewKit";
+import ReportErrorBoundary from "@/components/report/ReportErrorBoundary";
 
 /* --- Status Badge --- */
 function StatusBadge({ status }: { status: string }) {
@@ -65,6 +66,166 @@ function ScoreRing({ score, size = 120 }: { score: number; size?: number }) {
         <span className="text-[10px] text-slate-500 uppercase tracking-widest">/ 100</span>
       </div>
     </div>
+  );
+}
+
+/* --- Badge Share Section --- */
+function BadgeShareSection({ username }: { username: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const badgeMarkdown = `[![DevXray](https://devxray-backend.onrender.com/badge/${username})](https://dev-xray.vercel.app/report/${username})`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(badgeMarkdown).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}
+      className="rounded-2xl border border-white/[0.06] p-6" style={{ background: "rgba(255,255,255,0.02)" }}>
+      <button onClick={() => setIsOpen(!isOpen)} className="w-full flex items-center justify-between cursor-pointer">
+        <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[#cdff00]" /> Share Your DevXray Badge
+        </h2>
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"
+          className={`text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}>
+          <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {isOpen && (
+        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-4 space-y-4">
+          <p className="text-xs text-slate-500">
+            Embed this badge in your GitHub README. When hiring managers click it, they&apos;ll land directly on your verification report.
+          </p>
+          {/* Badge preview */}
+          <div className="p-4 rounded-xl bg-black/40 border border-white/5 flex items-center justify-center">
+            <img
+              src={`https://devxray-backend.onrender.com/badge/${username}`}
+              alt="DevXray Badge"
+              className="h-6"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          </div>
+          {/* Markdown code */}
+          <div className="relative">
+            <pre className="p-3 rounded-xl bg-black/60 border border-white/5 text-[11px] text-[#cdff00] font-mono overflow-x-auto whitespace-pre-wrap break-all">
+              {badgeMarkdown}
+            </pre>
+            <button
+              onClick={handleCopy}
+              className="absolute top-2 right-2 px-3 py-1 text-[10px] font-bold rounded-lg transition-all border"
+              style={{
+                background: copied ? 'rgba(52,211,153,0.15)' : 'rgba(255,255,255,0.05)',
+                borderColor: copied ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.1)',
+                color: copied ? '#34d399' : '#888',
+              }}
+            >
+              {copied ? '✓ Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-600">
+            Paste into your GitHub profile README.md • The badge auto-updates when you get rescanned
+          </p>
+        </motion.div>
+      )}
+    </motion.section>
+  );
+}
+
+/* --- Share Report Button + Modal --- */
+function ShareReportButton({ candidateName }: { candidateName?: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Generate a pseudo-unique share URL (using current URL + timestamp hash)
+  const shareUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/report/resume?share=${btoa(String(Date.now())).slice(0, 12)}`
+    : '';
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(shareUrl).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setIsOpen(true)}
+        className="px-3.5 py-1.5 text-xs font-bold text-white bg-white/10 rounded-lg transition-all hover:bg-white/20 border border-white/10 cursor-pointer flex items-center gap-1.5"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+        Share
+      </button>
+
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={() => setIsOpen(false)}>
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="relative w-full max-w-md mx-4 rounded-2xl p-6 border border-white/10"
+            style={{ background: '#0f0f0f' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button onClick={() => setIsOpen(false)} className="absolute top-3 right-3 text-slate-500 hover:text-white transition-colors">
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" /></svg>
+            </button>
+
+            <h3 className="font-[family-name:var(--font-syne)] font-bold text-lg text-white mb-1">
+              Share Report
+            </h3>
+            <p className="text-xs text-slate-500 mb-5">
+              {candidateName ? `Share ${candidateName}'s` : 'Share this'} verification report with your team
+            </p>
+
+            {/* Share URL */}
+            <div className="flex items-center gap-2 mb-4">
+              <input
+                type="text"
+                readOnly
+                value={shareUrl}
+                className="flex-1 px-3 py-2.5 rounded-xl text-xs text-slate-300 font-mono border border-white/10 outline-none"
+                style={{ background: 'rgba(255,255,255,0.03)' }}
+              />
+              <button
+                onClick={handleCopy}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0"
+                style={{
+                  background: copied ? 'rgba(52,211,153,0.15)' : '#cdff00',
+                  color: copied ? '#34d399' : '#050505',
+                }}
+              >
+                {copied ? '✓ Copied!' : 'Copy'}
+              </button>
+            </div>
+
+            {/* Quick share options */}
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: 'Email', icon: '📧', action: () => window.open(`mailto:?subject=DevXray Report - ${candidateName || 'Candidate'}&body=Check out this verification report: ${shareUrl}`) },
+                { label: 'Slack', icon: '💬', action: handleCopy },
+                { label: 'Print', icon: '🖨️', action: () => window.print() },
+              ].map(opt => (
+                <button key={opt.label} onClick={opt.action}
+                  className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-white/5 hover:border-white/15 transition-all text-center hover:bg-white/[0.02]">
+                  <span className="text-lg">{opt.icon}</span>
+                  <span className="text-[10px] text-slate-400 font-medium">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <p className="text-[10px] text-slate-600 mt-4 text-center">
+              This link is private and will not appear in search results
+            </p>
+          </motion.div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -214,6 +375,27 @@ export default function ResumeReportPage() {
   const forensics = github_intelligence?.authenticity?.commit_timeline_forensics;
   const isStuffer = forensics?.stuffer_detected;
 
+  // Confidence score + low-confidence detection
+  const confidenceRaw = github_intelligence?.confidence_score ?? 0;
+  const confidenceScore = confidenceRaw > 1 ? confidenceRaw : Math.round(confidenceRaw * 100);
+  const isLowConfidence = github_intelligence?.is_low_confidence === true || confidenceScore < 50;
+
+  // JD Match data
+  const jdSkillGap = github_intelligence?.jd_match;
+  const jdMatchPct = jdSkillGap?.match_percentage || 0;
+  const matchedSkills: string[] = jdSkillGap?.matched_skills || jdSkillGap?.verified_skills || [];
+  const missingSkills: string[] = jdSkillGap?.missing_skills || jdSkillGap?.unverified_skills || [];
+
+  // GitHub username for badge
+  const githubUsername = analysis_metadata?.github_username || github_intelligence?.username || '';
+
+  // Confidence tooltip text
+  const confidenceExplanation = confidenceScore > 80
+    ? `High confidence (${confidenceScore}%): We analyzed 15+ repos and 3+ external sources.`
+    : confidenceScore >= 50
+    ? `Medium confidence (${confidenceScore}%): Limited repos or external data available.`
+    : `Low confidence (${confidenceScore}%): Very few data points \u2014 treat report as preliminary.`;
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#fafafa] font-[family-name:var(--font-dm-sans)] relative overflow-hidden">
       {/* --- Print Styles (page-specific overrides) --- */}
@@ -240,6 +422,7 @@ export default function ResumeReportPage() {
           </Link>
           <div className="flex items-center gap-2">
             <InterviewKit reportData={data} candidateName={resume_data?.name || "Candidate"} />
+            <ShareReportButton candidateName={resume_data?.name} />
             <button
               onClick={handleExportPDF}
               disabled={isExporting}
@@ -261,7 +444,24 @@ export default function ResumeReportPage() {
 
       <main ref={reportRef} className="relative z-10 mx-auto max-w-6xl px-6 py-10 pb-20 space-y-6">
 
+        {/* ═══ LOW CONFIDENCE BANNER ═══ */}
+        {isLowConfidence && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl p-4 border border-amber-500/30 flex items-center gap-3"
+            style={{ background: "rgba(251,191,36,0.08)" }}>
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <p className="text-sm font-bold text-amber-400">Low Confidence Report</p>
+              <p className="text-xs text-amber-300/60 mt-0.5">
+                This report is based on limited data ({confidenceScore}% confidence). Very few data points were available
+                — treat this as a preliminary assessment and verify claims manually.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
         {/* ═══ HEADER ═══ */}
+        <ReportErrorBoundary section="Candidate Profile">
         <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}
           className="rounded-2xl border border-white/[0.06] p-8" style={{ background: "rgba(255,255,255,0.03)" }}>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -278,6 +478,23 @@ export default function ResumeReportPage() {
             <div className="flex flex-col items-center">
               <ScoreRing score={score} />
               <span className="text-[10px] text-slate-500 uppercase tracking-widest mt-2">DIP Score</span>
+              {/* Confidence tooltip */}
+              <div className="relative group mt-1">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full cursor-help border ${
+                  confidenceScore > 80
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : confidenceScore >= 50
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                }`}>
+                  {confidenceScore}% confidence
+                </span>
+                <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 rounded-xl text-[11px] text-slate-300 leading-relaxed z-50"
+                  style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 24px rgba(0,0,0,0.5)' }}>
+                  {confidenceExplanation}
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 rotate-45" style={{ background: '#1a1a1a', borderRight: '1px solid rgba(255,255,255,0.1)', borderBottom: '1px solid rgba(255,255,255,0.1)' }} />
+                </div>
+              </div>
             </div>
           </div>
           {/* Metadata bar */}
@@ -297,8 +514,10 @@ export default function ResumeReportPage() {
             </div>
           )}
         </motion.section>
+        </ReportErrorBoundary>
 
         {/* ═══ HIRING RECOMMENDATION ═══ */}
+        <ReportErrorBoundary section="Hiring Recommendation">
         <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
           className={`rounded-2xl border p-6 ${
             recommendation.startsWith("HIRE") ? "border-emerald-500/30 bg-emerald-500/5" :
@@ -316,6 +535,7 @@ export default function ResumeReportPage() {
             <p className="text-sm text-slate-400 mt-4 leading-relaxed">{claims_validation.overall_assessment}</p>
           )}
         </motion.section>
+        </ReportErrorBoundary>
 
         {/* ═══ JOB REQUIREMENTS MATCH ═══ */}
         {job_requirements && Object.keys(job_requirements).length > 0 && (
@@ -337,6 +557,71 @@ export default function ResumeReportPage() {
               </div>
             </div>
           </motion.section>
+        )}
+
+        {/* ═══ JD SKILL GAP ANALYSIS ═══ */}
+        {(matchedSkills.length > 0 || missingSkills.length > 0) && (
+          <ReportErrorBoundary section="Job Fit Analysis">
+          <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.13 }}
+            className="rounded-2xl border border-indigo-500/20 p-6" style={{ background: "rgba(99,102,241,0.03)" }}>
+            <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg mb-1 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-400" /> Job Fit Analysis
+            </h2>
+            <p className="text-xs text-slate-500 mb-5">How the candidate's verified skills match the job requirements</p>
+
+            {/* Match score */}
+            <div className="flex items-center gap-4 mb-6">
+              <div className="text-4xl font-bold" style={{ color: jdMatchPct >= 75 ? '#22c55e' : jdMatchPct >= 50 ? '#eab308' : '#ef4444' }}>
+                {jdMatchPct}%
+              </div>
+              <div className="flex-1">
+                <div className="h-2.5 rounded-full overflow-hidden bg-white/5">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${jdMatchPct}%` }}
+                    transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+                    className="h-full rounded-full"
+                    style={{ background: jdMatchPct >= 75 ? '#22c55e' : jdMatchPct >= 50 ? '#eab308' : '#ef4444' }}
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Skill match score</p>
+              </div>
+            </div>
+
+            {/* Two columns */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {matchedSkills.length > 0 && (
+                <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
+                  <span className="text-[10px] uppercase tracking-widest text-emerald-400 font-bold block mb-3">✅ Matched Skills</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {matchedSkills.map((s: string, i: number) => (
+                      <span key={i} className="text-xs px-2 py-1 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {missingSkills.length > 0 && (
+                <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/15">
+                  <span className="text-[10px] uppercase tracking-widest text-rose-400 font-bold block mb-3">❌ Missing Skills</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {missingSkills.map((s: string, i: number) => (
+                      <span key={i} className="text-xs px-2 py-1 rounded-md bg-rose-500/10 text-rose-300 border border-rose-500/20">{s}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Gap closure estimate */}
+            {missingSkills.length > 0 && (
+              <p className="text-xs text-slate-500 mt-4 pt-3 border-t border-white/5">
+                ⏱ Estimated time to close skill gaps: <span className="text-white font-bold">
+                  ~{missingSkills.length <= 2 ? '1-2' : missingSkills.length <= 4 ? '2-3' : '3-6'} months
+                </span> with focused learning
+              </p>
+            )}
+          </motion.section>
+          </ReportErrorBoundary>
         )}
 
         {/* ═══ SKILLS MATRIX ═══ */}
@@ -724,6 +1009,13 @@ export default function ResumeReportPage() {
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">{deep_report.growth_trajectory}</p>
           </motion.section>
+        )}
+
+        {/* ═══ GITHUB BADGE SHARING ═══ */}
+        {githubUsername && (
+          <ReportErrorBoundary section="GitHub Badge">
+          <BadgeShareSection username={githubUsername} />
+          </ReportErrorBoundary>
         )}
 
       </main>

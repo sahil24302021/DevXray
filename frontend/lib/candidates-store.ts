@@ -250,3 +250,50 @@ export async function hasCandidates(): Promise<boolean> {
   const records = await listCandidates();
   return records.length > 0;
 }
+
+// ─── Score History (PDF Guide: "Score trend over time") ──────────────────────
+
+const LS_HISTORY_KEY = "devxray_score_history";
+
+export interface ScoreHistoryPoint {
+  date: string; // ISO string
+  score: number;
+}
+
+function lsGetHistory(): Record<string, ScoreHistoryPoint[]> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(localStorage.getItem(LS_HISTORY_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function lsSaveHistory(data: Record<string, ScoreHistoryPoint[]>): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(data));
+  } catch {}
+}
+
+/**
+ * Record a score data point for a candidate.
+ * Called after each successful scan to build a score trend.
+ */
+export function addScoreHistory(username: string, score: number): void {
+  const all = lsGetHistory();
+  if (!all[username]) all[username] = [];
+  all[username].push({ date: new Date().toISOString(), score });
+  // Keep last 20 data points max
+  if (all[username].length > 20) all[username] = all[username].slice(-20);
+  lsSaveHistory(all);
+}
+
+/**
+ * Get score history for a candidate (for the Score Trend chart).
+ * Returns empty array if no history exists.
+ */
+export function getScoreHistory(username: string): ScoreHistoryPoint[] {
+  const all = lsGetHistory();
+  return all[username] || [];
+}

@@ -361,6 +361,115 @@ def generate_report(
     return report
 
 
+def normalize_report(report: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    PDF Guide item: 'Add normalize_report() to report_generator.py — fixes blank report sections'
+
+    Ensures every field the frontend reads has a non-null safe default.
+    Call this AFTER generate_report() to guarantee no white-screen crashes.
+    """
+    defaults: Dict[str, Any] = {
+        # Core
+        "username": "",
+        "name": "",
+        "avatar_url": "",
+        "bio": "",
+        "final_score": 0,
+        "score": 0,
+
+        # Intelligence
+        "verdict": "Unknown",
+        "verdict_explanation": "",
+        "developer_tier": {"tier": "Unknown", "tier_description": ""},
+        "risk_level": "Medium",
+        "risk_assessment": "Medium",
+        "risk_analysis": "",
+        "confidence_score": 0,
+        "is_low_confidence": True,
+        "warning": "",
+
+        # Hiring
+        "hiring_recommendation": {"summary": "Insufficient data", "recommendation": {}, "reasoning": []},
+        "role_fit": {},
+        "interview_difficulty": "",
+        "salary_estimate": {},
+        "interview_questions": [],
+        "auto_interview_questions": [],
+
+        # Signals
+        "strengths": [],
+        "weaknesses": [],
+        "risk_flags": [],
+        "proof": [],
+
+        # Skills
+        "skills": [],
+        "skill_summary": {},
+        "top_skills": [],
+        "top_languages": [],
+        "verified_skills": [],
+
+        # Scores
+        "score_breakdown": {},
+        "feature_importance": [],
+        "decision_trace": [],
+        "benchmark": {},
+        "scoring": {},
+
+        # Data sections
+        "projects": [],
+        "code_analysis": {},
+        "system_design": {},
+        "truth_analysis": {},
+        "authenticity": {},
+        "consistency": {},
+        "growth": {},
+
+        # Extras
+        "summary": "",
+        "experience": "< 1 year",
+        "jd_match": {},
+        "github_discovered_projects": [],
+        "total_projects_count": 0,
+        "pinned_code_reviews": [],
+        "repos_deep_analyzed": 0,
+        "total_repos": 0,
+        "total_stars": 0,
+        "followers": 0,
+        "following": 0,
+        "public_repos": 0,
+        "created_at": "",
+        "authenticity_score": 0,
+        "organic_commits_percentage": 0,
+        "organic_commits_note": "",
+        "account_age_years": 0,
+        "percentile": 0,
+    }
+
+    for key, default_val in defaults.items():
+        if report.get(key) is None:
+            report[key] = default_val
+
+    # Ensure nested structures have required keys
+    if isinstance(report.get("score_breakdown"), dict):
+        if "breakdown" not in report["score_breakdown"]:
+            report["score_breakdown"]["breakdown"] = {}
+
+    # Ensure developer_tier is always a dict
+    if isinstance(report.get("developer_tier"), str):
+        report["developer_tier"] = {"tier": report["developer_tier"], "tier_description": ""}
+
+    # Ensure hiring_recommendation is always a dict
+    if isinstance(report.get("hiring_recommendation"), str):
+        report["hiring_recommendation"] = {
+            "summary": report["hiring_recommendation"],
+            "recommendation": {},
+            "reasoning": [],
+        }
+
+    return report
+
+
 # ═══════════════════════════════════════════════════════
 #  HELPER GENERATORS (DETERMINISTIC)
 # ═══════════════════════════════════════════════════════

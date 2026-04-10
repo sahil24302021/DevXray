@@ -14,6 +14,8 @@ export default function HiringRecommendation({ data }: Props) {
     High: "bg-red-500/10 text-red-400 border-red-500/20",
   };
   const riskStyle = riskColors[data.risk_level as string] || riskColors.Medium;
+  const confRaw = (data.confidence_score ?? 0) as number;
+  const confPct = Math.round(confRaw > 1 ? confRaw : confRaw * 100);
 
   return (
     <motion.div
@@ -71,10 +73,16 @@ export default function HiringRecommendation({ data }: Props) {
         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${riskStyle}`}>
           {data.risk_level}
         </span>
-        <span className="text-[10px] text-slate-500 ml-1 flex items-center gap-1">
-          <span className="w-1 h-1 rounded-full bg-[#cdff00]" />
-          {Math.round(((data.confidence_score ?? 0) > 1 ? (data.confidence_score ?? 0) : (data.confidence_score ?? 0) * 100))}% confidence
-        </span>
+        <div className="relative group ml-1">
+          <span className="text-[10px] text-slate-500 flex items-center gap-1 cursor-help">
+            <span className={`w-1.5 h-1.5 rounded-full ${confPct > 80 ? 'bg-cyan-400' : confPct >= 50 ? 'bg-amber-400' : 'bg-rose-400'}`} />
+            {confPct}% confidence
+          </span>
+          <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-2.5 rounded-lg text-[10px] text-slate-300 leading-relaxed z-50"
+            style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 4px 16px rgba(0,0,0,0.5)' }}>
+            {confPct > 80 ? 'High: Multi-source data available.' : confPct >= 50 ? 'Medium: Limited data. Some claims unverified.' : 'Low: Very few data points. Treat as preliminary.'}
+          </div>
+        </div>
       </div>
     </motion.div>
   );

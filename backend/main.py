@@ -129,6 +129,50 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── API Key Authentication Middleware (PDF Guide: "Add API key authentication") ───
+# Set DEVXRAY_API_KEYS="key1,key2,key3" in env to enable.
+# When enabled, protected endpoints require header: X-API-Key: <key>
+# When NOT set, all endpoints remain open (no auth required).
+_API_KEYS_RAW = os.environ.get("DEVXRAY_API_KEYS", "").strip()
+_VALID_API_KEYS = set(k.strip() for k in _API_KEYS_RAW.split(",") if k.strip()) if _API_KEYS_RAW else set()
+
+if _VALID_API_KEYS:
+    log.info(f"[Auth] API key authentication ENABLED — {len(_VALID_API_KEYS)} key(s) configured")
+
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    class APIKeyMiddleware(BaseHTTPMiddleware):
+        """Require X-API-Key header on protected endpoints."""
+        EXCLUDED_PATHS = {"/health", "/", "/docs", "/openapi.json", "/favicon.ico"}
+        EXCLUDED_PREFIXES = ("/badge/", "/static/")
+
+        async def dispatch(self, request, call_next):
+            path = request.url.path
+
+            # Skip auth for excluded paths, OPTIONS, and non-protected routes
+            if (
+                request.method == "OPTIONS"
+                or path in self.EXCLUDED_PATHS
+                or any(path.startswith(p) for p in self.EXCLUDED_PREFIXES)
+            ):
+                return await call_next(request)
+
+            # Only protect analysis and API endpoints
+            if path.startswith("/analyze") or path.startswith("/api/"):
+                api_key = request.headers.get("X-API-Key", "")
+                if api_key not in _VALID_API_KEYS:
+                    from starlette.responses import JSONResponse
+                    return JSONResponse(
+                        {"error": "Invalid or missing API key. Set X-API-Key header."},
+                        status_code=403
+                    )
+
+            return await call_next(request)
+
+    app.add_middleware(APIKeyMiddleware)
+else:
+    log.info("[Auth] API key authentication DISABLED — set DEVXRAY_API_KEYS to enable")
+
 
 def _get_today_str() -> str:
     """Returns today's date as a clear string for LLM prompts."""
@@ -590,7 +634,7 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
 
     # Generate final report
     await emit_progress(job_id, "Generating AI summary", progress=80, detail="Synthesizing findings")
-    from orchestrator.report_generator import generate_report
+    from orchestrator.report_generator import generate_report, normalize_report
     report = generate_report(
         profile=profile,
         projects=engine_results.get("projects", []),
@@ -629,6 +673,9 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
     # Inject date context into report so frontend never shows wrong dates
     report["account_age_context"] = account_age_ctx
     report["analysis_date"] = _get_today_str()
+
+    # Normalize report — fill any missing fields with safe defaults (PDF Guide item)
+    report = normalize_report(report)
 
     # Cache result
     cache_set(username_lower, report)
@@ -975,7 +1022,7 @@ async def analyze_resume_endpoint(
             except Exception as e:
                 log.warning(f"JD matching failed: {e}")
 
-        from orchestrator.report_generator import generate_report
+        from orchestrator.report_generator import generate_report, normalize_report
         github_report = generate_report(
             profile=profile,
             projects=engine_results.get("projects", []),
@@ -1009,6 +1056,9 @@ async def analyze_resume_endpoint(
         github_report["account_age_context"] = account_age_ctx
         github_report["repo_context"] = repo_context_str
         github_report["analysis_date"] = _get_today_str()
+
+        # Normalize report — fill any missing fields with safe defaults
+        github_report = normalize_report(github_report)
 
     # ═══ STEP 3.5: Multi-source scoring ═══
     resume_skills_flat = []
@@ -1713,7 +1763,7 @@ async def batch_analyze_resumes_endpoint(
 
 from services.linkedin_config import set_li_at_runtime, get_li_at_status
 
-ADMIN_SECRET = os.environ.get("DEVXRAY_ADMIN_SECRET", "devxray-admin-2024")
+ADMIN_SECRET = os.environ.get("DEVXRAY_ADMIN_SECRET", "")
 
 @app.post("/api/admin/update-linkedin-cookie")
 async def update_linkedin_cookie(request: Request):

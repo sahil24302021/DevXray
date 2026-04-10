@@ -456,6 +456,7 @@ export default function Home() {
   const [showRequirements, setShowRequirements] = useState(false);
   const [jobReqs, setJobReqs] = useState<JobRequirements>({});
   const [jobId, setJobId] = useState("");
+  const [linkedinText, setLinkedinText] = useState("");
   const { scrollYProgress } = useScroll();
   const [navSolid, setNavSolid] = useState(false);
 
@@ -510,6 +511,7 @@ export default function Home() {
               jobDescription: jobReqs.job_description,
             }
           : {}),
+        ...(linkedinText.trim() ? { linkedinText: linkedinText.trim() } : {}),
       });
       sessionStorage.setItem("resume_report_data", JSON.stringify(result));
 
@@ -1014,6 +1016,25 @@ export default function Home() {
                                 rows={3}
                                 className="w-full px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white placeholder:text-[#444] focus:outline-none focus:border-[#cdff00]/30 transition-colors resize-none"
                               />
+                            </div>
+                            {/* LinkedIn Paste-Text Field — PDF Guide item */}
+                            <div>
+                              <label className="block text-[10px] font-[family-name:var(--font-space)] text-[#666] uppercase tracking-widest mb-1.5">
+                                LinkedIn Profile Text <span className="text-[#444] normal-case lowercase tracking-normal">(paste from their profile page)</span>
+                              </label>
+                              <textarea
+                                placeholder="Paste LinkedIn 'About' section or full profile text here. This helps us verify claims and cross-reference employment history..."
+                                value={linkedinText}
+                                onChange={(e) => setLinkedinText(e.target.value)}
+                                rows={3}
+                                className="w-full px-3 py-2 rounded-lg bg-white/[0.03] border border-white/[0.08] text-sm text-white placeholder:text-[#444] focus:outline-none focus:border-[#cdff00]/30 transition-colors resize-none"
+                              />
+                              {linkedinText.trim() && (
+                                <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1">
+                                  <span className="w-1 h-1 rounded-full bg-emerald-400"></span>
+                                  LinkedIn text will be cross-referenced with resume claims
+                                </p>
+                              )}
                             </div>
                           </div>
                         </motion.div>

@@ -8,7 +8,13 @@ from typing import Dict, Any, List
 
 _resume_parse_cache: dict = {}
 
-# PDF Support
+# PDF Support — pdfplumber preferred (better layout handling), PyPDF2 as fallback
+try:
+    import pdfplumber
+    HAS_PDFPLUMBER = True
+except ImportError:
+    HAS_PDFPLUMBER = False
+
 try:
     import PyPDF2
     HAS_PDF = True
@@ -71,15 +77,31 @@ def _extract_text(file_content: bytes, filename: str) -> str:
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     text = ""
 
-    if ext == "pdf" and HAS_PDF:
-        try:
-            reader = PyPDF2.PdfReader(io.BytesIO(file_content))
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
-        except Exception as e:
-            print(f"[ResumeParser] PDF extraction error: {e}")
+    if ext == "pdf":
+        # Try pdfplumber first (better quality for complex layouts)
+        if HAS_PDFPLUMBER:
+            try:
+                with pdfplumber.open(io.BytesIO(file_content)) as pdf:
+                    for page in pdf.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text += page_text + "\n"
+                if text.strip():
+                    print(f"[ResumeParser] pdfplumber extracted {len(text)} chars")
+            except Exception as e:
+                print(f"[ResumeParser] pdfplumber failed, trying PyPDF2: {e}")
+                text = ""
+
+        # Fallback to PyPDF2 if pdfplumber didn't work
+        if not text.strip() and HAS_PDF:
+            try:
+                reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+                for page in reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text + "\n"
+            except Exception as e:
+                print(f"[ResumeParser] PyPDF2 extraction error: {e}")
 
     elif ext in ("doc", "docx") and HAS_DOCX:
         try:

@@ -26,6 +26,7 @@ import EvidencePanel from "@/components/report/EvidencePanel";
 import RecruiterBrief from "@/components/report/RecruiterBrief";
 
 import LoadingState from "@/components/LoadingState";
+import ReportErrorBoundary from "@/components/report/ReportErrorBoundary";
 
 /* ─── Animated Score Counter ─── */
 function AnimatedScore({ value, className }: { value: number; className: string }) {
@@ -294,8 +295,10 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
 
         // Save to cache for next time
         try {
-          const { saveCandidate } = await import("@/lib/candidates-store");
+          const { saveCandidate, addScoreHistory } = await import("@/lib/candidates-store");
           await saveCandidate(result as any, username);
+          const s = Number((result as any).final_score || (result as any).score || 0);
+          if (s > 0) addScoreHistory(username, s);
         } catch {}
       } catch (err: any) {
         setError(err.message || "An unknown error occurred");
@@ -521,7 +524,9 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           {/* ═══ NARRATIVE FLOW ═══ */}
 
           {/* -- Recruiter Brief (TL;DR) -- */}
-          <RecruiterBrief data={data2} />
+          <ReportErrorBoundary section="Recruiter Brief">
+            <RecruiterBrief data={data2} />
+          </ReportErrorBoundary>
 
           {/* -- Section: Assessment -- */}
           <div className="flex items-center gap-3 mb-4 mt-2">
@@ -530,33 +535,43 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           </div>
 
           {/* -- Executive Summary (Hero) -- */}
-          <ExecutiveSummary 
-            tier={{
-              tier: (data2 as any).benchmark?.tier || ((typeof data2.developer_tier === 'string') ? data2.developer_tier : 'Unknown'),
-              tier_level: Math.ceil(((data2 as any).benchmark?.percentile || 50) / 20),
-              tier_description: (data2 as any).benchmark?.tier_description || data2.verdict_explanation || "No description provided.",
-              evidence: data2.strengths || [],
-              signal_strength: data2.confidence_score || 50
-            }} 
-            docQuality={data2.documentation_quality || {
-              grade: (data2 as any).system_design?.folder_maturity === "Production" ? "A" : (data2 as any).system_design?.folder_maturity === "Structured" ? "B" : "C",
-              insight: "Based on repository structure and readme presence.",
-              score: 0, repos_with_descriptions: 0, repos_with_topics: 0, repos_with_pages: 0, total_assessed: 0
-            }} 
-            score={score} 
-          />
+          <ReportErrorBoundary section="Executive Summary">
+            <ExecutiveSummary 
+              tier={{
+                tier: (data2 as any).benchmark?.tier || ((typeof data2.developer_tier === 'string') ? data2.developer_tier : 'Unknown'),
+                tier_level: Math.ceil(((data2 as any).benchmark?.percentile || 50) / 20),
+                tier_description: (data2 as any).benchmark?.tier_description || data2.verdict_explanation || "No description provided.",
+                evidence: data2.strengths || [],
+                signal_strength: data2.confidence_score || 50
+              }} 
+              docQuality={data2.documentation_quality || {
+                grade: (data2 as any).system_design?.folder_maturity === "Production" ? "A" : (data2 as any).system_design?.folder_maturity === "Structured" ? "B" : "C",
+                insight: "Based on repository structure and readme presence.",
+                score: 0, repos_with_descriptions: 0, repos_with_topics: 0, repos_with_pages: 0, total_assessed: 0
+              }} 
+              score={score} 
+            />
+          </ReportErrorBoundary>
 
           {/* -- Verdict + Hiring -- */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5 print:block print:space-y-5">
-            <VerdictSection data={data2} />
-            <HiringRecommendation data={data2} />
+            <ReportErrorBoundary section="Verdict">
+              <VerdictSection data={data2} />
+            </ReportErrorBoundary>
+            <ReportErrorBoundary section="Hiring Recommendation">
+              <HiringRecommendation data={data2} />
+            </ReportErrorBoundary>
           </div>
 
           {/* -- Strengths + Weaknesses -- */}
-          <StrengthWeakness data={data2} />
+          <ReportErrorBoundary section="Strengths & Weaknesses">
+            <StrengthWeakness data={data2} />
+          </ReportErrorBoundary>
 
           {/* -- Red Flags -- */}
-          <RedFlags data={data2} />
+          <ReportErrorBoundary section="Red Flags">
+            <RedFlags data={data2} />
+          </ReportErrorBoundary>
 
           {/* -- Section: Evidence -- */}
           <div className="flex items-center gap-3 mb-4 mt-8">
@@ -574,12 +589,18 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
 
           {/* -- Authenticity + Commit Intelligence -- */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5 print:block print:space-y-5">
-            <AuthenticityScanner data={data2} />
-            {data2.commit_analysis && <CommitAnalysis data={data2.commit_analysis} />}
+            <ReportErrorBoundary section="Authenticity Scanner">
+              <AuthenticityScanner data={data2} />
+            </ReportErrorBoundary>
+            <ReportErrorBoundary section="Commit Analysis">
+              {data2.commit_analysis && <CommitAnalysis data={data2.commit_analysis} />}
+            </ReportErrorBoundary>
           </div>
 
           {/* -- Multi-Source Verification -- */}
-          {data2.verification_sources && <VerificationSources data={data2.verification_sources} />}
+          <ReportErrorBoundary section="Verification Sources">
+            {data2.verification_sources && <VerificationSources data={data2.verification_sources} multiSource={(data2 as any).multi_source_verification} />}
+          </ReportErrorBoundary>
 
           {/* -- Section: Deep Dive -- */}
           <div className="flex items-center gap-3 mb-4 mt-8">
@@ -596,16 +617,24 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           )}
 
           {/* -- Language DNA -- */}
-          {data2.language_breakdown && <LanguageBreakdown data={data2.language_breakdown} />}
+          <ReportErrorBoundary section="Language Breakdown">
+            {data2.language_breakdown && <LanguageBreakdown data={data2.language_breakdown} />}
+          </ReportErrorBoundary>
 
           {/* -- Activity Timeline -- */}
-          {data2.activity_heatmap && <ActivityHeatmap data={data2.activity_heatmap} />}
+          <ReportErrorBoundary section="Activity Heatmap">
+            {data2.activity_heatmap && <ActivityHeatmap data={data2.activity_heatmap} />}
+          </ReportErrorBoundary>
 
           {/* -- Coding Patterns -- */}
-          {data2.coding_patterns && <CodingPatterns data={data2.coding_patterns} />}
+          <ReportErrorBoundary section="Coding Patterns">
+            {data2.coding_patterns && <CodingPatterns data={data2.coding_patterns} />}
+          </ReportErrorBoundary>
 
           {/* -- Growth Roadmap -- */}
-          {data2.improvements && <ImprovementPlan data={data2} />}
+          <ReportErrorBoundary section="Growth Roadmap">
+            {data2.improvements && <ImprovementPlan data={data2} />}
+          </ReportErrorBoundary>
 
           {/* -- Interview Questions -- */}
           {data2.interview_questions && data2.interview_questions.length > 0 && (
@@ -615,7 +644,9 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           )}
 
           {/* -- Top Repositories -- */}
-          {(data2.top_repos && data2.top_repos.length > 0) && <RepoEvidence data={data2} />}
+          <ReportErrorBoundary section="Repository Evidence">
+            {(data2.top_repos && data2.top_repos.length > 0) && <RepoEvidence data={data2} />}
+          </ReportErrorBoundary>
 
           {/* Footer */}
           <div className="mt-12 pt-6 border-t border-white/[0.06] text-center">

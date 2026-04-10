@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic';
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { listCandidates, deleteCandidate } from "@/lib/candidates-store";
+import { listCandidates, deleteCandidate, getScoreHistory } from "@/lib/candidates-store";
+import type { ScoreHistoryPoint } from "@/lib/candidates-store";
 import type { CandidateRecord } from "@/lib/db";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -92,6 +93,46 @@ function Avatar({ name, avatar }: { name: string; avatar?: string }) {
     <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px] text-[#050505]"
       style={{ background: "#cdff00" }}>
       {(name || "?").charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+/* Score Trend sparkline — PDF Guide: "Score trend over time" */
+function TrendSparkline({ username }: { username: string }) {
+  const history = getScoreHistory(username);
+  if (history.length < 2) {
+    return <span className="text-[9px] text-[#333]">—</span>;
+  }
+
+  const W = 48, H = 20;
+  const scores = history.map(h => h.score);
+  const min = Math.min(...scores) - 5;
+  const max = Math.max(...scores) + 5;
+  const range = max - min || 1;
+
+  const points = scores.map((s, i) => {
+    const x = (i / (scores.length - 1)) * W;
+    const y = H - ((s - min) / range) * H;
+    return `${x},${y}`;
+  }).join(" ");
+
+  const trending = scores[scores.length - 1] >= scores[0];
+
+  return (
+    <div className="flex items-center gap-1" title={`${history.length} scans • ${trending ? "↑ Improving" : "↓ Declining"}`}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="shrink-0">
+        <polyline
+          points={points}
+          fill="none"
+          stroke={trending ? "#34d399" : "#fb7185"}
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className={`text-[9px] font-bold ${trending ? "text-emerald-400" : "text-rose-400"}`}>
+        {trending ? "↑" : "↓"}
+      </span>
     </div>
   );
 }
@@ -298,10 +339,11 @@ export default function CandidatesPage() {
           style={{ background: "rgba(255,255,255,0.01)", borderColor: "rgba(255,255,255,0.06)" }}>
           {/* Header */}
           <div className="grid gap-4 px-5 py-3 border-b text-[10px] font-bold uppercase tracking-wider text-[#444]"
-            style={{ gridTemplateColumns: "24px 2fr 1fr 1fr 1.5fr 80px 32px", borderColor: "rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.01)" }}>
+            style={{ gridTemplateColumns: "24px 2fr 1fr 60px 1fr 1.5fr 80px 32px", borderColor: "rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.01)" }}>
             <div />
             <div>Candidate</div>
             <div>Score</div>
+            <div>Trend</div>
             <div>Risk</div>
             <div>Recommendation</div>
             <div>Scanned</div>
@@ -318,7 +360,7 @@ export default function CandidatesPage() {
             return (
               <motion.div key={c.id} variants={fadeIn}
                 className="grid gap-4 px-5 py-4 border-b items-center hover:bg-white/[0.01] transition-colors group"
-                style={{ gridTemplateColumns: "24px 2fr 1fr 1fr 1.5fr 80px 32px", borderColor: "rgba(255,255,255,0.03)" }}>
+                style={{ gridTemplateColumns: "24px 2fr 1fr 60px 1fr 1.5fr 80px 32px", borderColor: "rgba(255,255,255,0.03)" }}>
                 {/* Checkbox */}
                 <div className={`w-4 h-4 rounded border cursor-pointer flex items-center justify-center transition-all ${selected.has(c.id) ? "border-[#cdff00] bg-[#cdff00]" : "border-white/15 hover:border-white/30"}`}
                   onClick={() => toggleSelect(c.id)}>
@@ -344,6 +386,9 @@ export default function CandidatesPage() {
 
                 {/* Score */}
                 <ScoreBadge score={Number(c.final_score ?? c.score ?? 0)} tier={tier} />
+
+                {/* Trend sparkline */}
+                <TrendSparkline username={c.username} />
 
                 {/* Risk */}
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full inline-block"

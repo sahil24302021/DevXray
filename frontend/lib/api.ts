@@ -4,6 +4,29 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+/**
+ * Convert raw API errors into specific, user-friendly messages.
+ * PDF Guide item: "Better error messages in the UI"
+ */
+function humanizeError(status: number, raw: string): string {
+  const lower = raw.toLowerCase();
+  if (status === 404 || lower.includes("404") || lower.includes("not found"))
+    return "GitHub user not found — check the username spelling.";
+  if (status === 429 || lower.includes("429") || lower.includes("rate") || lower.includes("quota"))
+    return "Too many requests — please wait 60 seconds and try again.";
+  if (status === 422 || lower.includes("422") || lower.includes("unprocessable"))
+    return "Could not read this file — try a different PDF or DOCX.";
+  if (status === 500 || lower.includes("500") || lower.includes("internal"))
+    return "Analysis failed — the server may be overloaded. Try again in 30 seconds.";
+  if (status === 503 || lower.includes("503") || lower.includes("unavailable"))
+    return "Server is starting up (cold start). Please retry in 15–30 seconds.";
+  if (lower.includes("timeout") || lower.includes("timed out"))
+    return "Request timed out — the analysis is taking longer than expected. Try again.";
+  if (lower.includes("network") || lower.includes("fetch") || lower.includes("failed to fetch"))
+    return "Network error — check your internet connection and try again.";
+  return raw || `Request failed (${status}).`;
+}
+
 export interface JobRequirements {
   job_title?: string;
   job_type?: string;
@@ -273,7 +296,7 @@ export async function analyzeGitHub(
   const res = await fetch(`${API_BASE}/analyze?${params}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `Analysis failed (${res.status})`);
+    throw new Error(humanizeError(res.status, err.detail || ""));
   }
   return res.json();
 }
@@ -307,7 +330,7 @@ export async function analyzeResume(
   const res = await fetch(`${API_BASE}/analyze-resume`, { method: "POST", body: form });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `Resume analysis failed (${res.status})`);
+    throw new Error(humanizeError(res.status, err.detail || ""));
   }
   return res.json();
 }
@@ -345,7 +368,7 @@ export async function batchAnalyzeResumes(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `Batch analysis failed (${res.status})`);
+    throw new Error(humanizeError(res.status, err.detail || ""));
   }
   return res.json();
 }
