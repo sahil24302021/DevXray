@@ -1409,9 +1409,9 @@ Generate a complete interview kit. Return ONLY this JSON:
 
     try:
         from services.gemini_client import generate_json
-        result = await generate_json(prompt, temperature=0)
+        result = await asyncio.wait_for(generate_json(prompt, temperature=0), timeout=25.0)
         return {"success": True, "interview_kit": result, "role": role, "difficulty": difficulty}
-    except Exception as e:
+    except (asyncio.TimeoutError, Exception) as e:
         log.warning(f"Interview prep AI generation failed (likely quota issue): {e}")
         # Generate a structured fallback kit from the raw report data
         fallback_kit = {
@@ -1664,7 +1664,7 @@ Generate a comprehensive JSON report:
 """
 
     try:
-        result = await generate_json(prompt, temperature=0)
+        result = await asyncio.wait_for(generate_json(prompt, temperature=0), timeout=25.0)
         return result
     except Exception as e:
         log.warning(f"Deep report generation failed: {e}")

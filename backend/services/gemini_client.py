@@ -126,7 +126,7 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
                     json={
-                        "model": "llama-3.1-70b-versatile",
+                        "model": "llama-3.3-70b-versatile",
                         "messages": [
                             {"role": "system", "content": "You are a JSON generator. Reply ONLY with valid JSON. No markdown, no explanation."},
                             {"role": "user", "content": prompt}
