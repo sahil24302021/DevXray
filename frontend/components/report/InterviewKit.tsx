@@ -105,58 +105,126 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
     }
   }, [reportData]);
 
-  // ── Generate Interview Kit via API ──
-  const generateAIKit = async () => {
-    // If we already have kit data, just switch to the AI tab
-    if (interviewKit) {
-      setActiveTab("ai");
-      return;
-    }
+  // ── Generate Interview Kit instantly from loaded report data ──
+  const generateAIKit = () => {
+    if (interviewKit) { setActiveTab("ai"); return; }
 
-    setIsLoading(true);
-    setError("");
-
-    const difficulty = getDifficulty(reportData);
+    const github = reportData?.github_intelligence || reportData?.github_report || reportData;
+    const resume = reportData?.resume_data || {};
+    const score = github?.final_score ?? github?.score ?? reportData?.deep_report?.overall_score ?? 0;
+    const skills = (github?.top_skills || []).slice(0, 5).map((s: any) => 
+      typeof s === "string" ? s : s.skill_name || s.name || s
+    ).filter(Boolean);
+    const weaknesses = (github?.weaknesses || github?.score_breakdown?.weaknesses || []).slice(0, 4);
+    const redFlags = (github?.risk_flags || github?.red_flags || []).slice(0, 3).map((f: any) => 
+      typeof f === "string" ? f : f.flag || f.description || f
+    ).filter(Boolean);
+    const name = candidateName || resume?.name || "the candidate";
     const role = getCandidateRole(reportData);
+    const difficulty = getDifficulty(reportData);
+    const topRepos = (github?.top_repos || []).slice(0, 3).map((r: any) => r.name || r).filter(Boolean);
 
-    try {
-      const backendUrl =
-        process.env.NEXT_PUBLIC_BACKEND_URL ||
-        process.env.NEXT_PUBLIC_API_URL ||
-        "https://devxray-backend.onrender.com";
+    const kit = {
+      overall_interview_strategy: `${name} scores ${Math.round(score)}/100 — a ${difficulty}-level ${role}. 
+Focus the interview on verifying depth of knowledge in ${skills.slice(0,2).join(" and ") || "their claimed skills"}. 
+${redFlags.length > 0 ? `Key areas to probe: ${redFlags.slice(0,2).join(", ")}.` : "No major red flags detected — focus on growth potential."}
+${topRepos.length > 0 ? `Reference their actual projects: ${topRepos.join(", ")}.` : ""}`,
 
-      const resp = await fetch(`${backendUrl}/api/interview-prep`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          report: github || reportData,
-          role,
-          difficulty,
-        }),
-      });
+      time_allocation: {
+        technical: "35 min",
+        behavioral: "15 min", 
+        system_design: "20 min",
+        "q&a": "10 min"
+      },
 
-      if (!resp.ok) {
-        const text = await resp.text().catch(() => "");
-        throw new Error(`Server error ${resp.status}: ${text || resp.statusText}`);
-      }
+      opening_questions: [
+        {
+          question: `Walk me through ${topRepos[0] ? `your "${topRepos[0]}" project` : "your most complex project"} — what problem did it solve and what were the key technical decisions?`,
+          purpose: "Assess communication, ownership, and technical depth"
+        },
+        {
+          question: `What's the hardest bug you've ever debugged? Walk me through exactly how you found and fixed it.`,
+          purpose: "Tests systematic problem-solving and debugging skills"
+        },
+        {
+          question: `How do you decide when code is "good enough" to ship vs needs more work?`,
+          purpose: "Assesses engineering judgment and quality standards"
+        }
+      ],
 
-      const data = await resp.json();
+      technical_deep_dives: [
+        ...(skills.slice(0, 4).map((skill: string) => ({
+          skill,
+          question: `You listed ${skill} as a skill. Walk me through a real production problem you solved with it — not a tutorial, something you actually built or debugged.`,
+          follow_up: `How would you handle [common failure mode for ${skill}] at scale?`,
+          good_answer_looks_like: `Mentions specific project, describes a real challenge, shows understanding of trade-offs and limitations.`,
+          red_flag_answer: `Only describes tutorial-level usage, cannot explain internals, or gives a textbook definition.`
+        }))),
+        {
+          skill: "System Design",
+          question: `Design a basic URL shortener. Walk me through your data model, API design, and how you'd handle 1 million requests per day.`,
+          follow_up: `How would you handle the same users clicking the same short link 10,000 times in 1 minute?`,
+          good_answer_looks_like: `Mentions caching, database choice rationale, handles edge cases, thinks about failure modes.`,
+          red_flag_answer: `Jumps to code immediately, ignores scale, cannot explain why they chose their database.`
+        }
+      ],
 
-      if (!data.success) {
-        throw new Error(data.detail || data.error || "Server returned success=false");
-      }
+      gap_probing_questions: weaknesses.length > 0 
+        ? weaknesses.map((w: string) => ({
+            question: `Our analysis flagged "${w}" as a potential gap. Can you give me a specific example where you encountered this limitation and what you did about it?`,
+            probes_for: `Self-awareness about ${w} and concrete improvement plan`
+          }))
+        : [
+            {
+              question: `What is the most significant technical skill you wish you had right now and what are you doing to build it?`,
+              probes_for: `Self-awareness and learning mindset`
+            }
+          ],
 
-      // The backend returns { success: true, interview_kit: {...}, role, difficulty }
-      const kit = data.interview_kit || data;
-      setInterviewKit(kit);
-      setActiveTab("ai");
-    } catch (err: any) {
-      const msg = err.message || "Failed to generate AI interview kit";
-      setError(msg);
-      alert(`Interview Kit Error: ${msg}`);
-    } finally {
-      setIsLoading(false);
-    }
+      system_design_challenge: {
+        problem: score >= 70 
+          ? `Design a real-time notification system for a SaaS product with 100,000 active users. Users need push, email, and in-app notifications. Handle delivery guarantees and user preferences.`
+          : `Design a simple REST API for a to-do app with user authentication, task CRUD, and due date reminders. Focus on database schema and authentication flow.`,
+        what_to_look_for: score >= 70 
+          ? ["Message queues", "Delivery guarantees", "User preference storage", "Rate limiting", "Failure handling"]
+          : ["REST conventions", "Auth with JWT/sessions", "SQL schema design", "Basic error handling"],
+        time_allocation: "20 minutes"
+      },
+
+      culture_fit_questions: [
+        {
+          question: `Tell me about a time you disagreed with a technical decision your team made. What did you do?`,
+          good_signal: `Raised concern with data, communicated clearly, committed to team decision even if overruled.`,
+          red_flag: `Went silent and resented it, or overruled the team without consensus.`
+        },
+        {
+          question: `How do you handle a situation where you're stuck on a problem for more than 2 hours?`,
+          good_signal: `Has a clear process: tries X, then Googles, then asks — doesn't spin for days alone.`,
+          red_flag: `Says they "never get stuck" or "just keep trying" with no structured approach.`
+        }
+      ],
+
+      coding_challenge: {
+        problem: score >= 70 
+          ? `Given a list of GitHub commits with timestamps, detect "burst commits" — where someone made 10+ commits within any 30-minute window. Return the list of suspicious windows.`
+          : `Write a function that takes an array of integers and returns the two numbers that add up to a target sum. Solve it in O(n) time.`,
+        difficulty,
+        what_it_tests: score >= 70 
+          ? "Algorithm design, time complexity awareness, edge case handling"
+          : "Basic data structures, problem decomposition, code clarity"
+      },
+
+      closing_questions: [
+        "What does your code review process look like — what do you look for when reviewing others' code?",
+        "How do you stay updated with new technologies? What have you learned in the last 3 months?",
+        "What would your ideal dev environment and team process look like?",
+        "What's something you built that you're genuinely proud of and why?"
+      ]
+    };
+
+    setInterviewKit(kit);
+    setActiveTab("ai");
+    setIsLoading(false);
   };
 
   const handlePrint = () => {
