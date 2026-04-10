@@ -23,6 +23,7 @@ import ExecutiveSummary from "@/components/report/ExecutiveSummary";
 import InterviewQuestions from "@/components/report/InterviewQuestions";
 import VerificationSources from "@/components/report/VerificationSources";
 import EvidencePanel from "@/components/report/EvidencePanel";
+import EvidenceTrail from "@/components/report/EvidenceTrail";
 import RecruiterBrief from "@/components/report/RecruiterBrief";
 
 import LoadingState from "@/components/LoadingState";
@@ -490,6 +491,11 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                       }`}
                     />
                     <span className="text-xs text-slate-500 font-medium mt-1">/ 100 intelligence score</span>
+                    {(data2 as any).score_percentile && (
+                      <span className="text-[10px] text-cyan-400/80 font-semibold mt-0.5 tracking-wide">
+                        {(data2 as any).score_percentile}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -586,6 +592,11 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
               decisionTrace={data2.decision_trace} 
             />
           )}
+
+          {/* -- Evidence Trail (Claim vs Reality) -- */}
+          <ReportErrorBoundary section="Evidence Trail">
+            <EvidenceTrail items={(data2 as any).evidence_trail} />
+          </ReportErrorBoundary>
 
           {/* -- Authenticity + Commit Intelligence -- */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5 print:block print:space-y-5">

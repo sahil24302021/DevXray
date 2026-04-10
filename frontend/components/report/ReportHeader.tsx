@@ -88,6 +88,13 @@ export default function ReportHeader({ data }: Props) {
       <div className="mb-4">
         <span className={`text-6xl font-bold tabular-nums ${gradClass}`}>{score}</span>
         <span className="text-xl text-slate-500 font-light ml-1">/ 100</span>
+        {(data as any).score_percentile && (
+          <div className="mt-1">
+            <span className="text-[10px] text-cyan-400/80 font-semibold tracking-wide">
+              {(data as any).score_percentile}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Verdict + Confidence */}

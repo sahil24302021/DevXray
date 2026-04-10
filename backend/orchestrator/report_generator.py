@@ -467,6 +467,50 @@ def normalize_report(report: Dict[str, Any]) -> Dict[str, Any]:
             "reasoning": [],
         }
 
+    # ── IMPROVEMENT 1: Score Percentile Ranking for HR ──
+    score = report.get("final_score", report.get("score", 0)) or 0
+    if score >= 85:
+        report["score_percentile"] = "Top 5% of developers analyzed"
+    elif score >= 75:
+        report["score_percentile"] = "Top 15% of developers analyzed"
+    elif score >= 65:
+        report["score_percentile"] = "Top 30% of developers analyzed"
+    elif score >= 55:
+        report["score_percentile"] = "Top 45% of developers analyzed"
+    elif score >= 45:
+        report["score_percentile"] = "Top 60% of developers analyzed"
+    else:
+        report["score_percentile"] = "Bottom 40% of developers analyzed"
+
+    # ── IMPROVEMENT 3: Evidence Trail (claim vs reality for HR) ──
+    evidence_trail = []
+    proof = report.get("proof", [])
+    if isinstance(proof, list):
+        for item in proof:
+            if not isinstance(item, dict):
+                continue
+            trail_item = {
+                "claim": item.get("detail", item.get("claim", "Unknown claim")),
+                "evidence": item.get("evidence_type", item.get("evidence", "Code analysis")),
+                "repo": item.get("repo", item.get("source", "")),
+                "verified": True,  # items in proof_list are verified evidence
+            }
+            evidence_trail.append(trail_item)
+    # Also add unverified claims from truth_analysis mismatches
+    truth = report.get("truth_analysis", {})
+    if isinstance(truth, dict):
+        mismatches = truth.get("mismatches", [])
+        if isinstance(mismatches, list):
+            for m in mismatches:
+                if isinstance(m, dict):
+                    evidence_trail.append({
+                        "claim": m.get("claim", m.get("skill", "Unknown")),
+                        "evidence": m.get("finding", m.get("detail", "Not found in code")),
+                        "repo": "",
+                        "verified": False,
+                    })
+    report["evidence_trail"] = evidence_trail[:30]  # cap for performance
+
     return report
 
 

@@ -1627,10 +1627,11 @@ IMPORTANT INSTRUCTIONS:
 2. The repository list above shows ACTUAL repos on this profile. Do not say repos are "empty" or "unverifiable" if they appear in the list above.
 3. Base skill verification on the DIP engine scores and the repo list, NOT on whether the account seems "new."
 4. A developer can have a relatively new account ({age_plain}) and still have real projects — evaluate the CODE, not the age.
+5. In your executive_summary, you MUST mention at least 2 specific repository names from the repo list above and what they prove about this candidate's skills. Be specific — name the repo, name the skill it proves, name one technical detail you observed. Example: 'The JARVIS-telegram-bot repo demonstrates real Python automation skills with asyncio and subprocess management.' Do not write generic sentences. Every sentence must contain a specific fact.
 
 Generate a comprehensive JSON report:
 {{
-    "executive_summary": "3-4 sentence executive summary for a hiring manager",
+    "executive_summary": "3-4 sentence executive summary for a hiring manager — MUST name specific repos and skills",
     "candidate_tier": "S / A / B / C / D (S being elite, D being reject)",
     "overall_score": 0-100,
     "hire_decision": "STRONG HIRE / HIRE / LEAN HIRE / LEAN NO HIRE / NO HIRE",
