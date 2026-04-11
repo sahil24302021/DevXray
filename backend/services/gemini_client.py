@@ -25,6 +25,8 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     # ── STEP 1: Try Groq first (free, unlimited, fast) ──────────────
     groq_key = _os.getenv("GROQ_API_KEY", "")
     if groq_key:
+        # Truncate prompt for Groq — free tier has token limits
+        groq_prompt = prompt if len(prompt) <= 6000 else prompt[:6000] + "\n\n[...truncated for token limit. Complete the JSON with the data provided above.]"
         try:
             async with _hx.AsyncClient(timeout=20.0) as c:
                 r = await c.post(
@@ -35,7 +37,7 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                         "model": "llama-3.3-70b-versatile",
                         "messages": [
                             {"role": "system", "content": "You are a JSON generator. Reply ONLY with valid JSON. No markdown, no explanation, no extra text."},
-                            {"role": "user", "content": prompt}
+                            {"role": "user", "content": groq_prompt}
                         ],
                         "temperature": temperature,
                         "max_tokens": 4000,
@@ -80,7 +82,7 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
 
     # ── STEP 3: Gemini flash as last resort ─────────────────────────
     from google.genai import types
-    models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash"]
+    models_to_try = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
     last_error = None
     for model_name in models_to_try:
         try:
