@@ -1595,10 +1595,16 @@ Consistency Score: {github_report.get('consistency', {}).get('consistency_score'
 Growth Score: {github_report.get('growth', {}).get('growth_score', 'N/A')}
 """
 
-    prompt = f"""You are the world's most experienced technical hiring consultant.
-You have VERIFIED, DETERMINISTIC intelligence from the DIP engine plus resume data.
-Synthesize ALL data into a comprehensive hiring report. Use the DIP engine scores as the
-primary source of truth — they are computed from actual code analysis, not AI guesses.
+    prompt = f"""You are the world's most experienced technical hiring consultant analyzing a real candidate.
+You have VERIFIED, DETERMINISTIC intelligence data computed from ACTUAL code analysis (DIP engine).
+Your job is to synthesize ALL data into a comprehensive, ACCURATE hiring report.
+
+CRITICAL RULES:
+- The DIP engine scores are computed from actual GitHub code analysis — they are GROUND TRUTH, not estimates.
+- You MUST use exact DIP scores. DO NOT invent your own scores.
+- Every claim in your report MUST cite specific evidence (repo names, score numbers, skill names).
+- The overall_score MUST be within ±3 points of the DIP engine's Final Score.
+- Do NOT write generic filler. Every sentence must contain a SPECIFIC FACT from the data below.
 
 {date_context_block}
 
@@ -1608,13 +1614,15 @@ primary source of truth — they are computed from actual code analysis, not AI 
 Name: {resume_data.get('name')}
 Current Role: {resume_data.get('current_role')}
 Experience: {compute_experience_display(account_age_ctx.get('created_at', '') if account_age_ctx else '', resume_data.get('years_of_experience', 0))} (GitHub account age)
-Skills: {json.dumps(resume_data.get('technical_skills', {}))}
-Projects: {json.dumps(resume_data.get('projects', [])[:5])}
+Skills Claimed: {json.dumps(resume_data.get('technical_skills', {{}}))}
+Projects Listed: {json.dumps(resume_data.get('projects', [])[:5])}
 Education: {json.dumps(resume_data.get('education', []))}
 {dip_context}
 === CLAIMS VERIFICATION ===
 Authenticity Score: {claims_validation.get('authenticity_score') if isinstance(claims_validation, dict) else 0}/100
+Overall Assessment: {claims_validation.get('overall_assessment', 'N/A') if isinstance(claims_validation, dict) else 'N/A'}
 Red Flags: {json.dumps(claims_validation.get('red_flags', []) if isinstance(claims_validation, dict) else [])}
+Strengths Confirmed: {json.dumps(claims_validation.get('strengths_confirmed', []) if isinstance(claims_validation, dict) else [])}
 {job_context}
 === LINKEDIN DATA ===
 {json.dumps(linkedin_data) if linkedin_data else "Not available"}
@@ -1624,29 +1632,34 @@ Red Flags: {json.dumps(claims_validation.get('red_flags', []) if isinstance(clai
 
 IMPORTANT INSTRUCTIONS:
 1. Today is {today}. Any GitHub account created before today is a REAL, EXISTING account.
-2. The repository list above shows ACTUAL repos on this profile. Do not say repos are "empty" or "unverifiable" if they appear in the list above.
-3. Base skill verification on the DIP engine scores and the repo list, NOT on whether the account seems "new."
-4. A developer can have a relatively new account ({age_plain}) and still have real projects — evaluate the CODE, not the age.
-5. In your executive_summary, you MUST mention at least 2 specific repository names from the repo list above and what they prove about this candidate's skills. Be specific — name the repo, name the skill it proves, name one technical detail you observed. Example: 'The JARVIS-telegram-bot repo demonstrates real Python automation skills with asyncio and subprocess management.' Do not write generic sentences. Every sentence must contain a specific fact.
+2. The repository list above shows ACTUAL repos fetched from GitHub. They are real. Do not say repos are "empty" or "unverifiable".
+3. Base skill verification on the DIP engine scores and the repo list, NOT on account age.
+4. In your executive_summary, you MUST:
+   - State the DIP score (e.g., "scores 84/100")
+   - Name at least 2 specific repositories and what they demonstrate
+   - Mention at least 2 specific technologies verified in the code
+   - Give a clear hire/no-hire recommendation with reasoning
+   Example: 'Sahil Kumar scores 84/100 on the DevXray Intelligence Engine. His devsignal repository demonstrates full-stack engineering with Next.js, FastAPI, and AI integration (Gemini API). The JARVIS-telegram-bot repo proves Python automation skills with asyncio and subprocess management. Recommend HIRE for mid-level full-stack positions.'
+5. Skill scores in skill_assessment MUST reflect actual evidence. If no repos use a technology, score it 0. If 1-2 repos use it at basic level, score 2-4. If multiple repos demonstrate deep usage, score 6-8. Only score 9-10 for production-grade mastery with multiple complex projects.
 
-Generate a comprehensive JSON report:
+Generate this EXACT JSON structure (fill every field):
 {{
-    "executive_summary": "3-4 sentence executive summary for a hiring manager — MUST name specific repos and skills",
-    "candidate_tier": "S / A / B / C / D (S being elite, D being reject)",
-    "overall_score": 0-100,
+    "executive_summary": "4-5 sentence executive summary — MUST name specific repos, specific skills, and specific scores from DIP data",
+    "candidate_tier": "S / A / B / C / D",
+    "overall_score": {github_report.get('final_score', 0) if github_report else 0},
     "hire_decision": "STRONG HIRE / HIRE / LEAN HIRE / LEAN NO HIRE / NO HIRE",
     "confidence_level": "High / Medium / Low",
-    "key_strengths": ["Top 3-5 genuine strengths backed by evidence"],
-    "key_concerns": ["Top 3-5 concerns or risks"],
+    "key_strengths": ["Strength 1 with specific evidence", "Strength 2 with repo name", "Strength 3 with score"],
+    "key_concerns": ["Concern 1 with evidence", "Concern 2 with evidence"],
     "skill_assessment": {{
-        "frontend": 0-10,
-        "backend": 0-10,
-        "devops": 0-10,
-        "system_design": 0-10,
-        "problem_solving": 0-10,
-        "ai_ml": 0-10,
-        "mobile": 0-10,
-        "data_engineering": 0-10
+        "frontend": 0,
+        "backend": 0,
+        "devops": 0,
+        "system_design": 0,
+        "problem_solving": 0,
+        "ai_ml": 0,
+        "mobile": 0,
+        "data_engineering": 0
     }},
     "experience_quality": {{
         "depth": "Deep / Moderate / Shallow",
@@ -1655,26 +1668,52 @@ Generate a comprehensive JSON report:
     }},
     "red_flag_analysis": {{
         "severity": "None / Low / Medium / High / Critical",
-        "flags": ["detailed description of any red flags"],
-        "recommendation": "What to ask about in interview"
+        "flags": ["detailed description of each red flag with evidence"],
+        "recommendation": "Specific interview question to probe this risk"
     }},
-    "interview_focus_areas": ["Top 5 things to deep-dive in interview"],
-    "comparison_notes": "How this candidate compares to typical applicants at their level",
-    "growth_trajectory": "Assessment of the candidate's growth pattern and potential"{', "role_fit_analysis": {{ "overall_fit": "Strong Fit / Moderate Fit / Weak Fit / Poor Fit", "skill_match_percentage": 0-100, "missing_skills": ["Skills required but not demonstrated"], "recommendation_for_role": "Specific recommendation for THIS role" }}' if job_requirements else ''}
-}}
-"""
+    "interview_focus_areas": ["Area 1: specific topic to probe with reasoning", "Area 2", "Area 3", "Area 4", "Area 5"],
+    "comparison_notes": "How this candidate compares to typical applicants — cite specific percentile and tier",
+    "growth_trajectory": "Assessment of growth pattern — cite specific evidence of improvement or stagnation"{', "role_fit_analysis": {{ "overall_fit": "Strong Fit / Moderate Fit / Weak Fit / Poor Fit", "skill_match_percentage": 0-100, "missing_skills": ["Skills required but not demonstrated"], "recommendation_for_role": "Specific recommendation for THIS role" }}' if job_requirements else ''}
+}}"""
 
     try:
-        result = await asyncio.wait_for(generate_json(prompt, temperature=0), timeout=25.0)
+        result = await asyncio.wait_for(generate_json(prompt, temperature=0), timeout=40.0)
+
+        # Post-process: enforce overall_score matches DIP engine (±3 tolerance)
+        if github_report:
+            dip_score = github_report.get('final_score', 0)
+            ai_score = result.get('overall_score', 0)
+            if abs(ai_score - dip_score) > 3:
+                result['overall_score'] = dip_score  # DIP engine is ground truth
+
         return result
     except Exception as e:
         log.warning(f"Deep report generation failed: {e}")
+        # Comprehensive fallback using DIP engine data directly
+        _fb_score = github_report.get('final_score', 0) if github_report else 0
+        _fb_tier = "A" if _fb_score >= 80 else ("B" if _fb_score >= 65 else ("C" if _fb_score >= 50 else "D"))
+        _fb_hire = "HIRE" if _fb_score >= 75 else ("LEAN HIRE" if _fb_score >= 60 else ("LEAN NO HIRE" if _fb_score >= 45 else "NO HIRE"))
+        _fb_strengths = github_report.get('strengths', []) if github_report else []
+        _fb_weaknesses = github_report.get('weaknesses', []) if github_report else []
+        _fb_skills = github_report.get('top_skills', []) if github_report else []
+        _fb_skill_names = [s.get('skill_name', '') for s in _fb_skills[:5]] if _fb_skills else []
+
         return {
-            "executive_summary": "Deep report generation was not available.",
-            "candidate_tier": "?",
-            "overall_score": claims_validation.get("authenticity_score", 0) if isinstance(claims_validation, dict) else 0,
-            "hire_decision": claims_validation.get("hiring_recommendation", "N/A") if isinstance(claims_validation, dict) else "N/A",
-            "confidence_level": "Low",
+            "executive_summary": f"{resume_data.get('name', 'Candidate')} scores {_fb_score}/100 on the DevXray Intelligence Engine (Tier {_fb_tier}). "
+                                 f"Top verified skills: {', '.join(_fb_skill_names[:3]) or 'N/A'}. "
+                                 f"{'Key strengths include: ' + _fb_strengths[0] if _fb_strengths else 'Further AI analysis was unavailable due to API limits.'} "
+                                 f"Recommendation: {_fb_hire}.",
+            "candidate_tier": _fb_tier,
+            "overall_score": _fb_score,
+            "hire_decision": _fb_hire,
+            "confidence_level": "Medium" if github_report else "Low",
+            "key_strengths": _fb_strengths[:5] if _fb_strengths else ["DIP engine analysis completed — AI synthesis unavailable"],
+            "key_concerns": _fb_weaknesses[:5] if _fb_weaknesses else ["AI deep analysis unavailable — manual review recommended"],
+            "skill_assessment": {},
+            "interview_focus_areas": [f"Verify depth in {s}" for s in _fb_skill_names[:5]] if _fb_skill_names else ["General technical assessment"],
+            "growth_trajectory": f"Score of {_fb_score}/100 places this candidate in the {'top' if _fb_score >= 75 else 'mid' if _fb_score >= 50 else 'lower'} tier of analyzed developers.",
+            "comparison_notes": f"DIP score: {_fb_score}/100. Tier: {_fb_tier}.",
+            "_ai_unavailable": True,
         }
 
 

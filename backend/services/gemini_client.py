@@ -25,10 +25,10 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     # ── STEP 1: Try Groq first (free, unlimited, fast) ──────────────
     groq_key = _os.getenv("GROQ_API_KEY", "")
     if groq_key:
-        # Truncate prompt for Groq — free tier has token limits
-        groq_prompt = prompt if len(prompt) <= 6000 else prompt[:6000] + "\n\n[...truncated for token limit. Complete the JSON with the data provided above.]"
+        # Groq llama-3.3-70b supports 128k context — use generous limit
+        groq_prompt = prompt if len(prompt) <= 15000 else prompt[:15000] + "\n\n[...truncated for token limit. Complete the JSON with ALL the data provided above. Be thorough and specific.]"
         try:
-            async with _hx.AsyncClient(timeout=20.0) as c:
+            async with _hx.AsyncClient(timeout=30.0) as c:
                 r = await c.post(
                     "https://api.groq.com/openai/v1/chat/completions",
                     headers={"Authorization": f"Bearer {groq_key}",
@@ -36,11 +36,11 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                     json={
                         "model": "llama-3.3-70b-versatile",
                         "messages": [
-                            {"role": "system", "content": "You are a JSON generator. Reply ONLY with valid JSON. No markdown, no explanation, no extra text."},
+                            {"role": "system", "content": "You are a JSON generator. Reply ONLY with valid JSON. No markdown, no explanation, no extra text. Be thorough, specific, and evidence-based in every field."},
                             {"role": "user", "content": groq_prompt}
                         ],
                         "temperature": temperature,
-                        "max_tokens": 4000,
+                        "max_tokens": 8000,
                     }
                 )
                 r.raise_for_status()
@@ -50,13 +50,13 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                 log.info("[GeminiClient] Groq succeeded (primary)")
                 return result
         except Exception as groq_err:
-            log.warning(f"[GeminiClient] Groq primary failed: {groq_err} — trying Gemini")
+            log.warning(f"[GeminiClient] Groq primary failed: {groq_err} — trying Together AI")
 
     # ── STEP 2: Try Together AI (free $25 credit, never expires) ────
     together_key = _os.getenv("TOGETHER_API_KEY", "")
     if together_key:
         try:
-            async with _hx.AsyncClient(timeout=20.0) as c:
+            async with _hx.AsyncClient(timeout=30.0) as c:
                 r = await c.post(
                     "https://api.together.xyz/v1/chat/completions",
                     headers={"Authorization": f"Bearer {together_key}",
@@ -64,11 +64,11 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                     json={
                         "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
                         "messages": [
-                            {"role": "system", "content": "Reply ONLY with valid JSON. No markdown."},
+                            {"role": "system", "content": "Reply ONLY with valid JSON. No markdown. Be thorough, specific, and evidence-based."},
                             {"role": "user", "content": prompt}
                         ],
                         "temperature": temperature,
-                        "max_tokens": 4000,
+                        "max_tokens": 8000,
                     }
                 )
                 r.raise_for_status()

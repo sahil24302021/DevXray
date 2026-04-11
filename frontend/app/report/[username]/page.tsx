@@ -25,6 +25,7 @@ import VerificationSources from "@/components/report/VerificationSources";
 import EvidencePanel from "@/components/report/EvidencePanel";
 import EvidenceTrail from "@/components/report/EvidenceTrail";
 import RecruiterBrief from "@/components/report/RecruiterBrief";
+import InterviewKit from "@/components/report/InterviewKit";
 
 import LoadingState from "@/components/LoadingState";
 import ReportErrorBoundary from "@/components/report/ReportErrorBoundary";
@@ -424,6 +425,13 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           </div>
         </div>
       </nav>
+
+      {/* Interview Kit — rendered OUTSIDE the nav to prevent backdrop-filter from breaking position:fixed modal */}
+      <div className="sticky top-[68px] z-40 px-4 sm:px-6 md:px-10 mb-2 print:hidden">
+        <div className="mx-auto max-w-5xl flex justify-end">
+          <InterviewKit reportData={dataWithAliases} candidateName={data.name || data.username || "Candidate"} />
+        </div>
+      </div>
 
       {/* --- Report Content --- */}
       <main ref={reportRef} className="relative z-10 mx-auto max-w-5xl px-4 sm:px-6 py-8 sm:py-10 pb-20 animate-fade-in print:p-0 print:m-0 print:max-w-none print:w-full print:block print:overflow-visible">

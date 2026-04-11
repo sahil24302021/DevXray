@@ -421,7 +421,6 @@ export default function ResumeReportPage() {
             </span>
           </Link>
           <div className="flex items-center gap-2">
-            <InterviewKit reportData={data} candidateName={resume_data?.name || "Candidate"} />
             <ShareReportButton candidateName={resume_data?.name} />
             <button
               onClick={handleExportPDF}
@@ -441,6 +440,13 @@ export default function ResumeReportPage() {
           </div>
         </div>
       </nav>
+
+      {/* Interview Kit — rendered OUTSIDE the nav to prevent backdrop-filter from breaking position:fixed modal */}
+      <div className="sticky top-[68px] z-40 px-6 md:px-10 mb-2">
+        <div className="mx-auto max-w-6xl flex justify-end">
+          <InterviewKit reportData={data} candidateName={resume_data?.name || "Candidate"} />
+        </div>
+      </div>
 
       <main ref={reportRef} className="relative z-10 mx-auto max-w-6xl px-6 py-10 pb-20 space-y-6">
 
