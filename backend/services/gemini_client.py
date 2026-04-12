@@ -50,7 +50,13 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                 log.info("[GeminiClient] Groq succeeded (primary)")
                 return result
         except Exception as groq_err:
-            log.warning(f"[GeminiClient] Groq primary failed: {groq_err} — trying Together AI")
+            err_str = str(groq_err).lower()
+            if "429" in err_str or "too many" in err_str or "rate" in err_str:
+                import asyncio as _aio
+                log.warning("[GeminiClient] Groq rate limited (429) — waiting 3s before fallback")
+                await _aio.sleep(3)
+            else:
+                log.warning(f"[GeminiClient] Groq primary failed: {groq_err} — trying Together AI")
 
     # ── STEP 2: Try Together AI (free $25 credit, never expires) ────
     together_key = _os.getenv("TOGETHER_API_KEY", "")

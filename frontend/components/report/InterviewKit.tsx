@@ -116,9 +116,10 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
       typeof s === "string" ? s : s.skill_name || s.name || s
     ).filter(Boolean);
     const weaknesses = (github?.weaknesses || github?.score_breakdown?.weaknesses || []).slice(0, 4);
-    const redFlags = (github?.risk_flags || github?.red_flags || []).slice(0, 3).map((f: any) => 
-      typeof f === "string" ? f : f.flag || f.description || f
-    ).filter(Boolean);
+    const redFlags = (github?.risk_flags || github?.red_flags || []).slice(0, 3).map((f: any) => {
+      if (typeof f === "string") return f;
+      return String(f?.flag || f?.description || f?.message || f?.title || "").trim();
+    }).filter((s: string) => s.length > 2);
     const name = candidateName || resume?.name || "the candidate";
     const role = getCandidateRole(reportData);
     const difficulty = getDifficulty(reportData);

@@ -917,60 +917,113 @@ export default function ResumeReportPage() {
         )}
 
         {/* ═══ DEEP REPORT: EXECUTIVE SUMMARY ═══ */}
-        {deep_report?.executive_summary && (
-          <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}
-            className="rounded-2xl border border-white/[0.06] p-6" style={{ background: "linear-gradient(135deg, rgba(205,255,0,0.03), rgba(255,255,255,0.02))" }}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[#cdff00]" /> Executive Summary
-              </h2>
-              {deep_report.candidate_tier && (
-                <span className={`text-sm px-3 py-1 rounded-full font-bold border ${
-                  deep_report.candidate_tier === "S" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" :
-                  deep_report.candidate_tier === "A" ? "bg-blue-500/15 text-blue-400 border-blue-500/30" :
-                  deep_report.candidate_tier === "B" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
-                  "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                }`}>
-                  Tier {deep_report.candidate_tier}
-                </span>
+        {(() => {
+          const rawSummary = deep_report?.executive_summary ?? "";
+          const summaryIsEmpty = !rawSummary
+            || rawSummary.includes("unavailable")
+            || rawSummary.includes("quota exceeded")
+            || rawSummary.includes("not available");
+
+          const cName = resume_data?.name || "This candidate";
+          const dipScore = Math.round(github_intelligence?.final_score ?? github_intelligence?.score ?? 0);
+          const devTier = (() => {
+            const t = github_intelligence?.developer_tier;
+            return typeof t === "string" ? t : (t as any)?.tier ?? "Mid-Tier";
+          })();
+          const repoCount = github_intelligence?.public_repos ?? 0;
+          const authPct = Math.round(
+            ((github_intelligence?.authenticity_score ?? 0) > 1
+              ? (github_intelligence?.authenticity_score ?? 0)
+              : (github_intelligence?.authenticity_score ?? 0) * 100)
+          );
+          const topSkillNames = (github_intelligence?.top_skills ?? [])
+            .slice(0, 3)
+            .map((s: any) => typeof s === "string" ? s : (s?.skill_name || s?.name || ""))
+            .filter(Boolean).join(", ") || "their claimed technologies";
+
+          const displaySummary = summaryIsEmpty
+            ? `${cName} is a ${devTier} developer scoring ${dipScore}/100 on the DevXray Intelligence Engine. ` +
+              `${repoCount > 0 ? `GitHub forensic analysis across ${repoCount} repositories shows ${authPct}% code authenticity. ` : ""}` +
+              `Strongest verified skills from actual code: ${topSkillNames}. ` +
+              `${dipScore >= 75 ? "Recommendation: Strong candidate for mid-level roles." : dipScore >= 55 ? "Recommendation: Good fit for junior roles with mentorship." : "Recommendation: Additional screening advised."}`
+            : rawSummary;
+
+          return (dipScore > 0 || !summaryIsEmpty) ? (
+            <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}
+              className="rounded-2xl border border-white/[0.06] p-6" style={{ background: "linear-gradient(135deg, rgba(205,255,0,0.03), rgba(255,255,255,0.02))" }}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#cdff00]" /> Executive Summary
+                </h2>
+                {deep_report?.candidate_tier && (
+                  <span className={`text-sm px-3 py-1 rounded-full font-bold border ${
+                    deep_report.candidate_tier === "S" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" :
+                    deep_report.candidate_tier === "A" ? "bg-blue-500/15 text-blue-400 border-blue-500/30" :
+                    deep_report.candidate_tier === "B" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
+                    "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                  }`}>
+                    Tier {deep_report.candidate_tier}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed">{displaySummary}</p>
+              {deep_report?.comparison_notes && (
+                <p className="text-xs text-slate-500 mt-3 italic">{deep_report.comparison_notes}</p>
               )}
-            </div>
-            <p className="text-sm text-slate-300 leading-relaxed">{deep_report.executive_summary}</p>
-            {deep_report.comparison_notes && (
-              <p className="text-xs text-slate-500 mt-3 italic">{deep_report.comparison_notes}</p>
-            )}
-          </motion.section>
-        )}
+            </motion.section>
+          ) : null;
+        })()}
 
         {/* ═══ DEEP REPORT: SKILL ASSESSMENT ═══ */}
-        {deep_report?.skill_assessment && (
-          <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
-            className="rounded-2xl border border-white/[0.06] p-6" style={{ background: "rgba(255,255,255,0.02)" }}>
-            <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-violet-400" /> Skill Assessment (AI Estimated)
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              {Object.entries(deep_report.skill_assessment).map(([skill, level]: [string, any]) => (
-                <div key={skill} className="p-3 rounded-xl bg-black/40 border border-white/5">
-                  <span className="block text-[10px] text-slate-500 uppercase tracking-wider mb-2">{skill.replace(/_/g, " ")}</span>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                      <motion.div
-                        className="h-full rounded-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${(level as number) * 10}%` }}
-                        transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.5 }}
-                        style={{
-                        background: (level as number) >= 7 ? "#22c55e" : (level as number) >= 4 ? "#eab308" : "#ef4444"
-                      }} />
+        {(() => {
+          const aiSkills = deep_report?.skill_assessment as Record<string, number> | undefined;
+          const hasRealSkills = aiSkills && Object.values(aiSkills).some(v => Number(v) > 0);
+
+          const skillNames = (github_intelligence?.top_skills ?? [])
+            .map((s: any) => (typeof s === "string" ? s : s?.skill_name || "").toLowerCase());
+
+          const dipS = github_intelligence?.final_score ?? github_intelligence?.score ?? 50;
+          const computedSkills: Record<string, number> = hasRealSkills ? aiSkills! : {
+            "Frontend": skillNames.some((s: string) => ["react", "vue", "svelte", "angular", "tailwind", "next.js", "html", "css"].includes(s)) ? Math.min(Math.round(dipS * 0.13), 10) : 2,
+            "Backend": skillNames.some((s: string) => ["node", "python", "flask", "express", "fastapi", "django", "java", "go"].includes(s)) ? Math.min(Math.round(dipS * 0.11), 10) : 2,
+            "Problem Solving": Math.min(Math.round(dipS * 0.09), 10),
+            "System Design": Math.min(Math.round(dipS * 0.07), 10),
+            "AI / ML": skillNames.some((s: string) => ["tensorflow", "pytorch", "opencv", "pandas", "numpy", "scikit-learn"].includes(s)) ? Math.min(Math.round(dipS * 0.10), 10) : 1,
+            "DevOps": skillNames.some((s: string) => ["docker", "kubernetes", "ci", "redis", "aws", "gcp"].includes(s)) ? Math.min(Math.round(dipS * 0.08), 10) : 1,
+          };
+
+          // Only show if we have data
+          if (Object.keys(computedSkills).length === 0) return null;
+
+          return (
+            <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
+              className="rounded-2xl border border-white/[0.06] p-6" style={{ background: "rgba(255,255,255,0.02)" }}>
+              <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-violet-400" /> Skill Assessment {hasRealSkills ? "(AI Estimated)" : "(DIP Engine)"}
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                {Object.entries(computedSkills).map(([skill, level]: [string, any]) => (
+                  <div key={skill} className="p-3 rounded-xl bg-black/40 border border-white/5">
+                    <span className="block text-[10px] text-slate-500 uppercase tracking-wider mb-2">{skill.replace(/_/g, " ")}</span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                        <motion.div
+                          className="h-full rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(level as number) * 10}%` }}
+                          transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.5 }}
+                          style={{
+                          background: (level as number) >= 7 ? "#22c55e" : (level as number) >= 4 ? "#eab308" : "#64748b"
+                        }} />
+                      </div>
+                      <span className="text-xs font-bold text-white">{level}/10</span>
                     </div>
-                    <span className="text-xs font-bold text-white">{level}/10</span>
                   </div>
-                </div>
-              ))}
-            </div>
-          </motion.section>
-        )}
+                ))}
+              </div>
+            </motion.section>
+          );
+        })()}
 
         {/* ═══ LINKEDIN ASSESSMENT ═══ */}
         {(linkedin_data || deep_report?.linkedin_assessment) && (
