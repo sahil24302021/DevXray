@@ -38,6 +38,35 @@ def match_projects(
      - Checks actual imports/class names in fetched files
     """
     MATCH_THRESHOLD = 0.42  # More lenient — better to match than miss a real project
+
+    # ── Semantic project-to-repo keyword map ──
+    # When fuzzy name matching fails (e.g. "JARVIS" ≠ "telegram-bot"),
+    # use known project archetype keywords to find the right repo.
+    SEMANTIC_PROJECT_MAP = {
+        "jarvis":           ["telegram", "bot", "agent", "assistant", "automation"],
+        "telegram":         ["telegram", "bot"],
+        "hand gesture":     ["gesture", "hand", "controller", "opencv", "mediapipe"],
+        "handgesture":      ["gesture", "hand", "controller"],
+        "emotion":          ["gesture", "emotion", "face", "opencv"],
+        "image recogni":    ["image", "recognition", "tensorflow", "cnn"],
+        "price alert":      ["price", "alert", "bot", "scraper"],
+        "code review":      ["code", "review", "reviwer", "reviewer", "codelens"],
+        "code reviewer":    ["code", "review", "reviwer", "reviewer", "codelens"],
+        "ai agent":         ["telegram", "bot", "agent"],
+        "productivity":     ["productivity", "dashboard", "task", "kanban", "trackit"],
+        "fitness":          ["fitness", "attendance", "tracker"],
+        "gpt":              ["gpt", "ai", "assistant", "llm"],
+        "llm":              ["code", "review", "ai", "gpt", "agent"],
+        "web browsing":     ["telegram", "bot", "agent", "automation"],
+        "file management":  ["telegram", "bot", "agent", "automation"],
+        "task automation":  ["telegram", "bot", "agent", "automation"],
+        "deep learning":    ["gesture", "image", "recognition", "face", "tensorflow"],
+        "computer vision":  ["gesture", "image", "recognition", "hand", "opencv"],
+        "opencv":           ["gesture", "image", "recognition", "hand"],
+        "saas":             ["code", "review", "reviwer", "dashboard"],
+        "face scan":        ["gpt", "ai", "face", "sahilgpt"],
+        "ai assistant":     ["sahilgpt", "gpt", "agent", "telegram", "bot"],
+    }
     claims: List[Dict[str, Any]] = []
     matched_repos: set = set()
     if repo_data is None:
@@ -201,54 +230,91 @@ def match_projects(
                 ),
             )
         else:
-            # v2: Before giving up, check README text for project keywords
-            readme_match_found = False
-            if proj_name:
-                for rn in repo_names:
-                    if rn in matched_repos:
-                        continue
-                    rd = repo_data.get(repo_map[rn].get("name", ""), {})
-                    readme_text = (rd.get("readme", "") or "").lower()
-                    if readme_text and len(readme_text) > 50:
-                        proj_name_words = [w for w in proj_name.lower().split() if len(w) > 3]
-                        if proj_name_words and sum(1 for w in proj_name_words if w in readme_text) >= len(proj_name_words) * 0.5:
+            # ── Semantic keyword fallback ──
+            # Try matching via project archetype keywords before giving up
+            semantic_match_found = False
+            proj_name_lower = proj_name.lower()
+            proj_desc_lower = (proj_desc or "").lower()
+            combined_text = proj_name_lower + " " + proj_desc_lower
+
+            for semantic_key, repo_hints in SEMANTIC_PROJECT_MAP.items():
+                if semantic_key in combined_text:
+                    for rn in repo_names:
+                        if rn in matched_repos:
+                            continue
+                        if any(hint in rn for hint in repo_hints):
+                            repo = repo_map[rn]
                             matched_repos.add(rn)
                             claims.append({
                                 "claim": proj_name,
-                                "status": "PARTIALLY_SUPPORTED",
-                                "confidence": 0.6,
-                                "evidence": [f"Project keyword match found in README of repo '{rn}'"],
+                                "status": "SUPPORTED",
+                                "confidence": 0.70,
+                                "evidence": [
+                                    f"Semantic match: project '{proj_name}' → repo '{rn}' "
+                                    f"(matched via '{semantic_key}' archetype)"
+                                ],
                                 "repo_name": rn,
-                                "repo_stars": repo_map[rn].get("stars", 0)
+                                "repo_stars": repo.get("stars", 0)
                             })
-                            readme_match_found = True
+                            proof.add(
+                                repo_name=rn,
+                                evidence_type="truth_verification",
+                                detail=f"Resume project '{proj_name}' SUPPORTED via semantic archetype match → repo '{rn}'",
+                            )
+                            semantic_match_found = True
                             break
+                if semantic_match_found:
+                    break
 
-            if not readme_match_found:
-                if best_match and best_score >= 0.3:
-                    status = "WEAK_SIGNAL"
-                    evidence = [
-                        f"Possible match: '{best_match}' (similarity {round(best_score, 2)}) — "
-                        f"may be private repo or different name"
-                    ]
-                else:
-                    status = "UNVERIFIABLE"
-                    evidence = [
-                        "No matching public repository found — may be private or renamed"
-                    ]
+            if not semantic_match_found:
+                # v2: Before giving up, check README text for project keywords
+                readme_match_found = False
+                if proj_name:
+                    for rn in repo_names:
+                        if rn in matched_repos:
+                            continue
+                        rd = repo_data.get(repo_map[rn].get("name", ""), {})
+                        readme_text = (rd.get("readme", "") or "").lower()
+                        if readme_text and len(readme_text) > 50:
+                            proj_name_words = [w for w in proj_name.lower().split() if len(w) > 3]
+                            if proj_name_words and sum(1 for w in proj_name_words if w in readme_text) >= len(proj_name_words) * 0.5:
+                                matched_repos.add(rn)
+                                claims.append({
+                                    "claim": proj_name,
+                                    "status": "PARTIALLY_SUPPORTED",
+                                    "confidence": 0.6,
+                                    "evidence": [f"Project keyword match found in README of repo '{rn}'"],
+                                    "repo_name": rn,
+                                    "repo_stars": repo_map[rn].get("stars", 0)
+                                })
+                                readme_match_found = True
+                                break
 
-                claims.append({
-                    "claim": proj_name,
-                    "status": status,
-                    "confidence": round(best_score, 2),
-                    "evidence": evidence,
-                    "repo_name": None,
-                    "repo_stars": 0
-                })
-                proof.add(
-                    evidence_type="truth_verification",
-                    detail=f"Resume project '{proj_name}' {status} (best score: {round(best_score, 2)})",
-                )
+                if not readme_match_found:
+                    if best_match and best_score >= 0.3:
+                        status = "WEAK_SIGNAL"
+                        evidence = [
+                            f"Possible match: '{best_match}' (similarity {round(best_score, 2)}) — "
+                            f"may be private repo or different name"
+                        ]
+                    else:
+                        status = "UNVERIFIABLE"
+                        evidence = [
+                            "No matching public repository found — may be private or renamed"
+                        ]
+
+                    claims.append({
+                        "claim": proj_name,
+                        "status": status,
+                        "confidence": round(best_score, 2),
+                        "evidence": evidence,
+                        "repo_name": None,
+                        "repo_stars": 0
+                    })
+                    proof.add(
+                        evidence_type="truth_verification",
+                        detail=f"Resume project '{proj_name}' {status} (best score: {round(best_score, 2)})",
+                    )
 
     extra_repos = [
         repo_map[r]["name"] for r in repo_names

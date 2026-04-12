@@ -450,6 +450,23 @@ export default function ResumeReportPage() {
 
       <main ref={reportRef} className="relative z-10 mx-auto max-w-6xl px-6 py-10 pb-20 space-y-6">
 
+        {/* ═══ AI VERIFICATION UNAVAILABLE BANNER ═══ */}
+        {data?.analysis_metadata?.ai_verification_available === false && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="rounded-xl p-4 border border-amber-500/20 flex items-center gap-3"
+            style={{ background: "rgba(251,191,36,0.05)" }}>
+            <span className="text-xl">🔬</span>
+            <div>
+              <p className="text-sm font-bold text-amber-400">Deterministic Analysis Only</p>
+              <p className="text-xs text-amber-300/60 mt-0.5">
+                AI narrative generation was unavailable during this scan (API quota exceeded).
+                All scores are fully deterministic — calculated from actual GitHub code analysis.
+                The hiring recommendation is rule-based. Re-run in a few minutes for full AI insights.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
         {/* ═══ LOW CONFIDENCE BANNER ═══ */}
         {isLowConfidence && (
           <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
@@ -979,21 +996,61 @@ export default function ResumeReportPage() {
           const aiSkills = deep_report?.skill_assessment as Record<string, number> | undefined;
           const hasRealSkills = aiSkills && Object.values(aiSkills).some(v => Number(v) > 0);
 
+          // Use DIP skill_summary (category averages from actual code analysis)
+          const dipSummary: Record<string, number> = github_intelligence?.skill_summary ?? {};
+          const dipS = github_intelligence?.final_score ?? github_intelligence?.score ?? 50;
+
+          // skill_name list from top_skills (for presence checks)
           const skillNames = (github_intelligence?.top_skills ?? [])
             .map((s: any) => (typeof s === "string" ? s : s?.skill_name || "").toLowerCase());
 
-          const dipS = github_intelligence?.final_score ?? github_intelligence?.score ?? 50;
-          const computedSkills: Record<string, number> = hasRealSkills ? aiSkills! : {
-            "Frontend": skillNames.some((s: string) => ["react", "vue", "svelte", "angular", "tailwind", "next.js", "html", "css"].includes(s)) ? Math.min(Math.round(dipS * 0.13), 10) : 2,
-            "Backend": skillNames.some((s: string) => ["node", "python", "flask", "express", "fastapi", "django", "java", "go"].includes(s)) ? Math.min(Math.round(dipS * 0.11), 10) : 2,
-            "Problem Solving": Math.min(Math.round(dipS * 0.09), 10),
-            "System Design": Math.min(Math.round(dipS * 0.07), 10),
-            "AI / ML": skillNames.some((s: string) => ["tensorflow", "pytorch", "opencv", "pandas", "numpy", "scikit-learn"].includes(s)) ? Math.min(Math.round(dipS * 0.10), 10) : 1,
-            "DevOps": skillNames.some((s: string) => ["docker", "kubernetes", "ci", "redis", "aws", "gcp"].includes(s)) ? Math.min(Math.round(dipS * 0.08), 10) : 1,
+          // Helper: average scores from multiple DIP categories
+          const avgCategories = (...cats: string[]): number => {
+            const vals = cats.map(c => dipSummary[c]).filter(v => v != null && Number(v) > 0);
+            if (vals.length === 0) return 0;
+            return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
           };
 
-          // Only show if we have data
-          if (Object.keys(computedSkills).length === 0) return null;
+          const computedSkills: Record<string, number> = hasRealSkills ? aiSkills! : {
+            // Frontend: use DIP "frontend" category if present, else presence check
+            "Frontend": avgCategories("frontend") ||
+              (skillNames.some((s: string) => ["react","vue","angular","tailwind","next.js","html","css","svelte"].includes(s))
+                ? Math.min(Math.round(dipS * 0.13), 10) : 2),
+
+            // Backend: use DIP "backend" category
+            "Backend": avgCategories("backend") ||
+              (skillNames.some((s: string) => ["node.js","python","flask","express","fastapi","django","java","go"].includes(s))
+                ? Math.min(Math.round(dipS * 0.11), 10) : 2),
+
+            // Problem Solving: proxy from testing + overall score
+            "Problem Solving": avgCategories("testing") ||
+              Math.min(Math.round(dipS * 0.09), 10),
+
+            // System Design: proxy from database + backend
+            "System Design": avgCategories("database","sql/databases") ||
+              Math.min(Math.round(dipS * 0.07), 10),
+
+            // AI / ML: aggregate ALL ml-related DIP categories — this fixes the 1/10 bug
+            // DIP uses "ml", "ai_ml" as separate category keys
+            "AI / ML": avgCategories("ml", "ai_ml") ||
+              (skillNames.some((s: string) =>
+                ["tensorflow","pytorch","opencv","pandas","numpy","scikit-learn",
+                 "machine learning","deep learning","mediapipe","huggingface",
+                 "openai api","langchain","face recognition","data science"].includes(s))
+                ? Math.min(Math.round(dipS * 0.10), 10) : 0),
+
+            // DevOps: use DIP "devops" category
+            "DevOps": avgCategories("devops") ||
+              (skillNames.some((s: string) => ["docker","kubernetes","ci/cd","redis","aws","gcp","terraform"].includes(s))
+                ? Math.min(Math.round(dipS * 0.08), 10) : 0),
+          };
+
+          // Remove zero scores so bars don't show for genuinely absent skills
+          const filteredSkills = Object.fromEntries(
+            Object.entries(computedSkills).filter(([, v]) => Number(v) > 0)
+          );
+
+          if (Object.keys(filteredSkills).length === 0) return null;
 
           return (
             <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
@@ -1002,7 +1059,7 @@ export default function ResumeReportPage() {
                 <span className="w-2 h-2 rounded-full bg-violet-400" /> Skill Assessment {hasRealSkills ? "(AI Estimated)" : "(DIP Engine)"}
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                {Object.entries(computedSkills).map(([skill, level]: [string, any]) => (
+                {Object.entries(filteredSkills).map(([skill, level]: [string, any]) => (
                   <div key={skill} className="p-3 rounded-xl bg-black/40 border border-white/5">
                     <span className="block text-[10px] text-slate-500 uppercase tracking-wider mb-2">{skill.replace(/_/g, " ")}</span>
                     <div className="flex items-center gap-2">

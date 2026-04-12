@@ -1,11 +1,50 @@
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
+from collections import Counter
 
 from scoring.scoring_engine import normalize_authenticity
 from utils.logging_config import get_logger
 
 log = get_logger("report_generator")
+
+
+def _compute_actual_languages(
+    repos_param: Optional[List[Dict[str, Any]]],
+    skills: Dict[str, Any],
+) -> List[str]:
+    """
+    Return the actual programming languages used across repos.
+    Source: repo.language field from GitHub API (Python, TypeScript, HTML, C++…).
+    Falls back to DIP top_skills only if no repo language data is available.
+
+    This fixes the bug where "top_languages" showed React/Tailwind/WebSockets
+    (which are frameworks detected by DIP code scanning, not repo languages).
+    """
+    if repos_param:
+        lang_counter: Counter = Counter()
+        for repo in repos_param:
+            lang = (
+                repo.get("language")
+                or repo.get("primary_language")
+                or ""
+            )
+            if lang and lang.lower() not in ("", "none", "null", "unknown"):
+                lang_counter[lang] += 1
+        if lang_counter:
+            return [lang for lang, _ in lang_counter.most_common(6)]
+
+    # Fallback: use DIP skill names but filter to known languages only
+    KNOWN_LANGUAGES = {
+        "python", "typescript", "javascript", "java", "c", "c++", "c#",
+        "go", "rust", "ruby", "swift", "kotlin", "php", "scala", "r",
+        "html", "css", "shell", "dart", "lua", "perl",
+    }
+    return [
+        s.get("skill_name", "")
+        for s in skills.get("top_skills", [])[:8]
+        if s.get("skill_name", "").lower() in KNOWN_LANGUAGES
+    ][:6]
 
 
 def compute_experience_display(github_created_at: str, resume_years: int) -> str:
@@ -266,12 +305,9 @@ def generate_report(
         "risk_analysis": _generate_risk_analysis(final_score, all_risk_flags),
         "total_stars": profile.get("_total_stars", 0),
         "total_repos": profile.get("public_repos", 0),
-        # ACCURACY 4 FIX: Use actual technology names from top_skills, not category keys
-        "top_languages": [
-            s.get("skill_name", "")
-            for s in skills.get("top_skills", [])[:8]
-            if s.get("skill_name")
-        ],
+        # FIX: top_languages = actual GitHub repo primary languages (Python, TypeScript, etc.)
+        # NOT DIP skill names (React, Tailwind CSS) which are frameworks not languages.
+        "top_languages": _compute_actual_languages(repos_param, skills),
 
         # FIX: authenticity_score as percentage (0-100) for all consumers
         "authenticity_score": auth_pct,

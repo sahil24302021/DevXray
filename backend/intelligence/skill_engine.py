@@ -762,6 +762,31 @@ def _score_skill(
     if not detected_indicators:
         return None  # Skill not detected at all
 
+    # ── Minimum evidence threshold (prevents false positives) ──
+    # Skills that rarely appear in student/generalist profiles need stronger proof.
+    # A single stray string match ("websocket" in a comment) is NOT evidence of skill.
+    HIGH_FALSE_POSITIVE_SKILLS = {
+        "Flutter", "Elasticsearch", "Kafka", "RabbitMQ", "gRPC",
+        "Kubernetes", "Terraform", "AWS", "Rust", "Go", "Swift/iOS",
+        "React Native", "GraphQL", "Angular", "HuggingFace", "LangChain",
+    }
+    dep_verified = any(i["name"] == "Dependency Declared" for i in detected_indicators)
+    non_dep_indicators = [i for i in detected_indicators if i["name"] != "Dependency Declared"]
+
+    if skill_name in HIGH_FALSE_POSITIVE_SKILLS and not dep_verified:
+        # Count total file-level hits across all indicators
+        total_file_hits = sum(
+            len(evidence_files.get(ind["name"], []))
+            for ind in non_dep_indicators
+        )
+        if total_file_hits < 3:
+            return None  # Not enough real evidence
+
+    # For all skills: require at least 1 non-dependency indicator to be detected
+    # (prevents pure dependency-file false positives for unused packages)
+    if not dep_verified and not non_dep_indicators:
+        return None
+
     # ─── Score Calculation ───
     basic_indicators = [i for i in detected_indicators if not i["advanced"]]
     advanced_indicators = [i for i in detected_indicators if i["advanced"]]

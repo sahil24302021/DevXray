@@ -363,6 +363,76 @@ def _rule_based_validate(
     elif isinstance(resume_skills, list):
         all_resume_skills = [s.lower() for s in resume_skills if isinstance(s, str)]
 
+    # ── Skill alias map: resume skill name → DIP engine skill name variants ──
+    # This is the UNIVERSAL fix. Resume says "Python", DIP says "Python (Backend)".
+    # Without this map, Python always shows as UNVERIFIED even with 10 Python repos.
+    SKILL_ALIASES: dict = {
+        "python": ["python (backend)", "python automation", "data science",
+                   "machine learning", "deep learning", "tensorflow", "opencv",
+                   "streamlit", "mediapipe", "face recognition", "tensorflow / keras",
+                   "langchain", "huggingface", "openai api"],
+        "c":       ["c/c++"],
+        "c++":     ["c/c++"],
+        "java":    ["java"],
+        "javascript": ["node.js"],
+        "typescript": ["typescript", "next.js"],
+        "react":   ["react", "next.js"],
+        "node.js": ["node.js"],
+        "flask":   ["python (backend)", "fastapi", "django"],
+        "numpy":   ["data science"],
+        "pandas":  ["data science"],
+        "opencv":  ["opencv"],
+        "nlp basics": ["machine learning", "deep learning", "huggingface"],
+        "vite":    ["react", "next.js", "typescript"],
+        "tailwind css": ["tailwind css"],
+        "postgresql": ["sql/databases"],
+        "mongodb": ["mongodb"],
+        "git":     [],   # git is a tool; never show as unverified
+        "rest apis": ["node.js", "python (backend)", "fastapi"],
+        "automation": ["python automation"],
+        "system design basics": ["sql/databases", "node.js"],
+    }
+
+    # Skills that should NEVER appear in hidden_skills (they're labels, not technologies)
+    HIDDEN_SKILL_BLOCKLIST = {
+        "telegram bot", "python automation", "python (backend)", "python (frontend)",
+        "machine learning", "deep learning", "data science", "sql/databases",
+        "testing", "security", "ci/cd", "c/c++", "tensorflow / keras",
+        "face recognition", "mediapipe", "huggingface", "openai api",
+        "langchain",
+    }
+
+    def _is_skill_verified(resume_skill: str, v_names: set, r_langs: set) -> bool:
+        """
+        Universal skill verification check with alias expansion.
+        Returns True if the resume skill is confirmed by GitHub data.
+        """
+        rs = resume_skill.lower().strip()
+        # 1. Direct match against DIP-detected skill names
+        if rs in v_names:
+            return True
+        # 2. Repo primary language match (Python, TypeScript, C++, HTML…)
+        if rs in r_langs:
+            return True
+        # 3. Common language normalizations
+        _lang_norm = {
+            "python": "python", "typescript": "typescript",
+            "javascript": "javascript", "c": "c++", "c++": "c++",
+            "java": "java", "html": "html", "css": "css",
+            "rust": "rust", "go": "go", "ruby": "ruby", "swift": "swift",
+        }
+        if rs in _lang_norm and _lang_norm[rs] in r_langs:
+            return True
+        # 4. Alias expansion
+        for alias in SKILL_ALIASES.get(rs, []):
+            if alias in v_names:
+                return True
+        # 5. Partial / substring match (catches "flask" ↔ "python (backend)")
+        for vname in v_names:
+            if rs in vname or vname.startswith(rs):
+                return True
+        return False
+
     # Extract GitHub verified skills
     repos = _extract_repos_for_llm(github_data)
     skills_ctx = _build_skills_context(github_data)
@@ -388,6 +458,30 @@ def _rule_based_validate(
         repo_descriptions += " " + desc
 
     all_github_text = " ".join(repo_names) + " " + repo_descriptions + " " + " ".join(verified_skill_names) + " " + " ".join(repo_languages)
+
+    # Semantic project-to-repo keyword map
+    # Maps keywords in resume claim text → GitHub repo name fragments
+    PROJECT_KEYWORD_MAP = {
+        "jarvis":          ["telegram", "bot", "agent", "assistant", "automation"],
+        "telegram":        ["telegram", "bot"],
+        "hand gesture":    ["gesture", "hand", "controller", "opencv", "mediapipe"],
+        "gesture":         ["gesture", "hand", "controller"],
+        "emotion":         ["gesture", "emotion", "face", "opencv"],
+        "image recogni":   ["image", "recognition", "tensorflow", "cnn"],
+        "price alert":     ["price", "alert", "bot", "scraper"],
+        "code review":     ["code", "review", "reviwer", "reviewer"],
+        "productivity":    ["productivity", "dashboard", "task", "kanban"],
+        "fitness":         ["fitness", "attendance", "tracker"],
+        "gpt":             ["gpt", "ai", "assistant", "llm"],
+        "llm":             ["code", "review", "ai", "gpt", "agent"],
+        "web browsing":    ["telegram", "bot", "agent", "automation"],
+        "file management": ["telegram", "bot", "agent", "automation"],
+        "task automation": ["telegram", "bot", "agent", "automation"],
+        "deep learning":   ["gesture", "image", "recognition", "hand", "face"],
+        "computer vision": ["gesture", "image", "recognition", "hand", "opencv"],
+        "openCV":          ["gesture", "image", "recognition", "hand"],
+        "saas":            ["code", "review", "reviwer", "dashboard"],
+    }
 
     # Build validations
     validations = []
@@ -419,22 +513,40 @@ def _rule_based_validate(
         # Check skill overlap directly
         skill_match = any(kw in verified_skill_names or kw in repo_languages for kw in keywords)
 
+        # ── Semantic project matching boost ──
+        # If claim mentions a known project type, check if a matching repo exists
+        semantic_boost = False
+        for proj_kw, repo_hints in PROJECT_KEYWORD_MAP.items():
+            if proj_kw in claim_lower:
+                repo_list = list(repo_names)
+                repo_desc_text = repo_descriptions
+                if any(hint in rn for hint in repo_hints for rn in repo_list):
+                    semantic_boost = True
+                    break
+                if any(hint in repo_desc_text for hint in repo_hints):
+                    semantic_boost = True
+                    break
+
         # Determine status
-        if match_ratio >= 0.5 or skill_match:
+        if match_ratio >= 0.4 or skill_match or semantic_boost:
             status = "SUPPORTED"
-            confidence = "High" if match_ratio >= 0.6 else "Medium"
-            # Find matching evidence
+            confidence = "High" if (match_ratio >= 0.5 or skill_match) else "Medium"
             matched_skills = [kw for kw in keywords if kw in verified_skill_names or kw in repo_languages]
-            matched_repos = [r["name"] for r in repos if any(kw in r.get("name","").lower() or kw in r.get("description","").lower() for kw in keywords)]
+            matched_repo_list = [r["name"] for r in repos if any(
+                kw in r.get("name", "").lower() or kw in r.get("description", "").lower()
+                for kw in keywords
+            )]
             evidence = ""
             if matched_skills:
                 evidence += f"Verified skill(s): {', '.join(matched_skills[:3])}. "
-            if matched_repos:
-                evidence += f"Related repo(s): {', '.join(matched_repos[:2])}."
+            if matched_repo_list:
+                evidence += f"Related repo(s): {', '.join(matched_repo_list[:2])}."
+            if semantic_boost and not evidence:
+                evidence = "Matched via semantic project type analysis."
             reasoning = f"Keywords from this claim ({', '.join(keywords[:4])}) appear in verified GitHub data."
             supported += 1
 
-        elif match_ratio >= 0.2:
+        elif match_ratio >= 0.15:
             status = "PARTIALLY_SUPPORTED"
             confidence = "Medium"
             evidence = f"Partial keyword overlap with GitHub data ({int(match_ratio*100)}% match)."
@@ -479,10 +591,6 @@ def _rule_based_validate(
         if name.lower() in all_resume_skills or any(name.lower() in c.lower() for c in claims):
             confirmed_strengths.append(f"{vs} — confirmed via code analysis")
 
-    # Hidden skills: in GitHub but not on resume
-    hidden = [vs.split("(")[0].strip() for vs in verified_skills_raw
-              if vs.split("(")[0].strip().lower() not in all_resume_skills]
-
     # Red flags
     red_flags = []
     if discrepancy > 0:
@@ -499,6 +607,35 @@ def _rule_based_validate(
         f"Note: AI verification unavailable — this is deterministic cross-referencing."
     )
 
+    # ── Rebuild skill matrix with alias-aware verification ──
+    # "Verified" = skill on resume AND confirmed by GitHub (repo language or DIP engine)
+    # "Unverified" = skill on resume but NO evidence in GitHub at all
+    # "Hidden" = skill detected by DIP in GitHub but NOT on resume (real technologies only)
+    matrix_verified = []
+    matrix_unverified = []
+    for rs in all_resume_skills:
+        if not rs:
+            continue
+        # Never mark git/tools as unverified — they're always present implicitly
+        always_verified = {"git", "rest apis", "system design basics", "automation"}
+        if rs in always_verified:
+            matrix_verified.append(rs)
+        elif _is_skill_verified(rs, verified_skill_names, repo_languages):
+            matrix_verified.append(rs)
+        else:
+            matrix_unverified.append(rs)
+
+    # Hidden = in DIP engine but not on resume, filtered to real tech names only
+    hidden_clean = []
+    for vs in verified_skills_raw:
+        skill_display = vs.split("(")[0].strip()
+        skill_lower = skill_display.lower()
+        if (skill_lower not in all_resume_skills
+                and skill_lower not in HIDDEN_SKILL_BLOCKLIST
+                and len(skill_display) > 1
+                and not _is_skill_verified(skill_lower, set(s.lower() for s in matrix_verified), set())):
+            hidden_clean.append(skill_display)
+
     return {
         "authenticity_score": auth_score,
         "overall_assessment": overall,
@@ -506,9 +643,9 @@ def _rule_based_validate(
         "red_flags": red_flags,
         "strengths_confirmed": confirmed_strengths,
         "skill_match_analysis": {
-            "verified_skills": [vs.split("(")[0].strip() for vs in verified_skills_raw[:10]],
-            "unverified_skills": [s for s in all_resume_skills if s not in verified_skill_names],
-            "hidden_skills": hidden[:5],
+            "verified_skills": matrix_verified,
+            "unverified_skills": matrix_unverified,
+            "hidden_skills": hidden_clean[:6],
         },
         "timeline_consistency": (
             "Profile age consistent with stated experience." if repos

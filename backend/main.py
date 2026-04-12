@@ -1194,6 +1194,7 @@ async def analyze_resume_endpoint(
             "analysis_date": _get_today_str(),
             "account_age_context": account_age_ctx,
             "dip_version": "4.0",
+            "ai_verification_available": not deep_report.get("_ai_unavailable", False),
             "engines_run": [
                 "code_intelligence", "skill_verification",
                 "truth_engine", "authenticity_engine",
@@ -1505,6 +1506,50 @@ async def _generate_deep_report(
     """
     from orchestrator.report_generator import compute_experience_display
     today = _get_today_str()
+
+    # ── Sanitize helper — prevents "unhashable type: dict" crash ──
+    # Any field that ends up inside a set() or used as a dict key
+    # must be a primitive. Nested dicts from the DIP engine break this.
+    def _safe_str(value) -> str:
+        """Convert any value to a plain string safely."""
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (int, float, bool)):
+            return str(value)
+        if isinstance(value, dict):
+            # Pull the most useful string representation
+            for key in ("skill_name", "name", "tier", "summary", "label", "title"):
+                if key in value:
+                    return str(value[key])
+            return str(list(value.values())[:2])
+        if isinstance(value, (list, tuple)):
+            return ", ".join(_safe_str(v) for v in value[:5])
+        return str(value)
+
+    def _safe_list(value) -> list:
+        """Ensure a value is a flat list of strings."""
+        if not value:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            return [_safe_str(v) for v in value if v]
+        if isinstance(value, dict):
+            return [_safe_str(v) for v in value.values() if v]
+        return [_safe_str(value)]
+
+    # Sanitize top_languages — this was the direct cause of "unhashable type: dict"
+    if github_report:
+        raw_langs = github_report.get("top_languages", [])
+        if raw_langs and isinstance(raw_langs, list) and any(isinstance(l, dict) for l in raw_langs):
+            github_report = dict(github_report)  # shallow copy — don't mutate original
+            github_report["top_languages"] = [
+                l.get("skill_name") or l.get("language") or l.get("name") or str(l)
+                if isinstance(l, dict) else str(l)
+                for l in raw_langs
+            ]
 
     # Build date context block — this is the #1 fix for wrong verdicts
     age_ctx = account_age_ctx or {}
