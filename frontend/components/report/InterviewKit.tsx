@@ -153,22 +153,52 @@ ${topRepos.length > 0 ? `Reference their actual projects: ${topRepos.join(", ")}
         }
       ],
 
-      technical_deep_dives: [
-        ...(skills.slice(0, 4).map((skill: string) => ({
-          skill,
-          question: `You listed ${skill} as a skill. Walk me through a real production problem you solved with it — not a tutorial, something you actually built or debugged.`,
-          follow_up: `How would you handle [common failure mode for ${skill}] at scale?`,
-          good_answer_looks_like: `Mentions specific project, describes a real challenge, shows understanding of trade-offs and limitations.`,
-          red_flag_answer: `Only describes tutorial-level usage, cannot explain internals, or gives a textbook definition.`
-        }))),
-        {
-          skill: "System Design",
-          question: `Design a basic URL shortener. Walk me through your data model, API design, and how you'd handle 1 million requests per day.`,
-          follow_up: `How would you handle the same users clicking the same short link 10,000 times in 1 minute?`,
-          good_answer_looks_like: `Mentions caching, database choice rationale, handles edge cases, thinks about failure modes.`,
-          red_flag_answer: `Jumps to code immediately, ignores scale, cannot explain why they chose their database.`
-        }
-      ],
+      technical_deep_dives: (() => {
+        const FAILURE_MODES: Record<string, string> = {
+          "React": "performance issues from excessive re-renders",
+          "Next.js": "hydration mismatches between server and client",
+          "Vue": "reactivity pitfalls with deeply nested objects",
+          "Angular": "change detection performance in large component trees",
+          "Node.js": "blocking the event loop under high concurrency",
+          "Express": "unhandled promise rejections crashing the process",
+          "Tailwind CSS": "bundle size bloat in large applications",
+          "TypeScript": "type-safety gaps when integrating untyped libraries",
+          "Python": "GIL limitations in CPU-bound tasks",
+          "FastAPI": "async dependency injection deadlocks under load",
+          "Flask": "lack of async support under high traffic",
+          "Django": "N+1 query problems with the ORM",
+          "PostgreSQL": "slow queries on tables with millions of rows",
+          "MongoDB": "schema inconsistency across documents over time",
+          "Redis": "cache invalidation and memory pressure",
+          "Docker": "container networking failures in multi-service setups",
+          "Kubernetes": "pod scheduling failures during rolling deployments",
+          "AWS": "cold starts and timeout issues in Lambda functions",
+          "GraphQL": "N+1 query problems and overfetching in resolvers",
+          "WebSockets": "connection drops and reconnection logic at scale",
+          "Java": "memory leaks from unclosed resources and classloader issues",
+          "Go": "goroutine leaks and channel deadlocks",
+          "C++": "memory corruption and undefined behavior in production",
+        };
+        const getFailureMode = (s: string) =>
+          FAILURE_MODES[s] || `scaling and production failure scenarios for ${s}`;
+
+        return [
+          ...(skills.slice(0, 4).map((skill: string) => ({
+            skill,
+            question: `You listed ${skill} as a skill. Walk me through a real production problem you solved with it — not a tutorial, something you actually built or debugged.`,
+            follow_up: `How would you handle ${getFailureMode(skill)} at scale?`,
+            good_answer_looks_like: `Mentions specific project, describes a real challenge, shows understanding of trade-offs and limitations.`,
+            red_flag_answer: `Only describes tutorial-level usage, cannot explain internals, or gives a textbook definition.`
+          }))),
+          {
+            skill: "System Design",
+            question: `Design a basic URL shortener. Walk me through your data model, API design, and how you'd handle 1 million requests per day.`,
+            follow_up: `How would you handle the same users clicking the same short link 10,000 times in 1 minute?`,
+            good_answer_looks_like: `Mentions caching, database choice rationale, handles edge cases, thinks about failure modes.`,
+            red_flag_answer: `Jumps to code immediately, ignores scale, cannot explain why they chose their database.`
+          }
+        ];
+      })(),
 
       gap_probing_questions: weaknesses.length > 0 
         ? weaknesses.map((w: string) => ({
