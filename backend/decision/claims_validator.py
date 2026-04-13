@@ -95,14 +95,20 @@ def _extract_repos_for_llm(github_data: dict) -> List[Dict]:
 
 def _build_skills_context(github_data: dict) -> Dict:
     """Extract verified skills in a clean format for the prompt."""
-    # Try multiple known structures
+    # Try multiple known structures — use ALL skills, not just top_skills
+    all_skills = github_data.get("skills", [])
+    if isinstance(all_skills, dict):
+        all_skills = all_skills.get("skills", [])
+
+    # Also get top_skills as a separate list
+    top_skills = github_data.get("top_skills", [])
     verified_skills = github_data.get("verified_skills", [])
-    if not verified_skills:
-        skills_data = github_data.get("skills", {})
-        verified_skills = skills_data.get("skills", skills_data.get("verified_skills", []))
+
+    # Merge: use all skills detected (even score < 3.0) for the matrix
+    combined = all_skills or top_skills or verified_skills
 
     skill_names = []
-    for s in verified_skills:
+    for s in combined:
         if isinstance(s, dict):
             name = s.get("skill_name") or s.get("name") or s.get("skill", "")
             score = s.get("skill_score") or s.get("score", 0)
@@ -370,23 +376,25 @@ def _rule_based_validate(
         "python": ["python (backend)", "python automation", "data science",
                    "machine learning", "deep learning", "tensorflow", "opencv",
                    "streamlit", "mediapipe", "face recognition", "tensorflow / keras",
-                   "langchain", "huggingface", "openai api"],
+                   "langchain", "huggingface", "openai api", "python ai/ml"],
         "c":       ["c/c++"],
         "c++":     ["c/c++"],
         "java":    ["java"],
         "javascript": ["node.js"],
-        "typescript": ["typescript", "next.js"],
+        "typescript": ["typescript", "next.js", "react"],
         "react":   ["react", "next.js"],
         "node.js": ["node.js"],
         "flask":   ["python (backend)", "fastapi", "django"],
-        "numpy":   ["data science"],
-        "pandas":  ["data science"],
-        "opencv":  ["opencv"],
-        "nlp basics": ["machine learning", "deep learning", "huggingface"],
-        "vite":    ["react", "next.js", "typescript"],
+        "numpy":   ["data science", "machine learning", "deep learning"],
+        "pandas":  ["data science", "machine learning"],
+        "opencv":  ["opencv", "mediapipe", "face recognition", "computer vision"],
+        "machine learning": ["machine learning", "deep learning", "tensorflow", "tensorflow / keras",
+                              "huggingface", "scikit-learn", "data science", "python ai/ml"],
+        "nlp basics": ["machine learning", "deep learning", "huggingface", "openai api"],
+        "vite":    ["react", "next.js", "typescript", "tailwind css"],
         "tailwind css": ["tailwind css"],
-        "postgresql": ["sql/databases"],
-        "mongodb": ["mongodb"],
+        "postgresql": ["sql/databases", "node.js"],
+        "mongodb": ["mongodb", "node.js"],
         "git":     [],   # git is a tool; never show as unverified
         "rest apis": ["node.js", "python (backend)", "fastapi"],
         "automation": ["python automation"],
@@ -399,7 +407,17 @@ def _rule_based_validate(
         "machine learning", "deep learning", "data science", "sql/databases",
         "testing", "security", "ci/cd", "c/c++", "tensorflow / keras",
         "face recognition", "mediapipe", "huggingface", "openai api",
-        "langchain",
+        "langchain", "python ai/ml",
+        # Skills with no file evidence — DIP false positives
+        "flutter",        # No .dart files anywhere in profile
+        "rabbitmq",       # No pika usage anywhere
+        "kafka",          # No kafka usage
+        "grpc",           # No .proto files
+        "kubernetes",     # No k8s YAML
+        "terraform",      # No .tf files
+        "swift/ios",      # No .swift files
+        "react native",   # No React Native imports
+        "angular",        # No @angular/core
     }
 
     def _is_skill_verified(resume_skill: str, v_names: set, r_langs: set) -> bool:
@@ -408,6 +426,16 @@ def _rule_based_validate(
         Returns True if the resume skill is confirmed by GitHub data.
         """
         rs = resume_skill.lower().strip()
+        # 0. Special language-based unconditional verification
+        # TypeScript — if ANY repo has language: TypeScript, it's verified
+        if rs in ("typescript", "ts") and "typescript" in r_langs:
+            return True
+        # Python — if ANY repo has language: Python, Python AND its libraries are verified
+        if rs in ("python", "numpy", "pandas", "flask", "opencv", "nlp basics", "machine learning") and "python" in r_langs:
+            return True
+        # C/C++ — if any C/C++ repo exists, "C" on resume is verified
+        if rs in ("c", "c++") and ("c++" in r_langs or "c" in r_langs):
+            return True
         # 1. Direct match against DIP-detected skill names
         if rs in v_names:
             return True
@@ -575,14 +603,14 @@ def _rule_based_validate(
             "evidence": evidence,
         })
 
-    # Compute authenticity score
+    # Compute authenticity score (weighted formula, capped at 95 for rule-based)
     total = len(validations)
     if total == 0:
         auth_score = 50
     else:
-        auth_score = int(min(100, max(0,
-            (supported * 8 + partial * 4 + weak * 1) / max(1, total) * 10 + 40
-        )))
+        weighted = (supported * 3 + partial * 1.5 + weak * 0.5) / (total * 3)
+        # Scale to 40-95 range (never 100 from rule-based, that's AI's job)
+        auth_score = int(min(95, max(40, weighted * 100)))
 
     # Strengths: verified skills that appear on resume
     confirmed_strengths = []

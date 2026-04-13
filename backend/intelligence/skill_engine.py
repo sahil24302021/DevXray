@@ -558,6 +558,27 @@ SKILL_DEFINITIONS: Dict[str, Dict[str, Any]] = {
             {"name": "Comparison", "patterns": [r"compare_faces\(", r"face_distance\("], "weight": 3, "advanced": True},
         ],
     },
+    # ─── Broad Python AI/ML catch-all (v4.1 accuracy fix) ───
+    "Python AI/ML": {
+        "category": "ai_ml",
+        "file_patterns": [r"\.py$"],
+        "indicators": [
+            {"name": "AI library import", "patterns": [
+                r"import tensorflow", r"import torch", r"import cv2",
+                r"from sklearn", r"import mediapipe", r"import face_recognition",
+                r"from transformers", r"import openai", r"from langchain",
+                r"from groq", r"from gemini", r"import anthropic",
+            ], "weight": 3, "advanced": False},
+            {"name": "Model usage", "patterns": [
+                r"model\.predict", r"model\.fit", r"model\.compile",
+                r"\.generate\(", r"chat\.completions", r"ChatCompletion",
+            ], "weight": 3, "advanced": True},
+            {"name": "AI pipeline", "patterns": [
+                r"MobileNetV2", r"ResNet", r"YOLO", r"face_locations",
+                r"mp\.solutions", r"ImageDataGenerator",
+            ], "weight": 4, "advanced": True},
+        ],
+    },
 }
 
 
@@ -604,6 +625,10 @@ _DEPENDENCY_SKILL_MAP = {
     "selenium": "Python Automation",
     "streamlit": "Streamlit",
     "mediapipe": "MediaPipe", "face-recognition": "Face Recognition",
+    # Broad AI/ML catch-all mappings
+    "groq": "Python AI/ML",
+    "anthropic": "Python AI/ML",
+    "google-generativeai": "Python AI/ML",
     "face_recognition": "Face Recognition",
     # Go (go.mod)
     "github.com/gin-gonic/gin": "Go",

@@ -112,9 +112,52 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
     const github = reportData?.github_intelligence || reportData?.github_report || reportData;
     const resume = reportData?.resume_data || {};
     const score = github?.final_score ?? github?.score ?? reportData?.deep_report?.overall_score ?? 0;
-    const skills = (github?.top_skills || []).slice(0, 5).map((s: any) => 
+
+    // ── Role-based skill priority override ──
+    const ROLE_SKILL_PRIORITIES: Record<string, string[]> = {
+      "ai/ml": ["Python", "TensorFlow", "OpenCV", "Machine Learning", "Deep Learning"],
+      "full stack": ["Python", "React", "Node.js", "PostgreSQL"],
+      "ml": ["Python", "TensorFlow", "PyTorch", "OpenCV"],
+      "backend": ["Python", "Node.js", "Flask", "FastAPI", "PostgreSQL"],
+      "frontend": ["React", "TypeScript", "Next.js", "Tailwind CSS"],
+    };
+
+    const roleLower = (github?.developer_tier?.tier || "").toLowerCase();
+    const candidateRole = (resume?.current_role || "").toLowerCase();
+
+    // Find matching priority list
+    let prioritySkills: string[] = [];
+    for (const [roleKey, roleSkills] of Object.entries(ROLE_SKILL_PRIORITIES)) {
+      if (candidateRole.includes(roleKey) || roleLower.includes(roleKey)) {
+        prioritySkills = roleSkills;
+        break;
+      }
+    }
+
+    // Get all verified skill names for cross-referencing
+    const verifiedSkills = (github?.skills || github?.verified_skills || github?.top_skills || []);
+    const verifiedSkillNames = verifiedSkills.map((s: any) =>
+      typeof s === "string" ? s : s?.skill_name || s?.name || ""
+    ).filter(Boolean);
+
+    // Use priority skills if they exist in verified_skills, otherwise fall back to DIP top_skills
+    const allTopSkills = (github?.top_skills || []).slice(0, 5).map((s: any) =>
       typeof s === "string" ? s : s.skill_name || s.name || s
     ).filter(Boolean);
+
+    const deepDiveSkills = prioritySkills.length > 0
+      ? prioritySkills.filter(ps =>
+          verifiedSkillNames.some((vs: string) => vs.toLowerCase().includes(ps.toLowerCase()))
+        ).slice(0, 4)
+      : [];
+
+    // Merge: priority skills first, then fill remaining from top_skills
+    const usedSkills = new Set(deepDiveSkills.map((s: string) => s.toLowerCase()));
+    const remainingSlots = 5 - deepDiveSkills.length;
+    const fillerSkills = allTopSkills
+      .filter((s: string) => !usedSkills.has(s.toLowerCase()))
+      .slice(0, remainingSlots);
+    const skills = [...deepDiveSkills, ...fillerSkills];
     const weaknesses = (github?.weaknesses || github?.score_breakdown?.weaknesses || []).slice(0, 4);
     const redFlags = (github?.risk_flags || github?.red_flags || []).slice(0, 3).map((f: any) => {
       if (typeof f === "string") return f;
