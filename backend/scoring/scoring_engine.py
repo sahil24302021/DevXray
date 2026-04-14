@@ -739,6 +739,21 @@ def compute_final_score(
 
     skill_depth_normalized = min(skill_depth * 10 + ci_depth_bonus, 100)
 
+    # ── BUG 1 FIX: AI/ML Category Boost for AI Application Developers ──
+    # DIP measures ML *construction* depth (training loops, custom losses).
+    # But AI App Developers build apps *using* AI APIs (groq, face_recognition, MobileNetV2).
+    # Both are legitimate. When Python dominates and ai_ml is present, boost ai_ml.
+    if repos and skill_summary.get("ai_ml"):
+        repo_langs = [r.get("language", "") for r in repos if r.get("language")]
+        python_count = sum(1 for lang in repo_langs if lang and lang.lower() == "python")
+        if python_count >= 3 or (repo_langs and python_count / max(len(repo_langs), 1) >= 0.35):
+            old_ai_ml = skill_summary["ai_ml"]
+            skill_summary["ai_ml"] = min(10.0, skill_summary["ai_ml"] * 1.3)
+            log.info(
+                f"[Scoring] AI/ML boost applied: ai_ml {old_ai_ml:.1f} → {skill_summary['ai_ml']:.1f} "
+                f"(Python repos: {python_count}/{len(repo_langs)})"
+            )
+
     # ── AUTHENTICITY NORMALIZATION (the big fix) ──
     authenticity_normalized = normalize_authenticity(authenticity, repos, commits)
 

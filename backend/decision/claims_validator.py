@@ -418,6 +418,11 @@ def _rule_based_validate(
         "swift/ios",      # No .swift files
         "react native",   # No React Native imports
         "angular",        # No @angular/core
+        # FIX Bugs 3,4: High false-positive — needs explicit dependency to surface
+        "elasticsearch",  # No @elastic dependency in any repo
+        "websockets",     # Protocol label, not a technology skill
+        "redis",          # Needs redis package in requirements.txt/package.json
+        "graphql",        # High false positive from schema file mentions
     }
 
     def _is_skill_verified(resume_skill: str, v_names: set, r_langs: set) -> bool:
@@ -528,8 +533,15 @@ def _rule_based_validate(
                      "by", "is", "was", "are", "were", "be", "been", "have", "has", "had",
                      "using", "used", "built", "created", "developed", "implemented", "designed",
                      "integrated", "added", "include", "that", "this", "which", "their", "its"}
+        # FIX U4: Technical stopwords — common English words that inflate match ratios
+        # "Implemented real-time emotion detection" should NOT match on "real" and "time"
+        tech_stopwords = {"real", "time", "based", "system", "simple", "basic",
+                          "project", "tool", "feature", "platform", "application",
+                          "build", "data", "model", "service", "server", "client",
+                          "user", "test", "file", "code", "app", "web", "api"}
         words = _re.findall(r'\b[a-z][a-z0-9+#.]{2,}\b', claim_lower)
-        keywords = [w for w in words if w not in stopwords]
+        keywords = [w for w in words if w not in stopwords
+                    and (w not in tech_stopwords or len(w) >= 6)]
 
         if not keywords:
             continue

@@ -387,6 +387,7 @@ def _run_core_pipeline(
         commits=commits,
         events=events,
         proof=proof,
+        account_created=profile.get("created_at", ""),
     )
     cross_repo = analyze_cross_repo_patterns(code_results, proof)
     consistency["cross_repo_intelligence"] = cross_repo

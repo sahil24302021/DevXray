@@ -681,12 +681,22 @@ export default function ResumeReportPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
               {[
                 { title: "Verified by GitHub", items: claims_validation.skill_match_analysis.verified_skills, color: "emerald" },
-                { title: "Unverified (claimed)", items: claims_validation.skill_match_analysis.unverified_skills, color: "amber" },
+                { title: "Not Yet on GitHub", items: claims_validation.skill_match_analysis.unverified_skills, color: "amber", tooltip: "Skill is on the resume but no matching code found in public repos. Could be private repos, coursework, or a skill not yet applied in projects." },
                 { title: "Hidden Skills (in GitHub, not resume)", items: claims_validation.skill_match_analysis.hidden_skills, color: "cyan" },
               ].map((group) => (
                 group.items?.length > 0 && (
                   <div key={group.title} className={`p-4 rounded-xl border border-${group.color}-500/20 bg-${group.color}-500/5`}>
-                    <span className={`text-[10px] uppercase tracking-widest text-${group.color}-400 block mb-2`}>{group.title}</span>
+                    <span className={`text-[10px] uppercase tracking-widest text-${group.color}-400 block mb-2`}>
+                      {group.title}
+                      {(group as any).tooltip && (
+                        <span className="relative group/tip ml-1 cursor-help">
+                          <span className="text-slate-500"> ⓘ</span>
+                          <span className="hidden group-hover/tip:block absolute left-0 top-full mt-1 w-56 p-2 rounded-lg text-[10px] text-slate-300 leading-relaxed z-50" style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            {(group as any).tooltip}
+                          </span>
+                        </span>
+                      )}
+                    </span>
                     <div className="flex flex-wrap gap-1.5">
                       {group.items.map((s: string, i: number) => (
                         <span key={i} className={`text-xs px-2 py-1 rounded-md bg-${group.color}-500/10 text-${group.color}-300 border border-${group.color}-500/20`}>{s}</span>
@@ -953,10 +963,29 @@ export default function ResumeReportPage() {
               ? (github_intelligence?.authenticity_score ?? 0)
               : (github_intelligence?.authenticity_score ?? 0) * 100)
           );
-          const topSkillNames = (github_intelligence?.top_skills ?? [])
+          // FIX Bug 2: Prioritize dominant language + AI skills in executive summary
+          // Before: just used top_skills[0..2] which would be React/Tailwind/Node.js
+          // Now: surface the dominant repo language first, then AI/ML skills, then top_skills
+          const topLangs = github_intelligence?.top_languages ?? [];
+          const allSkills = github_intelligence?.notable_skills ?? github_intelligence?.top_skills ?? [];
+          const aiSkillNames = allSkills
+            .filter((s: any) => {
+              const name = (typeof s === "string" ? s : s?.skill_name || "").toLowerCase();
+              return ["python ai/ml", "tensorflow", "opencv", "mediapipe", "face recognition",
+                      "machine learning", "deep learning"].includes(name);
+            })
+            .map((s: any) => typeof s === "string" ? s : s?.skill_name || "");
+          const regularSkillNames = (github_intelligence?.top_skills ?? [])
             .slice(0, 3)
             .map((s: any) => typeof s === "string" ? s : (s?.skill_name || s?.name || ""))
-            .filter(Boolean).join(", ") || "their claimed technologies";
+            .filter(Boolean);
+          // Compose: dominant language first, then AI skills, then regular skills
+          const prioritizedSkills = [
+            ...(topLangs.length > 0 ? [topLangs[0]] : []),
+            ...aiSkillNames.slice(0, 2),
+            ...regularSkillNames,
+          ].filter((v, i, a) => v && a.indexOf(v) === i).slice(0, 4);
+          const topSkillNames = prioritizedSkills.join(", ") || "their claimed technologies";
 
           const displaySummary = summaryIsEmpty
             ? `${cName} is a ${devTier} developer scoring ${dipScore}/100 on the DevXray Intelligence Engine. ` +
@@ -1036,8 +1065,9 @@ export default function ResumeReportPage() {
               (skillNames.some((s: string) =>
                 ["tensorflow","pytorch","opencv","pandas","numpy","scikit-learn",
                  "machine learning","deep learning","mediapipe","huggingface",
-                 "openai api","langchain","face recognition","data science"].includes(s))
-                ? Math.min(Math.round(dipS * 0.10), 10) : 0),
+                 "openai api","langchain","face recognition","data science",
+                 "python ai/ml"].includes(s))
+                ? Math.min(Math.round(dipS * 0.12), 10) : 0),
 
             // DevOps: use DIP "devops" category
             "DevOps": avgCategories("devops") ||

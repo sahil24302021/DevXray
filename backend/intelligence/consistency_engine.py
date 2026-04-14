@@ -469,6 +469,7 @@ def run_consistency_engine(
     commits: List[Dict[str, Any]],
     events: List[Dict[str, Any]],
     proof: Optional[ProofCollector] = None,
+    account_created: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Master function: compute deep consistency score.
@@ -563,6 +564,36 @@ def run_consistency_engine(
         1,
     )
     consistency_score = max(0, min(100, consistency_score))
+
+    # ─── Student / Early-Career Calibration (Bug 6 FIX) ───
+    # Accounts < 18 months with increasing activity should not be penalized.
+    # A student who starts sparse and gets more active is showing a POSITIVE learning
+    # trajectory — penalizing that discourages exactly the behavior we want to reward.
+    if account_created:
+        account_dt = _parse_datetime(account_created)
+        if account_dt:
+            account_age_months = (datetime.now(timezone.utc) - account_dt).days / 30.0
+            if account_age_months < 18:
+                # Check if recent activity exceeds older activity (upward trend)
+                now = datetime.now(timezone.utc)
+                recent_cutoff = now - timedelta(days=180)  # last 6 months
+                older_cutoff = now - timedelta(days=365)    # 6-12 months ago
+
+                commit_dates = [_parse_datetime(c.get("date", "")) for c in commits]
+                commit_dates = [d for d in commit_dates if d is not None]
+
+                recent_commits = sum(1 for d in commit_dates if d >= recent_cutoff)
+                older_commits = sum(1 for d in commit_dates if older_cutoff <= d < recent_cutoff)
+
+                if recent_commits > older_commits:  # Activity is increasing
+                    old_score = consistency_score
+                    consistency_score = max(consistency_score, 50)  # Floor at 50
+                    if consistency_score != old_score:
+                        log.info(
+                            f"[Consistency] Student calibration applied: "
+                            f"{old_score:.1f} → {consistency_score:.1f} "
+                            f"(account {account_age_months:.0f}mo, recent={recent_commits} > older={older_commits})"
+                        )
 
     # ─── Risk Flags ───
     risk_flags: List[Dict[str, str]] = []

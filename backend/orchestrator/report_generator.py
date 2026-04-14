@@ -157,7 +157,8 @@ def generate_report(
 
     # Strengths & weaknesses now receive normalized auth_pct (0-100)
     strengths = _generate_strengths(
-        code_analysis, skills, auth_pct, consistency, growth, scoring
+        code_analysis, skills, auth_pct, consistency, growth, scoring,
+        repos_param=repos_param,
     )
     weaknesses = _generate_weaknesses(
         code_analysis, skills, auth_pct, consistency, growth
@@ -256,6 +257,8 @@ def generate_report(
         "skills": skills.get("skills", []),
         "skill_summary": skills.get("skill_summary", {}),
         "top_skills": skills.get("top_skills", []),
+        # FIX U2: Notable skills at threshold ≥2.0 (top_skills uses ≥3.0 and misses real skills like TensorFlow at 2.0)
+        "notable_skills": [s for s in skills.get("skills", []) if s.get("skill_score", 0) >= 2.0],
         "truth_analysis": truth,
         "authenticity": {
             # FIX: Store as 0-100 percentage, not 0-1 fraction
@@ -561,9 +564,35 @@ def _generate_strengths(
     consistency: Dict,
     growth: Dict,
     scoring: Dict,
+    repos_param: Optional[List[Dict[str, Any]]] = None,
 ) -> List[str]:
     """Generate strengths list from engine outputs."""
     strengths = []
+
+    # FIX Bug 2: Surface dominant language if ≥35% of repos use it
+    # This ensures Python-dominant profiles say "Python" not just "React"
+    if repos_param:
+        repo_langs = [r.get("language", "") for r in repos_param if r.get("language")]
+        if repo_langs:
+            lang_counter: Counter = Counter(repo_langs)
+            top_lang, top_count = lang_counter.most_common(1)[0]
+            lang_pct = int(top_count / max(len(repo_langs), 1) * 100)
+            if top_lang and lang_pct >= 35:
+                strengths.append(f"{top_lang}-dominant profile — {lang_pct}% of repositories")
+
+    # FIX Bug 2: If AI/ML skills exist in top_skills, surface them prominently
+    # even if a frontend skill scores higher on DIP
+    top = skills.get("top_skills", [])
+    ai_skills_in_top = [s for s in top if s.get("category", "") in ("ml", "ai_ml")
+                        or "ai" in s.get("skill_name", "").lower()
+                        or "opencv" in s.get("skill_name", "").lower()]
+    if ai_skills_in_top:
+        ai_skill = ai_skills_in_top[0]
+        ai_score = ai_skill.get('skill_score', 0)
+        score_display = ai_skill.get("formatted_score", f"{ai_score}/10")
+        strengths.append(
+            f"AI/ML capability confirmed: {ai_skill['skill_name']} — score: {score_display}"
+        )
 
     cq = code.get("code_quality_score", 0)
     if cq >= 70:
