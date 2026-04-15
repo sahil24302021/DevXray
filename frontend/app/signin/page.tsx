@@ -8,18 +8,18 @@ import { signInWithEmail, signInWithGoogle, getCurrentUser } from "@/lib/auth";
 function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // ✅ Default to landing page, not dashboard
-  const redirect = searchParams.get("redirect") || "/";
+  // ✅ Default to dashboard after sign in
+  const redirect = searchParams.get("redirect") || "/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ If already signed in, go to landing page
+  // ✅ If already signed in, go to dashboard
   useEffect(() => {
     getCurrentUser().then((user) => {
-      if (user) router.replace("/");
+      if (user) router.replace("/dashboard");
     });
   }, [router]);
 

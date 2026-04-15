@@ -127,6 +127,19 @@ export default function PricingPage() {
     getCurrentUser().then(u => setIsLoggedIn(!!u));
   }, []);
 
+  // Universal handler for all plan CTA buttons
+  const handlePlanClick = async (planKey: string) => {
+    // Re-check auth at click time (avoids race condition)
+    const user = await getCurrentUser();
+    if (user) {
+      // User is logged in → show Razorpay paywall modal
+      setShowPaywall(true);
+    } else {
+      // Guest → send to signup
+      window.location.href = `/signup?plan=${planKey}`;
+    }
+  };
+
   const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.12, delayChildren: 0.1 } } };
   const fadeUp = { hidden: { opacity: 0, y: 30 }, show: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] as const } } };
 
@@ -228,31 +241,28 @@ export default function PricingPage() {
                 </ul>
 
                 {key === "free" && (
-                  <Link href="/signup" className="block w-full py-3.5 text-center rounded-xl bg-white/[0.05] text-white border border-white/[0.08] hover:bg-white/[0.08] text-sm font-bold transition-all no-underline">
+                  <button
+                    onClick={() => handlePlanClick("free")}
+                    className="block w-full py-3.5 text-center rounded-xl bg-white/[0.05] text-white border border-white/[0.08] hover:bg-white/[0.08] text-sm font-bold transition-all cursor-pointer"
+                  >
                     Start Free
-                  </Link>
+                  </button>
                 )}
                 {key === "starter" && (
-                  isLoggedIn && userProfile ? (
-                    <button onClick={() => setShowPaywall(true)} className="block w-full py-3.5 text-center rounded-xl border border-[#cdff00]/40 text-[#cdff00] text-sm font-bold hover:bg-[#cdff00]/5 transition-all cursor-pointer">
-                      Get Starter →
-                    </button>
-                  ) : (
-                    <Link href="/signup?plan=starter" className="block w-full py-3.5 text-center rounded-xl border border-[#cdff00]/40 text-[#cdff00] text-sm font-bold hover:bg-[#cdff00]/5 transition-all no-underline">
-                      Get Starter →
-                    </Link>
-                  )
+                  <button
+                    onClick={() => handlePlanClick("starter")}
+                    className="block w-full py-3.5 text-center rounded-xl border border-[#cdff00]/40 text-[#cdff00] text-sm font-bold hover:bg-[#cdff00]/5 transition-all cursor-pointer"
+                  >
+                    Get Starter →
+                  </button>
                 )}
                 {key === "pro" && (
-                  isLoggedIn && userProfile ? (
-                    <button onClick={() => setShowPaywall(true)} className="block w-full py-3.5 text-center rounded-xl bg-[#cdff00] text-[#050505] text-sm font-black hover:shadow-[0_0_30px_rgba(205,255,0,0.3)] hover:-translate-y-0.5 transition-all cursor-pointer">
-                      Upgrade to Pro →
-                    </button>
-                  ) : (
-                    <Link href="/signup?plan=pro" className="block w-full py-3.5 text-center rounded-xl bg-[#cdff00] text-[#050505] text-sm font-black hover:shadow-[0_0_30px_rgba(205,255,0,0.3)] hover:-translate-y-0.5 transition-all no-underline">
-                      Upgrade to Pro →
-                    </Link>
-                  )
+                  <button
+                    onClick={() => handlePlanClick("pro")}
+                    className="block w-full py-3.5 text-center rounded-xl bg-[#cdff00] text-[#050505] text-sm font-black hover:shadow-[0_0_30px_rgba(205,255,0,0.3)] hover:-translate-y-0.5 transition-all cursor-pointer"
+                  >
+                    Upgrade to Pro →
+                  </button>
                 )}
                 {key === "enterprise" && (
                   <a href="mailto:sales@devxray.ai" className="block w-full py-3.5 text-center rounded-xl bg-white/[0.05] text-white border border-white/[0.08] hover:bg-white/[0.08] text-sm font-bold transition-all no-underline">
@@ -384,18 +394,18 @@ export default function PricingPage() {
             Start free. No credit card required. Upgrade only when you&apos;re convinced.
           </p>
           <div className="flex items-center justify-center gap-4 flex-wrap">
-            <Link href="/signup" className="px-8 py-4 rounded-xl bg-[#cdff00] text-black font-black hover:bg-[#b8e600] transition-all text-sm no-underline">
+            <button
+              onClick={() => handlePlanClick("free")}
+              className="px-8 py-4 rounded-xl bg-[#cdff00] text-black font-black hover:bg-[#b8e600] transition-all text-sm cursor-pointer"
+            >
               Start for Free →
-            </Link>
-            {isLoggedIn && userProfile ? (
-              <button onClick={() => setShowPaywall(true)} className="px-8 py-4 rounded-xl border border-white/20 text-white font-semibold hover:bg-white/5 transition-all text-sm cursor-pointer">
-                Get Pro — ₹2,499/mo
-              </button>
-            ) : (
-              <Link href="/signup?plan=pro" className="px-8 py-4 rounded-xl border border-white/20 text-white font-semibold hover:bg-white/5 transition-all text-sm no-underline">
-                Get Pro — ₹2,499/mo
-              </Link>
-            )}
+            </button>
+            <button
+              onClick={() => handlePlanClick("pro")}
+              className="px-8 py-4 rounded-xl border border-white/20 text-white font-semibold hover:bg-white/5 transition-all text-sm cursor-pointer"
+            >
+              Get Pro — ₹2,499/mo
+            </button>
           </div>
         </motion.div>
       </section>
@@ -412,13 +422,13 @@ export default function PricingPage() {
         </div>
       </footer>
 
-      {showPaywall && userProfile && (
+      {showPaywall && (
         <PaywallModal
           isOpen={showPaywall}
           onClose={() => setShowPaywall(false)}
-          userId={userProfile.id}
-          userEmail={userProfile.email}
-          userName={userProfile.full_name}
+          userId={userProfile?.id || ""}
+          userEmail={userProfile?.email || ""}
+          userName={userProfile?.full_name || ""}
           trigger="pricing"
         />
       )}

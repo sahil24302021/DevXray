@@ -33,6 +33,6 @@ export async function GET(request: Request) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // ✅ Redirect to landing page so user lands on the hero with the analyze input
-  return NextResponse.redirect(`${origin}/`)
+  // ✅ Redirect to dashboard after auth
+  return NextResponse.redirect(`${origin}/dashboard`)
 }
