@@ -17,8 +17,6 @@ import LoadingState from "@/components/LoadingState";
 import NavAuthButtons from "@/components/NavAuthButtons";
 import { hasGuestScansRemaining, incrementGuestScan } from "@/lib/scan-gate";
 import { getCurrentUser } from "@/lib/auth";
-import { useProfile } from "@/lib/useProfile";
-import { canScan } from "@/lib/plans";
 import PaywallModal from "@/components/PaywallModal";
 
 /* ═══════════════════════════════════════════════════════════
@@ -472,9 +470,45 @@ export default function Home() {
   }, [scrollYProgress]);
 
   // Paywall state
-  const { profile: userProfile, incrementScan } = useProfile();
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallTrigger, setPaywallTrigger] = useState<"github" | "resume">("github");
+  const [paywallUserId, setPaywallUserId] = useState("");
+  const [paywallUserEmail, setPaywallUserEmail] = useState("");
+  const [paywallUserName, setPaywallUserName] = useState("");
+
+  // Helper: get or create profile directly from Supabase (no React state dependency)
+  const getOrCreateProfile = async (userId: string, userEmail: string, userName: string) => {
+    const { supabase, isSupabaseAvailable } = await import("@/lib/db");
+    if (!isSupabaseAvailable || !supabase) return null;
+
+    let { data } = await supabase.from("profiles").select("*").eq("id", userId).single();
+
+    if (!data) {
+      const { data: inserted } = await supabase
+        .from("profiles")
+        .upsert({
+          id: userId,
+          email: userEmail,
+          full_name: userName,
+          plan: "free",
+          github_scans_used: 0,
+          resume_scans_used: 0,
+          subscription_status: "inactive",
+        })
+        .select()
+        .single();
+      data = inserted;
+    }
+    return data;
+  };
+
+  // Helper: increment scan count directly in Supabase
+  const directIncrementScan = async (userId: string, type: "github" | "resume", currentCount: number) => {
+    const { supabase, isSupabaseAvailable } = await import("@/lib/db");
+    if (!isSupabaseAvailable || !supabase) return;
+    const field = type === "github" ? "github_scans_used" : "resume_scans_used";
+    await supabase.from("profiles").update({ [field]: currentCount + 1 }).eq("id", userId);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -483,14 +517,25 @@ export default function Home() {
 
     const user = await getCurrentUser();
 
-    // Logged-in user: check plan limits
-    if (user && userProfile) {
-      if (!canScan(userProfile.plan, userProfile.github_scans_used, userProfile.resume_scans_used, "github")) {
-        setPaywallTrigger("github");
-        setShowPaywall(true);
-        return;
+    // Logged-in user: check plan limits directly from Supabase
+    if (user) {
+      const profile = await getOrCreateProfile(user.id, user.email, user.fullName);
+      if (profile) {
+        const plan = profile.plan || "free";
+        const used = profile.github_scans_used || 0;
+        const limit = plan === "free" ? 2 : plan === "starter" ? 20 : plan === "pro" ? 100 : Infinity;
+
+        if (used >= limit) {
+          setPaywallTrigger("github");
+          setPaywallUserId(user.id);
+          setPaywallUserEmail(user.email);
+          setPaywallUserName(user.fullName);
+          setShowPaywall(true);
+          return;
+        }
+        // Increment scan count BEFORE navigating
+        await directIncrementScan(user.id, "github", used);
       }
-      await incrementScan("github");
     }
 
     // Guest: check guest scan limit
@@ -511,12 +556,22 @@ export default function Home() {
   const handleFileDrop = async (file: File) => {
     const user = await getCurrentUser();
 
-    // Logged-in user: check plan limits
-    if (user && userProfile) {
-      if (!canScan(userProfile.plan, userProfile.github_scans_used, userProfile.resume_scans_used, "resume")) {
-        setPaywallTrigger("resume");
-        setShowPaywall(true);
-        return;
+    // Logged-in user: check plan limits directly from Supabase
+    if (user) {
+      const profile = await getOrCreateProfile(user.id, user.email, user.fullName);
+      if (profile) {
+        const plan = profile.plan || "free";
+        const used = profile.resume_scans_used || 0;
+        const limit = plan === "free" ? 2 : plan === "starter" ? 20 : plan === "pro" ? 100 : Infinity;
+
+        if (used >= limit) {
+          setPaywallTrigger("resume");
+          setPaywallUserId(user.id);
+          setPaywallUserEmail(user.email);
+          setPaywallUserName(user.fullName);
+          setShowPaywall(true);
+          return;
+        }
       }
     }
 
@@ -546,7 +601,10 @@ export default function Home() {
       sessionStorage.setItem("resume_report_data", JSON.stringify(result));
 
       if (!user) incrementGuestScan();
-      if (user && userProfile) await incrementScan("resume");
+      if (user) {
+        const profile = await getOrCreateProfile(user.id, user.email, user.fullName);
+        if (profile) await directIncrementScan(user.id, "resume", profile.resume_scans_used || 0);
+      }
       router.push("/report/resume");
     } catch (e: any) {
       alert(e.message || "Failed to analyze resume");
@@ -1481,13 +1539,13 @@ export default function Home() {
       {/* ═══════════════════════════════════════════════════
           PAYWALL MODAL (for logged-in users who hit plan limits)
           ═══════════════════════════════════════════════════ */}
-      {showPaywall && userProfile && (
+      {showPaywall && (
         <PaywallModal
           isOpen={showPaywall}
           onClose={() => setShowPaywall(false)}
-          userId={userProfile.id}
-          userEmail={userProfile.email}
-          userName={userProfile.full_name}
+          userId={paywallUserId}
+          userEmail={paywallUserEmail}
+          userName={paywallUserName}
           trigger={paywallTrigger}
         />
       )}

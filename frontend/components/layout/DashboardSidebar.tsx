@@ -76,12 +76,13 @@ const navItems = [
 
 const PLAN_COLORS: Record<string, string> = {
   free: "#555",
+  starter: "#cdff00",
   pro: "#cdff00",
   enterprise: "#a78bfa",
 };
 
 interface SidebarProps {
-  plan?: "free" | "pro" | "enterprise";
+  plan?: "free" | "starter" | "pro" | "enterprise";
   userName?: string;
   userEmail?: string;
   scansUsed?: number;
@@ -89,11 +90,11 @@ interface SidebarProps {
 }
 
 export default function DashboardSidebar({
-  plan = "pro",
+  plan = "free",
   userName: defaultName = "Developer",
   userEmail: defaultEmail = "",
   scansUsed: propScansUsed,
-  scansLimit = 100,
+  scansLimit = 2,
 }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);

@@ -3,9 +3,10 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useProfile } from "./useProfile";
 import { canScan } from "./plans";
+import { getCurrentUser } from "./auth";
 
 export function useScanGate() {
   const { profile, loading, incrementScan, refetch } = useProfile();
@@ -14,31 +15,40 @@ export function useScanGate() {
     "github"
   );
 
-  const checkAndScan = async (
-    type: "github" | "resume",
-    onAllowed: () => Promise<void>
-  ) => {
-    // No profile = not logged in = redirect to auth
-    if (!profile && !loading) {
-      window.location.href = "/signin";
-      return;
-    }
+  const checkAndScan = useCallback(
+    async (type: "github" | "resume", onAllowed: () => Promise<void>) => {
+      // First, check if user is even logged in
+      const user = await getCurrentUser();
+      if (!user) {
+        window.location.href = "/signin";
+        return;
+      }
 
-    // Check limits
-    const plan = profile?.plan ?? "free";
-    const githubUsed = profile?.github_scans_used ?? 0;
-    const resumeUsed = profile?.resume_scans_used ?? 0;
+      // If profile hasn't loaded yet, try to refetch it
+      let currentProfile = profile;
+      if (!currentProfile && !loading) {
+        await refetch();
+        // Small delay to let state update
+        await new Promise((r) => setTimeout(r, 200));
+      }
 
-    if (!canScan(plan, githubUsed, resumeUsed, type)) {
-      setPaywallTrigger(type);
-      setShowPaywall(true);
-      return;
-    }
+      // Use the profile if available, otherwise assume free plan with 0 usage
+      const plan = currentProfile?.plan ?? "free";
+      const githubUsed = currentProfile?.github_scans_used ?? 0;
+      const resumeUsed = currentProfile?.resume_scans_used ?? 0;
 
-    // Allowed — run scan and increment counter
-    await onAllowed();
-    await incrementScan(type);
-  };
+      if (!canScan(plan, githubUsed, resumeUsed, type)) {
+        setPaywallTrigger(type);
+        setShowPaywall(true);
+        return;
+      }
+
+      // Allowed — run scan and increment counter
+      await onAllowed();
+      await incrementScan(type);
+    },
+    [profile, loading, incrementScan, refetch]
+  );
 
   return {
     checkAndScan,
