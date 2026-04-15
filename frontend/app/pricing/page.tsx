@@ -6,6 +6,8 @@ import { useState, useRef, useEffect } from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { PLANS } from "@/lib/plans";
 import Script from "next/script";
+import { useProfile } from "@/lib/useProfile";
+import PaywallModal from "@/components/PaywallModal";
 
 /* ═══════════════════════════════════════════════════════════
    PARTICLE FIELD 
@@ -118,6 +120,8 @@ const SOCIAL_PROOF = [
    ═══════════════════════════════════════════════════════════ */
 export default function PricingPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { profile: userProfile } = useProfile();
+  const [showPaywall, setShowPaywall] = useState(false);
 
   useEffect(() => {
     getCurrentUser().then(u => setIsLoggedIn(!!u));
@@ -229,14 +233,26 @@ export default function PricingPage() {
                   </Link>
                 )}
                 {key === "starter" && (
-                  <Link href="/signup?plan=starter" className="block w-full py-3.5 text-center rounded-xl border border-[#cdff00]/40 text-[#cdff00] text-sm font-bold hover:bg-[#cdff00]/5 transition-all no-underline">
-                    Get Starter →
-                  </Link>
+                  isLoggedIn && userProfile ? (
+                    <button onClick={() => setShowPaywall(true)} className="block w-full py-3.5 text-center rounded-xl border border-[#cdff00]/40 text-[#cdff00] text-sm font-bold hover:bg-[#cdff00]/5 transition-all cursor-pointer">
+                      Get Starter →
+                    </button>
+                  ) : (
+                    <Link href="/signup?plan=starter" className="block w-full py-3.5 text-center rounded-xl border border-[#cdff00]/40 text-[#cdff00] text-sm font-bold hover:bg-[#cdff00]/5 transition-all no-underline">
+                      Get Starter →
+                    </Link>
+                  )
                 )}
                 {key === "pro" && (
-                  <Link href="/signup?plan=pro" className="block w-full py-3.5 text-center rounded-xl bg-[#cdff00] text-[#050505] text-sm font-black hover:shadow-[0_0_30px_rgba(205,255,0,0.3)] hover:-translate-y-0.5 transition-all no-underline">
-                    Upgrade to Pro →
-                  </Link>
+                  isLoggedIn && userProfile ? (
+                    <button onClick={() => setShowPaywall(true)} className="block w-full py-3.5 text-center rounded-xl bg-[#cdff00] text-[#050505] text-sm font-black hover:shadow-[0_0_30px_rgba(205,255,0,0.3)] hover:-translate-y-0.5 transition-all cursor-pointer">
+                      Upgrade to Pro →
+                    </button>
+                  ) : (
+                    <Link href="/signup?plan=pro" className="block w-full py-3.5 text-center rounded-xl bg-[#cdff00] text-[#050505] text-sm font-black hover:shadow-[0_0_30px_rgba(205,255,0,0.3)] hover:-translate-y-0.5 transition-all no-underline">
+                      Upgrade to Pro →
+                    </Link>
+                  )
                 )}
                 {key === "enterprise" && (
                   <a href="mailto:sales@devxray.ai" className="block w-full py-3.5 text-center rounded-xl bg-white/[0.05] text-white border border-white/[0.08] hover:bg-white/[0.08] text-sm font-bold transition-all no-underline">
@@ -371,9 +387,15 @@ export default function PricingPage() {
             <Link href="/signup" className="px-8 py-4 rounded-xl bg-[#cdff00] text-black font-black hover:bg-[#b8e600] transition-all text-sm no-underline">
               Start for Free →
             </Link>
-            <Link href="/signup?plan=pro" className="px-8 py-4 rounded-xl border border-white/20 text-white font-semibold hover:bg-white/5 transition-all text-sm no-underline">
-              Get Pro — ₹2,499/mo
-            </Link>
+            {isLoggedIn && userProfile ? (
+              <button onClick={() => setShowPaywall(true)} className="px-8 py-4 rounded-xl border border-white/20 text-white font-semibold hover:bg-white/5 transition-all text-sm cursor-pointer">
+                Get Pro — ₹2,499/mo
+              </button>
+            ) : (
+              <Link href="/signup?plan=pro" className="px-8 py-4 rounded-xl border border-white/20 text-white font-semibold hover:bg-white/5 transition-all text-sm no-underline">
+                Get Pro — ₹2,499/mo
+              </Link>
+            )}
           </div>
         </motion.div>
       </section>
@@ -389,6 +411,17 @@ export default function PricingPage() {
           </p>
         </div>
       </footer>
+
+      {showPaywall && userProfile && (
+        <PaywallModal
+          isOpen={showPaywall}
+          onClose={() => setShowPaywall(false)}
+          userId={userProfile.id}
+          userEmail={userProfile.email}
+          userName={userProfile.full_name}
+          trigger="pricing"
+        />
+      )}
     </div>
   );
 }

@@ -14,7 +14,7 @@ interface PaywallModalProps {
   userId: string;
   userEmail: string;
   userName: string;
-  trigger: "github" | "resume";
+  trigger?: "github" | "resume" | "pricing";
 }
 
 declare global {
@@ -124,22 +124,35 @@ export default function PaywallModal({
             >
               {/* Header */}
               <div className="relative p-8 pb-6 text-center border-b border-white/[0.06]">
-                <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#cdff00]/30 bg-[#cdff00]/5 text-[#cdff00] text-xs font-semibold mb-4">
-                  🔒 FREE LIMIT REACHED
-                </div>
-                <h2
-                  className="font-bold text-3xl text-white mb-2"
-                  style={{ fontFamily: "var(--font-syne)" }}
-                >
-                  You&apos;ve used your{" "}
-                  {trigger === "github"
-                    ? "2 free GitHub scans"
-                    : "2 free resume scans"}
-                </h2>
-                <p className="text-[#777] text-sm max-w-md mx-auto">
-                  Upgrade to keep screening candidates. DevXray finds red
-                  flags in seconds that take hours to uncover manually.
-                </p>
+                {trigger === "pricing" ? (
+                  <>
+                    <h2 className="font-bold text-3xl text-white mb-2" style={{ fontFamily: "var(--font-syne)" }}>
+                      Upgrade your plan
+                    </h2>
+                    <p className="text-[#777] text-sm max-w-md mx-auto">
+                      Get full access to DevXray's reporting, CSV uploads, and comparison features.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[#cdff00]/30 bg-[#cdff00]/5 text-[#cdff00] text-xs font-semibold mb-4">
+                      🔒 FREE LIMIT REACHED
+                    </div>
+                    <h2
+                      className="font-bold text-3xl text-white mb-2"
+                      style={{ fontFamily: "var(--font-syne)" }}
+                    >
+                      You&apos;ve used your{" "}
+                      {trigger === "resume"
+                        ? "2 free resume scans"
+                        : "2 free GitHub scans"}
+                    </h2>
+                    <p className="text-[#777] text-sm max-w-md mx-auto">
+                      Upgrade to keep screening candidates. DevXray finds red
+                      flags in seconds that take hours to uncover manually.
+                    </p>
+                  </>
+                )}
                 <button
                   onClick={onClose}
                   className="absolute top-6 right-6 text-[#555] hover:text-white transition-colors text-xl cursor-pointer"
