@@ -44,13 +44,15 @@ export default function PaywallModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan, userId }),
       });
-      const { orderId, amount, currency } = await res.json();
+      const data = await res.json();
 
-      if (!orderId) {
-        setError("Failed to create payment order. Try again.");
+      if (!data.orderId) {
+        setError(data.error || "Failed to create payment order. Try again.");
         setLoading(null);
         return;
       }
+
+      const { orderId, amount, currency } = data;
 
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
