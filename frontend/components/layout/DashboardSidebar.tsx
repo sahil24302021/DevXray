@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import { getCurrentUser, signOut, onAuthStateChange, type AuthUser } from "@/lib/auth";
+import { useProfile } from "@/lib/useProfile";
+import { PLANS } from "@/lib/plans";
 
 
 // ── Icons ──────────────────────────────────
@@ -114,21 +116,12 @@ export default function DashboardSidebar({
   const displayName = user?.fullName || user?.firstName || defaultName;
   const displayEmail = user?.email || defaultEmail;
 
-  // Real scan counter from localStorage
-  const [scansUsed, setScansUsed] = useState(propScansUsed ?? 0);
-  useEffect(() => {
-    if (propScansUsed !== undefined) return; // prop overrides
-    const stored = parseInt(localStorage.getItem("devxray_scans_used") || "0", 10);
-    setScansUsed(stored);
-    // Listen for storage changes from other tabs
-    const handler = () => {
-      setScansUsed(parseInt(localStorage.getItem("devxray_scans_used") || "0", 10));
-    };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  }, [propScansUsed]);
-
-  const usedPct = Math.round((scansUsed / scansLimit) * 100);
+  // Real plan data from profile
+  const { profile: userProfile } = useProfile();
+  const actualPlan = userProfile?.plan ?? plan;
+  const actualScansUsed = userProfile?.github_scans_used ?? propScansUsed ?? 0;
+  const actualScansLimit = PLANS[actualPlan]?.github_scans === Infinity ? 999 : (PLANS[actualPlan]?.github_scans ?? scansLimit);
+  const usedPct = Math.round((actualScansUsed / actualScansLimit) * 100);
 
 
   const SidebarContent = () => (
@@ -212,7 +205,7 @@ export default function DashboardSidebar({
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] text-[#666]">Monthly Scans</span>
               <span className="text-[11px] font-bold" style={{ color: usedPct > 80 ? "#fb7185" : "#cdff00" }}>
-                {scansUsed}/{scansLimit}
+                {actualScansUsed}/{actualScansLimit === 999 ? "∞" : actualScansLimit}
               </span>
             </div>
             <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
@@ -224,12 +217,18 @@ export default function DashboardSidebar({
                 }}
               />
             </div>
-            {usedPct > 70 && plan === "free" && (
-              <Link href="/pricing" className="mt-2 text-[10px] no-underline font-semibold block text-center py-1.5 rounded-lg transition-all"
-                style={{ background: "rgba(205,255,0,0.1)", color: "#cdff00" }}>
-                Upgrade to Pro
-              </Link>
-            )}
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full"
+                style={{ background: `${PLANS[actualPlan]?.highlight ? 'rgba(205,255,0,0.15)' : 'rgba(255,255,255,0.06)'}`, color: actualPlan === 'free' ? '#666' : '#cdff00' }}>
+                {actualPlan.toUpperCase()}
+              </span>
+              {actualPlan === "free" && (
+                <Link href="/pricing" className="text-[10px] no-underline font-semibold transition-all hover:underline"
+                  style={{ color: "#cdff00" }}>
+                  Upgrade →
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       )}

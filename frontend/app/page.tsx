@@ -17,6 +17,9 @@ import LoadingState from "@/components/LoadingState";
 import NavAuthButtons from "@/components/NavAuthButtons";
 import { hasGuestScansRemaining, incrementGuestScan } from "@/lib/scan-gate";
 import { getCurrentUser } from "@/lib/auth";
+import { useProfile } from "@/lib/useProfile";
+import { canScan } from "@/lib/plans";
+import PaywallModal from "@/components/PaywallModal";
 
 /* ═══════════════════════════════════════════════════════════
    GRAIN OVERLAY
@@ -468,17 +471,33 @@ export default function Home() {
     return scrollYProgress.on("change", (v) => setNavSolid(v > 0.02));
   }, [scrollYProgress]);
 
+  // Paywall state
+  const { profile: userProfile, incrementScan } = useProfile();
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallTrigger, setPaywallTrigger] = useState<"github" | "resume">("github");
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const username = extractUsername(input);
     if (!username || username === "unknown") return;
 
     const user = await getCurrentUser();
+
+    // Logged-in user: check plan limits
+    if (user && userProfile) {
+      if (!canScan(userProfile.plan, userProfile.github_scans_used, userProfile.resume_scans_used, "github")) {
+        setPaywallTrigger("github");
+        setShowPaywall(true);
+        return;
+      }
+      await incrementScan("github");
+    }
+
+    // Guest: check guest scan limit
     if (!user && !hasGuestScansRemaining()) {
       setShowSignupGate(true);
       return;
     }
-
     if (!user) incrementGuestScan();
 
     setLoading(true);
@@ -491,6 +510,17 @@ export default function Home() {
 
   const handleFileDrop = async (file: File) => {
     const user = await getCurrentUser();
+
+    // Logged-in user: check plan limits
+    if (user && userProfile) {
+      if (!canScan(userProfile.plan, userProfile.github_scans_used, userProfile.resume_scans_used, "resume")) {
+        setPaywallTrigger("resume");
+        setShowPaywall(true);
+        return;
+      }
+    }
+
+    // Guest: check guest scan limit
     if (!user && !hasGuestScansRemaining()) {
       setShowSignupGate(true);
       return;
@@ -516,6 +546,7 @@ export default function Home() {
       sessionStorage.setItem("resume_report_data", JSON.stringify(result));
 
       if (!user) incrementGuestScan();
+      if (user && userProfile) await incrementScan("resume");
       router.push("/report/resume");
     } catch (e: any) {
       alert(e.message || "Failed to analyze resume");
@@ -741,7 +772,6 @@ export default function Home() {
                 </motion.span>
               </motion.h1>
 
-              {/* Subheadline */}
               <motion.p
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -752,6 +782,23 @@ export default function Home() {
                 Skills verification, authenticity, and coding DNA —{" "}
                 <span className="text-[#ccc] font-normal">everything revealed.</span>
               </motion.p>
+
+              {/* Urgency / social proof */}
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7, delay: 0.85 }}
+                className="flex items-center gap-4 sm:gap-6 text-xs text-[#555] mt-5 flex-wrap"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                  127 candidates scanned today
+                </span>
+                <span className="hidden sm:inline">•</span>
+                <span>93% accuracy rate</span>
+                <span className="hidden sm:inline">•</span>
+                <span>Trusted by 200+ hiring teams</span>
+              </motion.div>
 
               {/* Welcome banner for logged-in users */}
               {isLoggedIn && (
@@ -894,6 +941,9 @@ export default function Home() {
                       </button>
                     ))}
                   </div>
+                  <p className="text-[#444] text-xs mt-3">
+                    ✓ 2 free scans included — no credit card needed
+                  </p>
                 </motion.form>
               ) : (
                 <motion.div
@@ -1426,6 +1476,20 @@ export default function Home() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════
+          PAYWALL MODAL (for logged-in users who hit plan limits)
+          ═══════════════════════════════════════════════════ */}
+      {showPaywall && userProfile && (
+        <PaywallModal
+          isOpen={showPaywall}
+          onClose={() => setShowPaywall(false)}
+          userId={userProfile.id}
+          userEmail={userProfile.email}
+          userName={userProfile.full_name}
+          trigger={paywallTrigger}
+        />
       )}
     </main>
   );

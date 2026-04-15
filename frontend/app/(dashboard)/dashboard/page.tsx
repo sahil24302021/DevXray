@@ -17,6 +17,9 @@ import {
 } from "@/lib/api";
 import { saveCandidate, listCandidates } from "@/lib/candidates-store";
 import { getCurrentUser } from "@/lib/auth";
+import { useScanGate } from "@/lib/useScanGate";
+import { PLANS } from "@/lib/plans";
+import PaywallModal from "@/components/PaywallModal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types & constants
@@ -157,6 +160,9 @@ export default function DashboardPage() {
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [userName, setUserName] = useState("there");
 
+  // ── Paywall gate ──
+  const { checkAndScan, showPaywall, setShowPaywall, paywallTrigger, profile: gateProfile } = useScanGate();
+
   // ── Load everything on mount ──
   useEffect(() => {
     let cancelled = false;
@@ -202,7 +208,7 @@ export default function DashboardPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // ── Handle scan ──
+  // ── Handle scan (wrapped with paywall gate) ──
   const handleQuickScan = useCallback(
     async (e?: React.FormEvent) => {
       if (e) e.preventDefault();
@@ -223,102 +229,105 @@ export default function DashboardPage() {
         return;
       }
 
-      setScanning(true);
-      setScanError("");
-      setScanProgress("Connecting to analysis engine...");
+      // ── Paywall gate: check plan limits before scanning ──
+      await checkAndScan("github", async () => {
+        setScanning(true);
+        setScanError("");
+        setScanProgress("Connecting to analysis engine...");
 
-      try {
-        const jobId = `dash-${Date.now()}`;
-        const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-        // SSE progress listener
-        let es: EventSource | null = null;
         try {
-          es = new EventSource(`${API_BASE}/api/progress/${jobId}`);
-          es.onmessage = (evt) => {
-            try {
-              const data = JSON.parse(evt.data);
-              if (data.step) setScanProgress(data.step);
-              if (data.done) es?.close();
-            } catch {}
+          const jobId = `dash-${Date.now()}`;
+          const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+          // SSE progress listener
+          let es: EventSource | null = null;
+          try {
+            es = new EventSource(`${API_BASE}/api/progress/${jobId}`);
+            es.onmessage = (evt) => {
+              try {
+                const data = JSON.parse(evt.data);
+                if (data.step) setScanProgress(data.step);
+                if (data.done) es?.close();
+              } catch {}
+            };
+            es.onerror = () => es?.close();
+          } catch {}
+
+          // Actual API call
+          const result = await analyzeGitHub(username, jobId);
+          es?.close();
+
+          // ─── Extract data from result robustly ───
+          const scoring = extractScoring(result);
+          const finalScore = scoring.finalScore || Math.round(Number(result.final_score || 0));
+
+          // Name: try multiple paths
+          const candidateName =
+            String(result.name || "") ||
+            String((result.basic_info as any)?.name || "") ||
+            String((result.basic_info as any)?.login || "") ||
+            username;
+
+          // Avatar: try multiple paths
+          const avatar =
+            String(result.avatar_url || "") ||
+            String((result.basic_info as any)?.avatar_url || "");
+
+          // Languages: robust extraction
+          const langs = extractLanguages(result);
+
+          // Tier / recommendation / risk: use safe normalizers
+          const tier = safeTier(
+            String(result.developer_tier || ""),
+            finalScore
+          );
+          const recommendation = safeRec(
+            getHiringRecommendationSummary(result),
+            finalScore
+          );
+          const risk = safeRisk(
+            String(result.risk_level || result.risk_assessment || ""),
+            finalScore
+          );
+
+          const newScan: ScanResult = {
+            username,
+            name: candidateName,
+            avatar,
+            score: finalScore,
+            tier,
+            recommendation,
+            risk,
+            time: "Just now",
+            languages: langs.length > 0 ? langs.slice(0, 3) : ["Unknown"],
           };
-          es.onerror = () => es?.close();
-        } catch {}
 
-        // Actual API call
-        const result = await analyzeGitHub(username, jobId);
-        es?.close();
+          // Add to state (prepend)
+          setScans((prev) => [newScan, ...prev.filter((s) => s.username !== username)]);
+          setScanInput("");
+          setScanProgress("");
 
-        // ─── Extract data from result robustly ───
-        const scoring = extractScoring(result);
-        const finalScore = scoring.finalScore || Math.round(Number(result.final_score || 0));
+          // Persist to Supabase / localStorage
+          try {
+            await saveCandidate(result as AnalysisResult, username);
+          } catch (persistErr) {
+            console.warn("[dashboard] Could not persist:", persistErr);
+          }
 
-        // Name: try multiple paths
-        const candidateName =
-          String(result.name || "") ||
-          String((result.basic_info as any)?.name || "") ||
-          String((result.basic_info as any)?.login || "") ||
-          username;
-
-        // Avatar: try multiple paths
-        const avatar =
-          String(result.avatar_url || "") ||
-          String((result.basic_info as any)?.avatar_url || "");
-
-        // Languages: robust extraction
-        const langs = extractLanguages(result);
-
-        // Tier / recommendation / risk: use safe normalizers
-        const tier = safeTier(
-          String(result.developer_tier || ""),
-          finalScore
-        );
-        const recommendation = safeRec(
-          getHiringRecommendationSummary(result),
-          finalScore
-        );
-        const risk = safeRisk(
-          String(result.risk_level || result.risk_assessment || ""),
-          finalScore
-        );
-
-        const newScan: ScanResult = {
-          username,
-          name: candidateName,
-          avatar,
-          score: finalScore,
-          tier,
-          recommendation,
-          risk,
-          time: "Just now",
-          languages: langs.length > 0 ? langs.slice(0, 3) : ["Unknown"],
-        };
-
-        // Add to state (prepend)
-        setScans((prev) => [newScan, ...prev.filter((s) => s.username !== username)]);
-        setScanInput("");
-        setScanProgress("");
-
-        // Persist to Supabase / localStorage
-        try {
-          await saveCandidate(result as AnalysisResult, username);
-        } catch (persistErr) {
-          console.warn("[dashboard] Could not persist:", persistErr);
+          // Update scan counter
+          try {
+            const current = parseInt(localStorage.getItem("devxray_scans_used") || "0", 10);
+            localStorage.setItem("devxray_scans_used", String(current + 1));
+          } catch {}
+        } catch (err: any) {
+          setScanError(err.message || "Analysis failed. Check if backend is running.");
+          setScanProgress("");
+        } finally {
+          setScanning(false);
         }
-
-        // Update scan counter
-        try {
-          const current = parseInt(localStorage.getItem("devxray_scans_used") || "0", 10);
-          localStorage.setItem("devxray_scans_used", String(current + 1));
-        } catch {}
-      } catch (err: any) {
-        setScanError(err.message || "Analysis failed. Check if backend is running.");
-        setScanProgress("");
-      } finally {
-        setScanning(false);
-      }
+      });
     },
-    [scanInput, scans]
+    [scanInput, scans, checkAndScan]
   );
 
   // ── Derived stats ──
@@ -353,6 +362,29 @@ export default function DashboardPage() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
+          {/* Scan counter badges */}
+          {gateProfile && (
+            <div className="hidden md:flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03]">
+                <span className="text-[#cdff00]">⚡</span>
+                <span className="text-[#888] text-[10px]">
+                  {Math.max(0, (PLANS[gateProfile.plan]?.github_scans ?? 2) - gateProfile.github_scans_used)} GitHub left
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/[0.08] bg-white/[0.03]">
+                <span className="text-violet-400">📄</span>
+                <span className="text-[#888] text-[10px]">
+                  {Math.max(0, (PLANS[gateProfile.plan]?.resume_scans ?? 2) - gateProfile.resume_scans_used)} resume left
+                </span>
+              </div>
+              {gateProfile.plan === "free" && (
+                <Link href="/pricing"
+                  className="px-3 py-1.5 rounded-full bg-[#cdff00] text-black text-xs font-black hover:bg-[#b8e600] transition-all no-underline">
+                  Upgrade ↑
+                </Link>
+              )}
+            </div>
+          )}
           <div
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
             style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
@@ -374,6 +406,62 @@ export default function DashboardPage() {
           </Link>
         </div>
       </motion.div>
+
+      {/* ── Plan usage stats ── */}
+      {gateProfile && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-3 gap-4 mb-6">
+          <div className="rounded-xl border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
+            <div className="text-[#555] text-xs mb-1">GitHub Scans Used</div>
+            <div className="text-2xl font-black text-white" style={{ fontFamily: "var(--font-syne)" }}>
+              {gateProfile.github_scans_used}
+              <span className="text-[#555] text-sm font-normal">/{PLANS[gateProfile.plan]?.github_scans === Infinity ? "∞" : PLANS[gateProfile.plan]?.github_scans ?? 2}</span>
+            </div>
+            <div className="mt-2 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.05)" }}>
+              <div className="h-full rounded-full bg-[#cdff00] transition-all duration-700" style={{
+                width: `${Math.min(100, (gateProfile.github_scans_used / ((PLANS[gateProfile.plan]?.github_scans as number) || 2)) * 100)}%`
+              }} />
+            </div>
+          </div>
+          <div className="rounded-xl border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
+            <div className="text-[#555] text-xs mb-1">Resume Scans Used</div>
+            <div className="text-2xl font-black text-white" style={{ fontFamily: "var(--font-syne)" }}>
+              {gateProfile.resume_scans_used}
+              <span className="text-[#555] text-sm font-normal">/{PLANS[gateProfile.plan]?.resume_scans === Infinity ? "∞" : PLANS[gateProfile.plan]?.resume_scans ?? 2}</span>
+            </div>
+            <div className="mt-2 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.05)" }}>
+              <div className="h-full rounded-full bg-violet-400 transition-all duration-700" style={{
+                width: `${Math.min(100, (gateProfile.resume_scans_used / ((PLANS[gateProfile.plan]?.resume_scans as number) || 2)) * 100)}%`
+              }} />
+            </div>
+          </div>
+          <div className="rounded-xl border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
+            <div className="text-[#555] text-xs mb-1">Current Plan</div>
+            <div className="text-2xl font-black text-white capitalize" style={{ fontFamily: "var(--font-syne)" }}>{gateProfile.plan}</div>
+            {gateProfile.plan === "free" && (
+              <Link href="/pricing" className="mt-2 inline-block text-xs text-[#cdff00] hover:underline no-underline">
+                Upgrade for more scans →
+              </Link>
+            )}
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── Upgrade nudge banner ── */}
+      {gateProfile && gateProfile.plan === "free" && (
+        gateProfile.github_scans_used >= 1 || gateProfile.resume_scans_used >= 1
+      ) && (
+        <div className="mb-6 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-amber-400">⚡</span>
+            <span className="text-sm text-[#aaa]">
+              You have <strong className="text-white">{2 - gateProfile.github_scans_used} GitHub</strong> and <strong className="text-white">{2 - gateProfile.resume_scans_used} resume</strong> scans remaining on your free plan.
+            </span>
+          </div>
+          <Link href="/pricing" className="shrink-0 px-4 py-2 rounded-lg bg-[#cdff00] text-black text-xs font-black hover:bg-[#b8e600] transition-all no-underline">
+            Upgrade Now
+          </Link>
+        </div>
+      )}
 
       {/* Quick scan */}
       <motion.form
@@ -608,39 +696,39 @@ export default function DashboardPage() {
           >
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-white">Plan Usage</h3>
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full text-[#050505]" style={{ background: "#cdff00" }}>
-                PRO
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full text-[#050505] uppercase" style={{ background: "#cdff00" }}>
+                {gateProfile?.plan ?? "FREE"}
               </span>
             </div>
             {[
-              { label: "Scans Used", used: totalScans, max: 100 },
-              { label: "Bulk Uploads", used: 0, max: 10 },
-              { label: "Team Seats", used: 1, max: 10 },
+              { label: "GitHub Scans", used: gateProfile?.github_scans_used ?? 0, max: (PLANS[gateProfile?.plan ?? "free"]?.github_scans as number) ?? 2, color: "#cdff00" },
+              { label: "Resume Scans", used: gateProfile?.resume_scans_used ?? 0, max: (PLANS[gateProfile?.plan ?? "free"]?.resume_scans as number) ?? 2, color: "#a78bfa" },
+              { label: "Total Analyzed", used: totalScans, max: Math.max(totalScans, 10), color: "#34d399" },
             ].map((item) => (
               <div key={item.label} className="mb-3">
                 <div className="flex items-center justify-between mb-1.5">
                   <span className="text-[11px] text-[#666]">{item.label}</span>
                   <span className="text-[11px] font-bold text-white">
-                    {item.used}/{item.max}
+                    {item.used}/{item.max === Infinity ? "∞" : item.max}
                   </span>
                 </div>
                 <div className="h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.05)" }}>
                   <div
                     className="h-full rounded-full transition-all duration-700"
                     style={{
-                      width: `${Math.min((item.used / item.max) * 100, 100)}%`,
-                      background: item.used / item.max > 0.8 ? "#fb7185" : "#cdff00",
+                      width: `${Math.min((item.used / (item.max === Infinity ? 999 : item.max)) * 100, 100)}%`,
+                      background: item.used / (item.max === Infinity ? 999 : item.max) > 0.8 ? "#fb7185" : item.color,
                     }}
                   />
                 </div>
               </div>
             ))}
             <Link
-              href="/settings"
+              href="/pricing"
               className="mt-2 block text-center text-[11px] no-underline font-semibold py-2 rounded-xl transition-all hover:bg-[#cdff00]/10"
               style={{ color: "#cdff00", border: "1px solid rgba(205,255,0,0.15)" }}
             >
-              Manage Plan →
+              {gateProfile?.plan === "free" ? "Upgrade Plan →" : "Manage Plan →"}
             </Link>
           </motion.div>
 
@@ -689,6 +777,17 @@ export default function DashboardPage() {
           </motion.div>
         </div>
       </div>
+      {/* ── Paywall Modal ── */}
+      {showPaywall && gateProfile && (
+        <PaywallModal
+          isOpen={showPaywall}
+          onClose={() => setShowPaywall(false)}
+          userId={gateProfile.id}
+          userEmail={gateProfile.email}
+          userName={gateProfile.full_name}
+          trigger={paywallTrigger}
+        />
+      )}
     </div>
   );
 }
