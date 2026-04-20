@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { getCurrentUser, signOut, onAuthStateChange, type AuthUser } from "@/lib/auth";
 import { useProfile } from "@/lib/useProfile";
 import { PLANS } from "@/lib/plans";
+import Logo from "@/components/Logo";
 
 
 // ── Icons ──────────────────────────────────
@@ -129,9 +130,7 @@ export default function DashboardSidebar({
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className={`px-4 py-5 flex items-center gap-3 border-b border-white/[0.05] ${collapsed ? "justify-center" : ""}`}>
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#cdff00" }}>
-          <Icon.Lightning />
-        </div>
+        <Logo className="w-7 h-7 flex-shrink-0" />
         {!collapsed && (
           <span className="font-bold text-[15px] text-white tracking-tight" style={{ fontFamily: "var(--font-syne)" }}>
             Dev<span style={{ color: "#cdff00" }}>Xray</span>

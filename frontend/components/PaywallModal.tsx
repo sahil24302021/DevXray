@@ -60,7 +60,7 @@ export default function PaywallModal({
         currency,
         name: "DevXray",
         description: `${PLANS[plan].name} Plan — Monthly`,
-        image: "https://dev-xray.vercel.app/logo.png",
+        image: "https://dev-xray.vercel.app/devxray-logo.png",
         order_id: orderId,
         prefill: { name: userName, email: userEmail },
         theme: { color: "#cdff00" },
