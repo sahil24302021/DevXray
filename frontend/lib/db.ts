@@ -31,7 +31,7 @@ export interface CandidateRecord {
   recommendation_summary?: string;
   languages?: string[];
   scanned_at: string;
-  full_report?: object;
+  report_payload?: object;
   user_id?: string;
   [key: string]: unknown;
 }

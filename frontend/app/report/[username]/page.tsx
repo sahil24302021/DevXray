@@ -26,6 +26,7 @@ import EvidencePanel from "@/components/report/EvidencePanel";
 import EvidenceTrail from "@/components/report/EvidenceTrail";
 import RecruiterBrief from "@/components/report/RecruiterBrief";
 import InterviewKit from "@/components/report/InterviewKit";
+import DataBasisBanner from "@/components/report/DataBasisBanner";
 
 import LoadingState from "@/components/LoadingState";
 import ReportErrorBoundary from "@/components/report/ReportErrorBoundary";
@@ -519,11 +520,11 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                     <ScoreBar value={data2.score_breakdown.breakdown.authenticity} max={15} color="#f472b6" />
                   </div>
                   <div className="flex justify-between text-[9px] text-slate-500 font-semibold uppercase tracking-wider">
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" />Depth</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-violet-400" />Ownership</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Activity</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Complexity</span>
-                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-400" />Languages</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" />Code</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-violet-400" />Skills</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Consistency</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Growth</span>
+                    <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-400" />Auth</span>
                   </div>
                 </div>
               )}
@@ -567,6 +568,18 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             />
           </ReportErrorBoundary>
 
+          {/* -- Data Basis Banner (Phase 3) -- */}
+          {((data2 as any).github_sparse_mode || (data2 as any).needs_more_data) && (
+            <DataBasisBanner
+              dataBasis={(data2 as any).data_basis || "GitHub"}
+              confidenceLevel={(data2 as any).data_assessment?.confidence_level || "Medium"}
+              needsMoreData={(data2 as any).needs_more_data || false}
+              requestSignals={(data2 as any).request_signals || []}
+              githubSparseMode={(data2 as any).github_sparse_mode || false}
+              username={data2.username || ""}
+            />
+          )}
+
           {/* -- Verdict + Hiring -- */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5 print:block print:space-y-5">
             <ReportErrorBoundary section="Verdict">
@@ -597,7 +610,11 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           {(data2.feature_importance || data2.decision_trace) && (
             <EvidencePanel 
               features={data2.feature_importance} 
-              decisionTrace={data2.decision_trace} 
+              decisionTrace={data2.decision_trace}
+              proofList={(data2 as any).proof}
+              dataSources={(data2 as any).data_sources}
+              dataSourceConfidence={(data2 as any).data_source_confidence}
+              multiSourceBonus={(data2 as any).multi_source_bonus}
             />
           )}
 
@@ -679,7 +696,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
 }
 
 function ScoreBar({ value, max, color }: { value: number; max: number; color: string }) {
-  const percentage = (value / max) * max;
+  const percentage = (value / max) * 100;
   return (
     <motion.div
       initial={{ width: 0 }}

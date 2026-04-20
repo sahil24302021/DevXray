@@ -169,6 +169,8 @@ def generate_report(
         weaknesses,
         all_risk_flags,
         scoring.get("role_fit", {}),
+        repos=repos_param,
+        code_analysis=code_analysis,
     )
 
     # Calculate raw organic ratio
@@ -521,34 +523,374 @@ def normalize_report(report: Dict[str, Any]) -> Dict[str, Any]:
     else:
         report["score_percentile"] = "Bottom 40% of developers analyzed"
 
-    # ── IMPROVEMENT 3: Evidence Trail (claim vs reality for HR) ──
+    # ── FIX A: REBUILT Evidence Trail — only real claim vs reality items ──
     evidence_trail = []
+
+    # SOURCE 1: Truth analysis — these are actual resume/bio claims vs GitHub reality
+    truth_data = report.get("truth_analysis", {})
+    if isinstance(truth_data, dict):
+        # Supported claims
+        for match in truth_data.get("matches", [])[:10]:
+            if isinstance(match, dict):
+                skill_name = match.get("skill", match.get("claim", ""))
+                evidence = match.get("evidence", match.get("finding", ""))
+                repo_name = match.get("repo", match.get("source", ""))
+                if skill_name and evidence:
+                    evidence_trail.append({
+                        "claim": f'Candidate claims: "{skill_name}"',
+                        "source": "resume",
+                        "evidence_found": evidence if len(str(evidence)) > 10 else f"Found in {repo_name or 'GitHub repos'}",
+                        "status": "SUPPORTED",
+                        "confidence": "High",
+                        "repo": repo_name,
+                    })
+
+        # Unverified/mismatched claims
+        for mismatch in truth_data.get("mismatches", [])[:5]:
+            if isinstance(mismatch, dict):
+                skill_name = mismatch.get("skill", mismatch.get("claim", ""))
+                finding = mismatch.get("finding", mismatch.get("detail", "Not found in code"))
+                if skill_name:
+                    evidence_trail.append({
+                        "claim": f'Candidate claims: "{skill_name}"',
+                        "source": "resume",
+                        "evidence_found": finding,
+                        "status": "NOT_FOUND",
+                        "confidence": "High",
+                        "repo": "",
+                    })
+
+    # SOURCE 2: Proof items that reference actual repos and skills (NOT internal metrics)
+    EXCLUDED_METRIC_TYPES = {
+        "metric", "code_quality", "maintainability", "complexity", "functions",
+        "classes", "architecture", "test_ratio", "cyclomatic", "project_detection",
+    }
     proof = report.get("proof", [])
     if isinstance(proof, list):
         for item in proof:
             if not isinstance(item, dict):
                 continue
-            trail_item = {
-                "claim": item.get("detail", item.get("claim", "Unknown claim")),
-                "evidence": item.get("evidence_type", item.get("evidence", "Code analysis")),
-                "repo": item.get("repo", item.get("source", "")),
-                "verified": True,  # items in proof_list are verified evidence
-            }
-            evidence_trail.append(trail_item)
-    # Also add unverified claims from truth_analysis mismatches
-    truth = report.get("truth_analysis", {})
-    if isinstance(truth, dict):
-        mismatches = truth.get("mismatches", [])
-        if isinstance(mismatches, list):
-            for m in mismatches:
-                if isinstance(m, dict):
-                    evidence_trail.append({
-                        "claim": m.get("claim", m.get("skill", "Unknown")),
-                        "evidence": m.get("finding", m.get("detail", "Not found in code")),
-                        "repo": "",
-                        "verified": False,
-                    })
+            evidence_type = str(item.get("evidence_type", "")).lower()
+            # SKIP raw metric items
+            if any(excluded in evidence_type for excluded in EXCLUDED_METRIC_TYPES):
+                continue
+            detail = item.get("detail", "")
+            if not detail or len(str(detail)) < 15:
+                continue
+            # Only include items that reference real findings
+            if any(keyword in str(detail).lower() for keyword in [
+                "skill", "repo", "commit", "project", "language", "tech", "found", "detected", "verified",
+            ]):
+                evidence_trail.append({
+                    "claim": str(detail)[:120],
+                    "source": evidence_type if evidence_type else "analysis",
+                    "evidence_found": item.get("repo", item.get("source", "GitHub analysis")),
+                    "status": "SUPPORTED",
+                    "confidence": "Medium",
+                    "repo": item.get("repo", ""),
+                })
+
+    # If we have fewer than 3 items, generate from verified_skills
+    if len(evidence_trail) < 3:
+        verified = report.get("verified_skills", [])
+        for skill in (verified or [])[:5]:
+            if isinstance(skill, str):
+                evidence_trail.append({
+                    "claim": f"Skill detected in code: {skill}",
+                    "source": "github_code",
+                    "evidence_found": f"Found usage of {skill} across GitHub repositories",
+                    "status": "SUPPORTED",
+                    "confidence": "Medium",
+                    "repo": "",
+                })
     report["evidence_trail"] = evidence_trail[:30]  # cap for performance
+
+    # ── FIX 5: Score Dimensions for Radar Chart ──
+    bd = report.get("score_breakdown", {})
+    if isinstance(bd, dict):
+        bd_inner = bd.get("breakdown", {})
+        if isinstance(bd_inner, dict) and bd_inner and not report.get("score_dimensions"):
+            report["score_dimensions"] = [
+                {"name": "Code Quality", "key": "code_quality", "value": round(float(bd_inner.get("code_quality", 0))), "max": 30},
+                {"name": "Skill Depth", "key": "skill_depth", "value": round(float(bd_inner.get("skill_depth", 0))), "max": 20},
+                {"name": "Consistency", "key": "consistency", "value": round(float(bd_inner.get("consistency", 0))), "max": 20},
+                {"name": "Growth", "key": "growth", "value": round(float(bd_inner.get("growth", 0))), "max": 15},
+                {"name": "Authenticity", "key": "authenticity", "value": round(float(bd_inner.get("authenticity", 0))), "max": 15},
+            ]
+
+    # ── FIX 7: Promote contribution_streak & generate community_stats ──
+    growth_data = report.get("growth", {})
+    if isinstance(growth_data, dict):
+        streaks = growth_data.get("contribution_streaks", {})
+        if isinstance(streaks, dict) and streaks and not report.get("contribution_streak"):
+            report["contribution_streak"] = {
+                "current_streak_weeks": streaks.get("current_streak_weeks", 0),
+                "longest_streak_weeks": streaks.get("longest_streak_weeks", 0),
+                "total_active_days": streaks.get("total_active_days", 0),
+                "best_day": streaks.get("best_day", ""),
+            }
+
+    # Community stats from authenticity engine's PR analysis
+    if not report.get("community_stats"):
+        auth_data = report.get("authenticity", {})
+        if isinstance(auth_data, dict):
+            pr_analysis = auth_data.get("pr_analysis", {})
+            community = {
+                "prs_opened": pr_analysis.get("total_prs", 0) if isinstance(pr_analysis, dict) else 0,
+                "issues_opened": 0,
+                "review_events": pr_analysis.get("review_events", 0) if isinstance(pr_analysis, dict) else 0,
+                "comments": 0,
+                "total_community_actions": 0,
+                "collaboration_ratio": 0,
+                "engagement_score": 0,
+            }
+            community["total_community_actions"] = (
+                community["prs_opened"] +
+                community["issues_opened"] +
+                community["review_events"] +
+                community["comments"]
+            )
+            total_actions = community["total_community_actions"]
+            if total_actions > 0:
+                community["engagement_score"] = min(100, total_actions * 3)
+                community["collaboration_ratio"] = round(
+                    min(1.0, total_actions / max(report.get("total_repos", 1), 1)), 2
+                )
+            report["community_stats"] = community
+
+    # ── FIX 8a: Language Breakdown ──
+    if not report.get("language_breakdown"):
+        top_langs = report.get("top_languages", [])
+        if isinstance(top_langs, list) and top_langs:
+            LANG_COLORS = {
+                "Python": "#3572A5", "TypeScript": "#3178C6", "JavaScript": "#f1e05a",
+                "Java": "#b07219", "C++": "#f34b7d", "C#": "#178600", "C": "#555555",
+                "Go": "#00ADD8", "Rust": "#dea584", "Ruby": "#701516", "Swift": "#F05138",
+                "Kotlin": "#A97BFF", "PHP": "#4F5D95", "Scala": "#c22d40", "R": "#198CE7",
+                "HTML": "#e34c26", "CSS": "#563d7c", "Shell": "#89e051", "Dart": "#00B4AB",
+                "Lua": "#000080", "Perl": "#0298c3",
+            }
+            total = len(top_langs)
+            breakdown_list = []
+            for i, lang in enumerate(top_langs[:8]):
+                if isinstance(lang, str) and lang:
+                    # Approximate percentage — first language dominates
+                    pct = round(100 * (total - i) / sum(range(1, total + 1)), 1)
+                    breakdown_list.append({
+                        "language": lang,
+                        "bytes": 0,
+                        "percentage": pct,
+                        "color": LANG_COLORS.get(lang, "#808080"),
+                    })
+            if breakdown_list:
+                report["language_breakdown"] = breakdown_list
+
+    # ── FIX 8b: Activity Heatmap ──
+    if not report.get("activity_heatmap"):
+        # Build from growth engine's timeline data
+        timeline = growth_data.get("activity_timeline", {}) if isinstance(growth_data, dict) else {}
+        quarterly = timeline.get("quarterly_activity", []) if isinstance(timeline, dict) else []
+        if isinstance(quarterly, list) and quarterly:
+            # Convert quarterly activity to monthly approximation
+            heatmap = []
+            for q in quarterly[-12:]:  # Last 12 quarters
+                if isinstance(q, dict):
+                    quarter_key = q.get("quarter", "")
+                    count = q.get("count", 0)
+                    if quarter_key and "-Q" in quarter_key:
+                        year, q_num = quarter_key.split("-Q")
+                        q_int = int(q_num)
+                        # Split quarterly count into 3 months
+                        per_month = max(1, count // 3)
+                        for m_offset in range(3):
+                            month_num = (q_int - 1) * 3 + m_offset + 1
+                            heatmap.append({
+                                "month": f"{year}-{month_num:02d}",
+                                "count": per_month + (1 if m_offset == 0 and count % 3 > 0 else 0),
+                            })
+            if heatmap:
+                report["activity_heatmap"] = heatmap[-24:]  # Last 24 months
+
+    # ── FIX 8c: Coding Patterns ──
+    if not report.get("coding_patterns"):
+        auth_data = report.get("authenticity", {})
+        if isinstance(auth_data, dict):
+            commit_freq = auth_data.get("commit_frequency", {})
+            if isinstance(commit_freq, dict):
+                # Build basic coding patterns from commit frequency data
+                organic = commit_freq.get("organic_ratio", 0.5)
+                total_commits = commit_freq.get("total_commits", 0)
+                patterns = {
+                    "day_hour_heatmap": [],
+                    "most_active_day": "Weekday",
+                    "weekend_ratio": round(1.0 - float(organic), 2) if organic else 0.3,
+                    "avg_commits_per_active_day": round(float(total_commits) / max(
+                        report.get("contribution_streak", {}).get("total_active_days", 1), 1
+                    ), 1) if total_commits else 0,
+                    "coding_session": "Regular" if organic > 0.5 else "Burst-heavy",
+                    "peak_hours": [],
+                }
+                report["coding_patterns"] = patterns
+
+    # ── FIX 9a: Commit Analysis ──
+    if not report.get("commit_analysis"):
+        auth_data = report.get("authenticity", {})
+        if isinstance(auth_data, dict):
+            commit_freq = auth_data.get("commit_frequency", {})
+            msg_entropy = auth_data.get("message_entropy", {})
+            if isinstance(commit_freq, dict):
+                total = commit_freq.get("total_commits", 0)
+                organic = commit_freq.get("organic_ratio", 0.5)
+                single_word = msg_entropy.get("single_word_ratio", 0) if isinstance(msg_entropy, dict) else 0
+                # Quality score: high organic + low single-word messages = high quality
+                quality = round(float(organic) * 70 + (1 - float(single_word)) * 30, 1)
+                quality = max(0, min(100, quality))
+                # Insight generation
+                if quality >= 75:
+                    insight = "Commit messages are descriptive and follow good practices."
+                elif quality >= 50:
+                    insight = "Commit quality is adequate but could be more descriptive."
+                else:
+                    insight = "Many commits have sparse or repetitive messages."
+
+                report["commit_analysis"] = {
+                    "total_analyzed": total,
+                    "quality_score": quality,
+                    "insight": insight,
+                    "conventional_ratio": round(1.0 - float(single_word), 2),
+                    "lazy_commit_ratio": round(float(single_word), 2),
+                }
+
+    # ── FIX 9b: Top Repos ──
+    if not report.get("top_repos"):
+        projects = report.get("projects", [])
+        if isinstance(projects, list) and projects:
+            top_repos = []
+            for p in projects[:8]:
+                if isinstance(p, dict):
+                    top_repos.append({
+                        "name": p.get("repo_name", p.get("name", "unknown")),
+                        "description": p.get("description", ""),
+                        "language": p.get("language", p.get("primary_language", "")),
+                        "stars": p.get("stars", 0),
+                        "forks": p.get("forks", 0),
+                        "size": p.get("size", 0),
+                        "url": p.get("html_url", p.get("url", "")),
+                        "_quality_weight": p.get("_quality_weight", 1.0),
+                    })
+            if top_repos:
+                report["top_repos"] = top_repos
+
+    # ── FIX 9c: Verification Sources ──
+    if not report.get("verification_sources"):
+        sources = []
+        # GitHub is always a source
+        username = report.get("username", "")
+        if username:
+            sources.append({
+                "name": "GitHub Profile",
+                "status": "verified",
+                "detail": f"@{username} — {report.get('total_repos', 0)} repos, {report.get('total_stars', 0)} stars",
+            })
+        # Code analysis source
+        code_analysis = report.get("code_analysis", {})
+        if isinstance(code_analysis, dict) and code_analysis.get("files_analyzed", 0) > 0:
+            sources.append({
+                "name": "Code Quality Analysis",
+                "status": "verified",
+                "detail": f"{code_analysis.get('files_analyzed', 0)} files analyzed across pinned repositories",
+            })
+        # Authenticity source
+        auth_score = report.get("authenticity_score", 0)
+        if auth_score:
+            sources.append({
+                "name": "Authenticity Engine",
+                "status": "verified",
+                "detail": f"Commit patterns, message entropy, and ownership analyzed — {auth_score}% authentic",
+            })
+        # Skills source
+        skill_count = len(report.get("verified_skills", []))
+        if skill_count > 0:
+            sources.append({
+                "name": "Skill Detection Engine",
+                "status": "verified",
+                "detail": f"{skill_count} technologies verified from code analysis",
+            })
+        if sources:
+            report["verification_sources"] = sources
+
+    # ── FIX 10: Improvements (Growth Roadmap) ──
+    if not report.get("improvements"):
+        improvements = []
+        weaknesses = report.get("weaknesses", [])
+        bd = report.get("score_breakdown", {})
+        bd_inner = bd.get("breakdown", {}) if isinstance(bd, dict) else {}
+
+        # Generate actionable improvements from weaknesses and score gaps
+        if isinstance(bd_inner, dict):
+            if bd_inner.get("code_quality", 100) < 50:
+                improvements.append(
+                    "Improve code quality: Add linting (ESLint/Pylint), adopt consistent formatting, "
+                    "and refactor large functions into smaller, testable units."
+                )
+            if bd_inner.get("consistency", 100) < 40:
+                improvements.append(
+                    "Build consistency: Set a daily/weekly coding schedule. Even 30 minutes of "
+                    "focused coding per day compounds dramatically over time."
+                )
+            if bd_inner.get("growth", 100) < 30:
+                improvements.append(
+                    "Expand your tech stack: Pick one new technology per quarter. Build a small "
+                    "project with it and push it to GitHub to demonstrate learning."
+                )
+            if bd_inner.get("authenticity", 100) < 40:
+                improvements.append(
+                    "Improve commit practices: Write descriptive commit messages, make smaller "
+                    "atomic commits, and avoid bulk-uploading code in single commits."
+                )
+
+        # Weakness-driven improvements
+        for w in (weaknesses or [])[:3]:
+            if isinstance(w, str):
+                if "test" in w.lower():
+                    improvements.append(
+                        "Add testing: Start with unit tests for core logic using pytest/Jest. "
+                        "Even 60% coverage dramatically improves code confidence."
+                    )
+                elif "doc" in w.lower() or "readme" in w.lower():
+                    improvements.append(
+                        "Improve documentation: Add a clear README with setup instructions, "
+                        "architecture overview, and screenshots/demos to every project."
+                    )
+
+        # Always add at least one general improvement
+        if not improvements:
+            score = report.get("final_score", report.get("score", 50))
+            if score >= 70:
+                improvements.append(
+                    "Level up: Contribute to popular open-source projects to gain external "
+                    "validation and expand your network. Consider writing technical blog posts."
+                )
+            elif score >= 45:
+                improvements.append(
+                    "Build depth: Pick your strongest technology and build a production-grade "
+                    "project with proper testing, CI/CD, and documentation."
+                )
+            else:
+                improvements.append(
+                    "Foundation first: Focus on completing 2-3 meaningful projects with proper "
+                    "README files, clean code structure, and consistent commits."
+                )
+
+        # Deduplicate
+        seen = set()
+        unique_improvements = []
+        for imp in improvements:
+            key = imp[:50]
+            if key not in seen:
+                seen.add(key)
+                unique_improvements.append(imp)
+        report["improvements"] = unique_improvements[:6]
 
     return report
 
@@ -686,66 +1028,109 @@ def _generate_interview_questions(
     weaknesses: List[str],
     risk_flags: List[Dict],
     role_fit: Dict,
+    repos: List[Dict] = None,
+    code_analysis: Dict = None,
 ) -> List[Dict[str, str]]:
-    """Generate targeted interview questions based on analysis."""
+    """Generate interview questions that reference THIS developer's specific repos."""
     questions = []
+    repos = repos or []
+    code_analysis = code_analysis or {}
 
+    # Find the most interesting repo to reference
+    non_forks = [r for r in repos if not r.get("is_fork", r.get("fork", False))]
+    interesting_repo = None
+    if non_forks:
+        def repo_interest(r):
+            return (
+                r.get("stars", 0) * 3 +
+                (10 if r.get("description") else 0) +
+                r.get("_fork_commit_count", r.get("commit_count", 0))
+            )
+        interesting_repo = max(non_forks, key=repo_interest)
+
+    repo_name = interesting_repo.get("name", "your projects") if interesting_repo else "your projects"
+    repo_lang = interesting_repo.get("language", top_skills[0]["skill_name"] if top_skills else "your stack") if interesting_repo else "your stack"
+    repo_desc = interesting_repo.get("description", "") if interesting_repo else ""
+
+    # Q1: Architecture deep-dive on THEIR specific repo
+    q1_context = f" ({repo_desc[:60]})" if repo_desc else ""
+    questions.append({
+        "category": "Technical Depth",
+        "question": (
+            f"Walk me through the architecture of {repo_name}{q1_context}. "
+            f"What were the hardest technical decisions, and what would you change if you started today?"
+        ),
+        "why": f"Your most substantial original project — tests whether you genuinely wrote and understand the codebase",
+    })
+
+    # Q2: Based on specific authenticity or code findings
+    test_ratio = code_analysis.get("test_ratio", code_analysis.get("metrics", {}).get("test_ratio", 0) if isinstance(code_analysis.get("metrics"), dict) else 0)
+    auth_flags = [f for f in risk_flags if isinstance(f, dict) and
+                  any(kw in str(f.get("flag", "")).lower() for kw in ["commit", "bulk", "fork", "clone"])]
+
+    if auth_flags:
+        flag_detail = auth_flags[0].get("flag", "unusual patterns")
+        questions.append({
+            "category": "Code Authenticity",
+            "question": (
+                f"Your GitHub history shows {flag_detail.lower()}. Can you explain what was happening "
+                f"during that period and walk me through your typical commit workflow?"
+            ),
+            "why": "Authenticates that you wrote the code yourself and can explain your development process",
+        })
+    elif test_ratio is not None and float(test_ratio or 0) < 0.05:
+        questions.append({
+            "category": "Engineering Practices",
+            "question": (
+                f"We noticed {repo_name} has very limited test coverage. Walk me through how you think "
+                f"about testing — and what it would take to add meaningful tests to that project specifically."
+            ),
+            "why": f"Tests are sparse across your repos — this probes engineering maturity and self-awareness",
+        })
+
+    # Q3: Skill-specific to their primary verified technology
     if top_skills:
         primary = top_skills[0]
         score_display = primary.get("formatted_score", f"{primary.get('skill_score', 0)}/10")
         questions.append({
-            "category": "Technical Depth",
+            "category": "Skill Verification",
             "question": (
-                f"Walk me through the architecture of your most complex "
-                f"{primary['skill_name']} project. What were the key technical decisions?"
+                f"In {repo_name}, how did you use {primary['skill_name']}? "
+                f"Walk me through a specific technical decision you made with it."
             ),
-            "why": f"Primary skill ({score_display}) — verify genuine depth",
+            "why": f"Your primary verified skill ({score_display}) — confirms genuine depth vs surface-level usage",
         })
 
-    for weakness in weaknesses[:2]:
-        if "test" in weakness.lower():
-            questions.append({
-                "category": "Engineering Practices",
-                "question": "How do you approach testing in your projects? What testing strategies have you used?",
-                "why": "No tests detected — assess testing awareness",
-            })
-            break
-        elif "inconsist" in weakness.lower():
-            questions.append({
-                "category": "Commitment",
-                "question": "I noticed gaps in your contribution history. Can you walk me through what you were working on during those periods?",
-                "why": "Inconsistent activity pattern — verify engagement",
-            })
-            break
-
-    for flag in risk_flags[:2]:
-        flag_text = flag.get("flag", "") if isinstance(flag, dict) else str(flag)
-        if "template" in flag_text.lower() or "tutorial" in flag_text.lower():
-            questions.append({
-                "category": "Originality",
-                "question": "Can you describe a project where you designed the architecture from scratch? What problem were you solving?",
-                "why": "Template/tutorial code detected — verify original problem-solving",
-            })
-            break
-
+    # Q4: Role-specific
     role = role_fit.get("primary_role", "")
     if role:
         questions.append({
-            "category": "Role-Specific",
+            "category": "Role Experience",
             "question": (
-                f"As a {role}, what's the most challenging production issue "
-                f"you've debugged? How did you approach it?"
+                f"As a {role}, what's the most complex production problem you've debugged? "
+                f"Walk me through your diagnosis process."
             ),
-            "why": f"Assess real-world {role} experience",
+            "why": f"Assesses real-world {role} experience beyond project work",
         })
 
-    questions.append({
-        "category": "System Design",
-        "question": "If you had to design a system that handles 1M daily active users, what would your high-level architecture look like?",
-        "why": "Assess architectural thinking beyond code-level skills",
-    })
+    # Q5: System design applied to their actual project
+    if interesting_repo:
+        questions.append({
+            "category": "System Design",
+            "question": (
+                f"If {repo_name} needed to handle 10x its current load, what would you change? "
+                f"Start with diagnosing the bottleneck."
+            ),
+            "why": "Tests architectural thinking applied to their real code, not a textbook scenario",
+        })
+    else:
+        questions.append({
+            "category": "System Design",
+            "question": "Describe a time you had to make a system scale. What was the bottleneck and how did you solve it?",
+            "why": "Assesses production engineering thinking",
+        })
 
-    return questions[:6]
+    return questions[:5]
 
 
 def _score_to_verdict(score: float) -> str:

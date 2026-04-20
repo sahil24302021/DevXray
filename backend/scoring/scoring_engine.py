@@ -697,6 +697,93 @@ def determine_dynamic_weights(
     return {k: round(float(v / total), 3) for k, v in weights.items()}
 
 
+# ═══════════════════════════════════════════════════════
+#  FIX E: SOCIAL PROOF / IMPACT SCORING
+# ═══════════════════════════════════════════════════════
+
+def compute_impact_score(profile: dict, repos: list) -> float:
+    """
+    Impact score (0-100) based on social proof signals.
+
+    This prevents cases where a developer with 8K followers scores as Junior.
+    A developer with significant community validation cannot be entry-level.
+    """
+    followers = profile.get("followers", 0)
+
+    # Follower score: 0-40 points (logarithmic)
+    if followers >= 10000:
+        follower_score = 40
+    elif followers >= 1000:
+        follower_score = 30
+    elif followers >= 100:
+        follower_score = 20
+    elif followers >= 10:
+        follower_score = 10
+    elif followers > 0:
+        follower_score = max(0, math.log10(followers + 1) * 10)
+    else:
+        follower_score = 0
+
+    # Stars score: 0-40 points across original repos
+    non_fork = [r for r in repos if not r.get("is_fork", r.get("fork", False))]
+    total_stars = sum(r.get("stars", r.get("stargazers_count", 0)) for r in non_fork)
+
+    if total_stars >= 5000:
+        stars_score = 40
+    elif total_stars >= 1000:
+        stars_score = 30
+    elif total_stars >= 100:
+        stars_score = 20
+    elif total_stars >= 10:
+        stars_score = 10
+    elif total_stars > 0:
+        stars_score = max(0, math.log10(total_stars + 1) * 10)
+    else:
+        stars_score = 0
+
+    # Community adoption: 0-20 points (repos forked BY others)
+    forks_received = sum(r.get("forks", 0) for r in non_fork)
+    if forks_received >= 500:
+        adoption_score = 20
+    elif forks_received >= 50:
+        adoption_score = 15
+    elif forks_received >= 10:
+        adoption_score = 10
+    elif forks_received > 0:
+        adoption_score = 5
+    else:
+        adoption_score = 0
+
+    raw = follower_score + stars_score + adoption_score
+    return min(100.0, float(raw))
+
+
+def apply_impact_floor(final_score: float, profile: dict, repos: list) -> float:
+    """
+    Hard floor rule: developers with significant community validation cannot score below these floors.
+    A developer with 1000+ followers or 500+ stars has REAL peer validation.
+    """
+    followers = profile.get("followers", 0)
+    non_fork = [r for r in repos if not r.get("is_fork", r.get("fork", False))]
+    total_stars = sum(r.get("stars", r.get("stargazers_count", 0)) for r in non_fork)
+
+    if followers >= 5000 or total_stars >= 2000:
+        floor = 70  # Top-tier social proof
+    elif followers >= 1000 or total_stars >= 500:
+        floor = 62  # Significant social proof
+    elif followers >= 500 or total_stars >= 100:
+        floor = 55  # Moderate social proof
+    else:
+        floor = 0  # No floor applied
+
+    if final_score < floor:
+        log.info(
+            f"[Impact Floor] Score {final_score:.1f} raised to {floor} "
+            f"(followers={followers}, stars={total_stars})"
+        )
+        return float(floor)
+    return final_score
+
 def compute_final_score(
     code_quality: float,
     skill_depth: float,
@@ -717,6 +804,7 @@ def compute_final_score(
     test_culture_score: float = 0.0,
     has_resume: bool = False,
     account_age_months: float = 0.0,
+    profile: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Compute the final deterministic developer score with full explainability.
@@ -813,6 +901,19 @@ def compute_final_score(
     if external_bonus > 0:
         final = min(final + external_bonus, 100.0)
         log.info(f"Applied multi-source bonus: +{ms_bonus:.1f} (external) +{tc_bonus:.1f} (tests) = +{external_bonus:.1f}")
+
+    # ── FIX E: IMPACT SCORING (social proof) ──
+    _profile = profile or {}
+    impact = compute_impact_score(_profile, repos)
+    if impact > 0:
+        # Add impact as a weighted bonus (up to +8 points)
+        impact_bonus = min(impact * 0.08, 8.0)
+        final = min(final + impact_bonus, 100.0)
+        log.info(f"Applied impact bonus: +{impact_bonus:.1f} (impact_score={impact:.0f})")
+
+    # Apply impact floor — ensure high-profile devs can't score unreasonably low
+    final = apply_impact_floor(final, _profile, repos)
+
     weighted_contributions = explanation["breakdown"]
 
     # Benchmark

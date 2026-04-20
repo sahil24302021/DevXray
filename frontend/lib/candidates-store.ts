@@ -117,7 +117,7 @@ export function buildCandidateRecord(
     // CRITICAL FIX: Save the FULL result so cached reports retain all data
     // (authenticity_score, organic_commits_percentage, authenticity, etc.)
     // Previously only 5 fields were saved → cached reports showed 0% authenticity.
-    full_report: ghReport as Record<string, unknown>,
+    report_payload: ghReport as Record<string, unknown>,
   };
 }
 

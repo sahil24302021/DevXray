@@ -144,11 +144,11 @@ export default function ReportHeader({ data }: Props) {
             <ScoreSegment value={data.score_breakdown.breakdown.authenticity} max={15} color="#f472b6" />
           </div>
           <div className="flex justify-between text-[9px] text-slate-500 font-medium uppercase tracking-wider">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" />Depth</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-violet-400" />Own</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Active</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Complex</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-400" />Lang</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" />Code</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-violet-400" />Skills</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Consistency</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Growth</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-400" />Auth</span>
           </div>
         </div>
       )}
@@ -157,7 +157,7 @@ export default function ReportHeader({ data }: Props) {
 }
 
 function ScoreSegment({ value, max, color }: { value: number; max: number; color: string }) {
-  const percentage = (value / max) * (max);
+  const percentage = (value / max) * 100;
   return (
     <motion.div
       initial={{ width: 0 }}

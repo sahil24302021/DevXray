@@ -285,13 +285,16 @@ export interface AnalysisResult {
 export async function analyzeGitHub(
   username: string,
   jobId?: string,
-  jobContext?: { title?: string; skills?: string; description?: string }
+  jobContext?: { title?: string; skills?: string; description?: string },
+  selfReported?: { privateRepos?: boolean; workCoder?: boolean },
 ): Promise<AnalysisResult> {
   const params = new URLSearchParams({ username });
   if (jobId) params.set("job_id", jobId);
   if (jobContext?.title) params.set("job_title", jobContext.title);
   if (jobContext?.skills) params.set("required_skills", jobContext.skills);
   if (jobContext?.description) params.set("job_description", jobContext.description);
+  if (selfReported?.privateRepos != null) params.set("private_repos", String(selfReported.privateRepos));
+  if (selfReported?.workCoder != null) params.set("work_coder", String(selfReported.workCoder));
 
   const res = await fetch(`${API_BASE}/analyze?${params}`);
   if (!res.ok) {

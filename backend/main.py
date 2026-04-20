@@ -411,9 +411,19 @@ async def emit_progress(job_id: Optional[str], step: str, done: bool = False, pr
 
 @app.get("/analyze")
 @limiter.limit("10/minute")
-async def analyze_user(request: Request, username: str, job_id: Optional[str] = None):
+async def analyze_user(
+    request: Request,
+    username: str,
+    job_id: Optional[str] = None,
+    private_repos: Optional[bool] = None,
+    work_coder: Optional[bool] = None,
+):
     """
     Developer Intelligence Analysis — GitHub-only mode.
+
+    Optional self-reported context:
+      private_repos: Developer says their main repos are private
+      work_coder: Developer says they primarily code at work, not GitHub
     """
     if not username:
         raise HTTPException(status_code=400, detail="Username parameter is required")
@@ -579,6 +589,29 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
         account_age_years=account_age,
     )
 
+    # ─── Inject self-reported context into data_assessment ───
+    if private_repos is not None or work_coder is not None:
+        from intelligence.data_richness import compute_overall_data_richness
+        _da = engine_results.get("data_assessment", {})
+        _gr = engine_results.get("github_richness", {})
+        _rr = {"richness_score": 0, "weight": 0.0, "tier": "none", "has_resume": False}
+        self_ctx = {
+            "private_repos": private_repos,
+            "work_coder": work_coder,
+            "sparse_mode_requested": bool(private_repos or work_coder),
+        }
+        # Recompute with self-reported context
+        updated_assessment = compute_overall_data_richness(
+            github_richness=_gr,
+            resume_richness=_rr,
+            self_reported_context=self_ctx,
+        )
+        engine_results["data_assessment"] = updated_assessment
+        pipeline_meta["data_basis"] = updated_assessment["data_basis"]
+        pipeline_meta["needs_more_data"] = updated_assessment["needs_more_data"]
+        pipeline_meta["request_signals"] = updated_assessment["request_signals"]
+        log.info(f"[SelfReported] Context applied: private={private_repos}, work={work_coder}")
+
     # ─── Apply multi-source bonus to final score ───
     if multi_source_bonus > 0 and "scoring" in engine_results:
         old_score = engine_results["scoring"].get("final_score", 0)
@@ -663,6 +696,15 @@ async def analyze_user(request: Request, username: str, job_id: Optional[str] = 
     report["pipeline_timing"] = pipeline_meta.get("timing", {})
     report["data_sources"] = pipeline_meta.get("data_sources", ["github"])
     report["data_source_confidence"] = pipeline_meta.get("data_source_confidence", "LOW")
+
+    # Phase 3: Adaptive data assessment
+    report["data_assessment"] = engine_results.get("data_assessment", {})
+    report["github_richness"] = engine_results.get("github_richness", {})
+    report["resume_quality"] = engine_results.get("resume_quality")
+    report["data_basis"] = pipeline_meta.get("data_basis", "GitHub")
+    report["needs_more_data"] = pipeline_meta.get("needs_more_data", False)
+    report["request_signals"] = pipeline_meta.get("request_signals", [])
+    report["github_sparse_mode"] = pipeline_meta.get("github_sparse_mode", False)
 
     # Inject multi-source intelligence
     report["multi_source"] = multi_source_data
@@ -1051,6 +1093,15 @@ async def analyze_resume_endpoint(
         github_report["proof_density"] = pipeline_meta.get("proof_density", {})
         github_report["data_sufficiency"] = pipeline_meta.get("sufficiency", {})
         github_report["pipeline_timing"] = pipeline_meta.get("timing", {})
+
+        # Phase 3: Adaptive data assessment
+        github_report["data_assessment"] = engine_results.get("data_assessment", {})
+        github_report["github_richness"] = engine_results.get("github_richness", {})
+        github_report["resume_quality"] = engine_results.get("resume_quality")
+        github_report["data_basis"] = pipeline_meta.get("data_basis", "GitHub")
+        github_report["needs_more_data"] = pipeline_meta.get("needs_more_data", False)
+        github_report["request_signals"] = pipeline_meta.get("request_signals", [])
+        github_report["github_sparse_mode"] = pipeline_meta.get("github_sparse_mode", False)
 
         # Inject date + repo context into report
         github_report["account_age_context"] = account_age_ctx
@@ -1484,6 +1535,18 @@ Generate a complete interview kit. Return ONLY this JSON:
             
         return {"success": True, "interview_kit": fallback_kit, "role": role, "difficulty": difficulty, "is_fallback": True}
 
+def _deep_sanitize(obj, depth=0):
+    """Recursively ensure no dicts appear where strings are expected in lists."""
+    if depth > 10:
+        return str(obj)
+    if isinstance(obj, dict):
+        return {str(k): _deep_sanitize(v, depth+1) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_deep_sanitize(item, depth+1) for item in obj]
+    if isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    return str(obj)
+
 async def _generate_deep_report(
     resume_data: dict,
     github_report: dict | None,
@@ -1504,6 +1567,19 @@ async def _generate_deep_report(
     are all injected into the prompt so the LLM cannot misclassify dates or
     claim that repos don't exist.
     """
+    try:
+        resume_data = _deep_sanitize(resume_data) if resume_data else {}
+        if github_report:
+            # Specifically fix top_languages — must be List[str] not List[Dict]
+            if "top_languages" in github_report:
+                langs = github_report["top_languages"]
+                if isinstance(langs, list):
+                    github_report["top_languages"] = [
+                        item if isinstance(item, str) else str(item.get("language", item.get("name", str(item))))
+                        for item in langs
+                    ]
+    except Exception as sanitize_err:
+        log.warning(f"Sanitize error: {sanitize_err}")
     from orchestrator.report_generator import compute_experience_display
     today = _get_today_str()
 

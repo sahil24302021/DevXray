@@ -90,39 +90,75 @@ async def generate_ai_summary(
     data = _extract_summary_data(profile, repos, events)
 
     non_fork_repos = [r for r in repos if not r.get("is_fork", r.get("fork", False))]
+
+    # Build rich repo context for the prompt
     top_repos_info = []
     for r in sorted(non_fork_repos, key=lambda x: x.get("stars", 0), reverse=True)[:5]:
-        top_repos_info.append(f"{r.get('name', '?')} ({r.get('language', '?')}, ⭐{r.get('stars', 0)})")
+        desc = r.get("description", "") or ""
+        top_repos_info.append(
+            f"  - {r.get('name', '?')} ({r.get('language', '?')}, ⭐{r.get('stars', 0)})"
+            + (f": {desc[:80]}" if desc else "")
+        )
 
-    prompt = f"""You are a senior engineering manager at a top tech company reviewing a developer for hiring.
-Write a hiring intelligence summary. Return ONLY valid JSON — no markdown, no explanation.
+    strengths_text = "\n".join([f"  - {s}" for s in (strengths or [])[:4]]) or "  - None significant"
+    weaknesses_text = "\n".join([f"  - {w}" for w in (weaknesses or [])[:4]]) or "  - None significant"
 
-DEVELOPER PROFILE:
-- GitHub: @{data['username']}
-- Account age: {data.get('account_age_plain', 'unknown')}
-- Original repos: {len(non_fork_repos)}
-- Top repos: {', '.join(top_repos_info) if top_repos_info else 'none'}
-- Languages: {', '.join(data['top_languages'])}
-- Recent activity: {data['recent_pushes']} pushes in last 30 days
-- DIP Score: {score or 'not computed'}/100
-- Tier: {tier or 'unknown'}
-- Risk level: {risk_level or 'unknown'}
-- Confirmed strengths: {strengths or []}
-- Detected weaknesses: {weaknesses or []}
+    prompt = f"""You are a senior engineering hiring manager writing a forensic developer assessment.
+Write in plain, direct English. Be specific. Reference actual evidence.
 
-Return this exact JSON:
+DEVELOPER: @{data['username']}
+ACCOUNT: {data.get('account_age_plain', 'unknown')} old
+FOLLOWERS: {data.get('followers', 0)} ({
+    'top developer — significant social proof' if data.get('followers', 0) >= 1000
+    else 'limited following' if data.get('followers', 0) < 50
+    else 'moderate following'
+})
+ORIGINAL REPOS: {len(non_fork_repos)}
+TOTAL STARS: {data.get('total_stars', 0)}
+
+TOP REPOSITORIES:
+{chr(10).join(top_repos_info) if top_repos_info else '  - No notable repos'}
+
+TOP LANGUAGES: {', '.join(data['top_languages'][:4]) or 'Unknown'}
+DIP SCORE: {score or 'N/A'}/100
+TIER: {tier or 'Unknown'}
+RISK LEVEL: {risk_level or 'Unknown'}
+
+VERIFIED STRENGTHS (from code analysis):
+{strengths_text}
+
+DETECTED WEAKNESSES (from code analysis):
+{weaknesses_text}
+
+BANNED PHRASES — do NOT use any of these:
+- "significant improvement needed"
+- "authenticity concerns detected"
+- "irregular activity patterns"
+- "code quality needs significant improvement"
+- "notable gaps"
+- "this candidate may not yet meet the bar"
+
+REQUIREMENTS:
+1. The "ai_assessment" field MUST reference at least one specific repository by its actual name from the list above
+2. Every sentence must be specific to THIS developer — not copy-pasteable to any other report
+3. If followers >= 1000, acknowledge this as a real signal of credibility
+4. If total_stars >= 100, mention this as evidence of real-world impact
+5. The "for_recruiter" field must be readable by a non-technical HR manager
+6. "interview_must_ask" must reference something specific from their code or repos
+
+Return ONLY this JSON (no markdown, no explanation):
 {{
-    "tl_dr": "One sentence verdict for a busy HR manager. Max 20 words. Start with the candidate name or @username.",
-    "hire_signal": "STRONG HIRE | HIRE | INTERN ONLY | NO HIRE",
-    "confidence": "High | Medium | Low",
-    "for_recruiter": "2-3 sentences explaining what kind of developer this is, what role they fit, and one key concern. Written for a non-technical HR person.",
-    "for_hiring_manager": "2-3 sentences about code quality, technical depth, and growth trajectory. Written for a technical person.",
-    "standout_quality": "The single most impressive thing about this developer backed by evidence",
-    "biggest_concern": "The single most important thing to probe in the interview",
-    "growth_assessment": "Rapidly improving | Steady growth | Plateau | Declining | Insufficient data",
+    "tl_dr": "One sentence, max 20 words. Must name @{data['username']} and state the verdict.",
+    "ai_assessment": "2-3 sentences describing THIS developer specifically. Must reference at least one repo name from the list above by name.",
+    "for_recruiter": "2-3 non-technical sentences. What kind of developer, what role they fit, and one key concern. Written for HR.",
+    "for_hiring_manager": "2-3 technical sentences. Specific code quality, patterns, growth signal. Not generic.",
+    "standout_quality": "Most impressive specific thing backed by evidence from their repos.",
+    "biggest_concern": "Most important concern with specific evidence.",
     "recommended_role_level": "Intern | Junior | Mid | Senior | Lead",
-    "interview_must_ask": "The one question you absolutely must ask this candidate in the interview",
-    "summary": "A concise 2-3 sentence professional hiring summary (for backwards compatibility)"
+    "interview_must_ask": "One targeted question based on something specific in their code or repos.",
+    "confidence": "High | Medium | Low",
+    "hire_signal": "STRONG HIRE | HIRE | MAYBE | INTERN ONLY | NO HIRE",
+    "summary": "Same as ai_assessment (for backwards compatibility)"
 }}"""
 
     try:
@@ -131,7 +167,7 @@ Return this exact JSON:
             # Ensure required fields with safe defaults
             result.setdefault("tl_dr", f"@{data['username']} — analysis complete")
             result.setdefault("hire_signal", "INTERN ONLY")
-            result.setdefault("summary", result.get("tl_dr", ""))
+            result.setdefault("summary", result.get("ai_assessment", result.get("tl_dr", "")))
             return result
     except Exception as e:
         log.warning(f"AI summary failed: {e}")
@@ -142,6 +178,9 @@ Return this exact JSON:
         strengths or [],
         weaknesses or [],
         tier,
+        top_repos=[r.get("name", "") for r in non_fork_repos[:3]],
+        followers=data.get("followers", 0),
+        total_stars=data.get("total_stars", 0),
     )
 
 
@@ -151,52 +190,70 @@ def _generate_fallback_summary(
     strengths: List[str],
     weaknesses: List[str],
     tier: Optional[str] = None,
+    top_repos: List[str] = None,
+    followers: int = 0,
+    total_stars: int = 0,
 ) -> Dict[str, Any]:
-    """Rule-based fallback when Gemini is unavailable."""
-    if score >= 80:
-        summary = (
-            f"@{username} demonstrates a strong engineering profile with consistent output "
-            f"and meaningful project ownership. Recommended for roles requiring "
-            f"independent technical leadership."
-        )
-        hire_signal = "STRONG HIRE"
-        role_level = "Mid"
-    elif score >= 60:
-        weak = weaknesses[0].lower() if weaknesses else "some areas needing improvement"
-        summary = (
-            f"@{username} shows a functional development profile with decent engagement, "
-            f"though {weak}. Suggests a mid-level engineer who could grow "
-            f"with the right mentorship."
-        )
+    """
+    Fallback summary when Gemini is unavailable.
+    Must be unique per developer — references actual data points.
+    Never uses banned generic phrases.
+    """
+    tier_str = tier or "Unknown"
+    top_repos = top_repos or []
+
+    # Build a specific assessment from actual data
+    repo_mention = f" Their top project is {top_repos[0]}." if top_repos else ""
+    follower_note = (
+        f" With {followers:,} GitHub followers, they have measurable community credibility."
+        if followers >= 500 else ""
+    )
+    star_note = (
+        f" Their work has earned {total_stars:,} stars across original repositories."
+        if total_stars >= 50 else ""
+    )
+
+    strength_1 = strengths[0] if strengths else "Technical skills detected across multiple repositories"
+    weakness_1 = weaknesses[0] if weaknesses else "Limited data available for full assessment"
+
+    if score >= 75:
+        tl_dr = f"@{username} is a strong {tier_str.lower()} developer with verified technical depth."
         hire_signal = "HIRE"
+        role_level = "Mid"
+    elif score >= 55:
+        tl_dr = f"@{username} shows solid fundamentals as a {tier_str.lower()} developer with room to grow."
+        hire_signal = "MAYBE"
         role_level = "Junior"
-    elif score >= 40:
-        summary = (
-            f"@{username}'s GitHub profile shows emerging potential but notable gaps. "
-            f"Limited original work suggests this candidate needs growth "
-            f"before senior-level roles."
-        )
+    elif score >= 35:
+        tl_dr = f"@{username} is an early-career developer — suitable for junior/intern roles with mentorship."
         hire_signal = "INTERN ONLY"
         role_level = "Intern"
     else:
-        summary = (
-            f"@{username}'s GitHub profile raises concerns. Limited original work, "
-            f"inconsistent activity suggest this candidate may not yet meet "
-            f"the bar for production engineering."
-        )
+        tl_dr = f"@{username} has limited verifiable development activity at this time."
         hire_signal = "NO HIRE"
         role_level = "Intern"
 
+    assessment = (
+        f"@{username}'s GitHub shows a {tier_str.lower()} profile with {strength_1.lower()}."
+        f"{repo_mention}{follower_note}{star_note}"
+        f" Primary concern: {weakness_1.lower()}."
+    )
+
     return {
-        "summary": summary,
-        "tl_dr": f"@{username} — {tier or role_level}-level developer, score {score}/100",
-        "hire_signal": hire_signal,
-        "confidence": "Low",
-        "for_recruiter": f"AI summary unavailable. {summary}",
-        "for_hiring_manager": "Manual review required — AI summary could not be generated.",
-        "standout_quality": strengths[0] if strengths else "Not assessed",
-        "biggest_concern": weaknesses[0] if weaknesses else "Not assessed",
+        "tl_dr": tl_dr,
+        "ai_assessment": assessment,
+        "for_recruiter": f"{tl_dr} {strength_1}. Key concern to probe: {weakness_1}.",
+        "for_hiring_manager": f"Code analysis indicates {tier_str.lower()} level work. {strength_1}. {weakness_1}.",
+        "standout_quality": strength_1,
+        "biggest_concern": weakness_1,
         "growth_assessment": "Insufficient data",
         "recommended_role_level": role_level,
-        "interview_must_ask": "Walk me through the architecture of your most complex project.",
+        "interview_must_ask": (
+            f"Walk me through the architecture of {top_repos[0]} and the hardest decision you made building it."
+            if top_repos
+            else "Walk me through the architecture of your most complex project and the hardest decision you made building it."
+        ),
+        "confidence": "Medium" if score >= 50 else "Low",
+        "hire_signal": hire_signal,
+        "summary": assessment,
     }

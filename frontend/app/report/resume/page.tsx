@@ -7,6 +7,7 @@ import Link from "next/link";
 import { BarChart, Bar, Cell, XAxis, Tooltip, ResponsiveContainer } from "recharts";
 import InterviewKit from "@/components/report/InterviewKit";
 import ReportErrorBoundary from "@/components/report/ReportErrorBoundary";
+import DataBasisBanner from "@/components/report/DataBasisBanner";
 
 /* --- Status Badge --- */
 function StatusBadge({ status }: { status: string }) {
@@ -332,9 +333,16 @@ export default function ResumeReportPage() {
       return;
     }
     try {
-      setData(JSON.parse(rawData));
-    } catch {
-      setError("Failed to parse report data.");
+      const parsed = JSON.parse(rawData);
+      // Safety check: ensure required fields exist
+      if (!parsed || typeof parsed !== 'object') {
+        setError("Invalid report data format.");
+        return;
+      }
+      setData(parsed);
+    } catch (e) {
+      console.error("Resume report parse error:", e);
+      setError("Failed to parse report data. Please try again.");
     }
   }, [router]);
 
@@ -350,11 +358,12 @@ export default function ResumeReportPage() {
   );
 
   const { resume_data, github_intelligence, claims_validation, analysis_metadata, deep_report, linkedin_data, job_requirements } = data;
-  const score = github_intelligence?.final_score 
-    ?? github_intelligence?.score 
-    ?? deep_report?.overall_score 
-    ?? claims_validation?.authenticity_score 
-    ?? 0;
+  const score = Number(
+    github_intelligence?.final_score ??
+    github_intelligence?.score ??
+    deep_report?.overall_score ??
+    0
+  ) || 0;  // Double fallback to 0 if NaN
   
   // Extract simple recommendation string if it's an object now
   let rec = github_intelligence?.hiring_recommendation?.summary
@@ -397,7 +406,8 @@ export default function ResumeReportPage() {
     : `Low confidence (${confidenceScore}%): Very few data points \u2014 treat report as preliminary.`;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#fafafa] font-[family-name:var(--font-dm-sans)] relative overflow-hidden">
+    <ReportErrorBoundary section="Resume Report">
+      <div className="min-h-screen bg-[#050505] text-[#fafafa] font-[family-name:var(--font-dm-sans)] relative overflow-hidden">
       {/* --- Print Styles (page-specific overrides) --- */}
       <style jsx global>{`
         @media print {
@@ -450,21 +460,25 @@ export default function ResumeReportPage() {
 
       <main ref={reportRef} className="relative z-10 mx-auto max-w-6xl px-6 py-10 pb-20 space-y-6">
 
-        {/* ═══ AI VERIFICATION UNAVAILABLE BANNER ═══ */}
+        {/* ═══ LOW DATA NOTE (replaces alarming quota banner) ═══ */}
         {data?.analysis_metadata?.ai_verification_available === false && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-            className="rounded-xl p-4 border border-amber-500/20 flex items-center gap-3"
-            style={{ background: "rgba(251,191,36,0.05)" }}>
-            <span className="text-xl">🔬</span>
-            <div>
-              <p className="text-sm font-bold text-amber-400">Deterministic Analysis Only</p>
-              <p className="text-xs text-amber-300/60 mt-0.5">
-                AI narrative generation was unavailable during this scan (API quota exceeded).
-                All scores are fully deterministic — calculated from actual GitHub code analysis.
-                The hiring recommendation is rule-based. Re-run in a few minutes for full AI insights.
-              </p>
-            </div>
-          </motion.div>
+          <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400/60" />
+            Limited data available — confidence is lower than usual for this profile.
+            All scores are fully deterministic, calculated from actual code analysis.
+          </div>
+        )}
+
+        {/* ═══ DATA BASIS BANNER (Phase 3) ═══ */}
+        {(github_intelligence?.github_sparse_mode || github_intelligence?.needs_more_data) && (
+          <DataBasisBanner
+            dataBasis={github_intelligence?.data_basis || "GitHub"}
+            confidenceLevel={github_intelligence?.data_assessment?.confidence_level || "Medium"}
+            needsMoreData={github_intelligence?.needs_more_data || false}
+            requestSignals={github_intelligence?.request_signals || []}
+            githubSparseMode={github_intelligence?.github_sparse_mode || false}
+            username={github_intelligence?.username || ""}
+          />
         )}
 
         {/* ═══ LOW CONFIDENCE BANNER ═══ */}
@@ -1166,5 +1180,6 @@ export default function ResumeReportPage() {
 
       </main>
     </div>
+    </ReportErrorBoundary>
   );
 }

@@ -15,6 +15,12 @@ from intelligence.consistency_engine import (
 )
 from engines.growth_engine import run_growth_engine
 from scoring.scoring_engine import compute_final_score
+from intelligence.data_richness import (
+    compute_github_richness,
+    compute_resume_richness,
+    compute_overall_data_richness,
+)
+from intelligence.resume_quality_scorer import score_resume_quality
 from intelligence.system_design_detector import run_system_design_engine
 from processing.repo_analyzer import detect_project, analyze_ci_practices, analyze_test_culture
 
@@ -471,6 +477,7 @@ def _run_core_pipeline(
         has_resume=(resume_data is not None),
         multi_source_bonus=multi_source_bonus_from_private,
         account_age_months=account_age_months,
+        profile=profile,
     )
     timing["scoring_engine"] = round(time.time() - t0, 3)
 
@@ -482,6 +489,83 @@ def _run_core_pipeline(
     confidence_score = _compute_global_confidence(
         sufficiency, code_analysis, skills, authenticity, proof
     )
+
+    # ════════════════════════════════════════════════════
+    #  STEP 10: DATA RICHNESS ASSESSMENT (Phase 3)
+    # ════════════════════════════════════════════════════
+    t0 = time.time()
+
+    # Compute account age for richness detector
+    _account_age_months = 0.0
+    _created_at = profile.get("created_at", "")
+    if _created_at:
+        try:
+            from datetime import datetime, timezone
+            _cdt = datetime.fromisoformat(_created_at.replace("Z", "+00:00"))
+            _account_age_months = max((datetime.now(timezone.utc) - _cdt).days / 30.44, 0)
+        except Exception:
+            pass
+    _profile_for_richness = {**profile, "_account_age_months": _account_age_months}
+
+    github_richness = compute_github_richness(_profile_for_richness, repos, commits)
+    resume_richness = compute_resume_richness(resume_data)
+
+    # Score resume as an independent signal
+    resume_quality = score_resume_quality(resume_data) if resume_data else None
+
+    data_assessment = compute_overall_data_richness(
+        github_richness=github_richness,
+        resume_richness=resume_richness,
+    )
+
+    # Adaptive confidence: blend legacy confidence with data richness confidence
+    richness_confidence = data_assessment["confidence_pct"] / 100.0
+    confidence_score = round((confidence_score * 0.6 + richness_confidence * 0.4), 2)
+    confidence_score = max(0.0, min(1.0, confidence_score))
+
+    # Apply sparse-mode uncertainty discount to final score
+    final_score_val = scoring.get("final_score", 0)
+    if github_richness.get("is_sparse") and not resume_data:
+        # GitHub is thin AND no resume — reduce confidence, flag it
+        sparse_discount = final_score_val * 0.15  # 15% uncertainty
+        scoring["final_score"] = round(final_score_val - sparse_discount, 1)
+        scoring["_sparse_discount_applied"] = round(sparse_discount, 1)
+        log.info(
+            f"[Sparse Mode] Score adjusted: {final_score_val:.1f} -> "
+            f"{scoring['final_score']:.1f} (-{sparse_discount:.1f} uncertainty)"
+        )
+
+    # Resume quality boost: if GitHub is sparse but resume is strong,
+    # blend the resume quality into the final score
+    if resume_quality and github_richness.get("is_sparse"):
+        resume_qs = resume_quality.get("quality_score", 0)
+        tier_scores = {
+            "principal": 90, "senior": 75, "mid": 55, "junior": 35, "entry": 15,
+        }
+        resume_score_signal = tier_scores.get(
+            resume_quality.get("seniority_tier", "entry"), 15
+        )
+        if resume_quality.get("has_quantified_achievements"):
+            resume_score_signal = min(100, resume_score_signal + 10)
+        if resume_quality.get("tier1_company"):
+            resume_score_signal = min(100, resume_score_signal + 15)
+
+        # Blend: use data_assessment weights
+        gh_w = data_assessment["weights"].get("github", 0.7)
+        res_w = data_assessment["weights"].get("resume", 0.3)
+        blended = scoring["final_score"] * gh_w + resume_score_signal * res_w
+        norm = gh_w + res_w
+        if norm > 0:
+            blended = blended / norm
+        scoring["final_score"] = round(max(scoring["final_score"], blended), 1)
+        scoring["_resume_blend_applied"] = True
+        log.info(
+            f"[Resume Blend] Resume signal={resume_score_signal}, "
+            f"blended score={scoring['final_score']:.1f} "
+            f"(gh_w={gh_w}, res_w={res_w})"
+        )
+
+    timing["data_richness"] = round(time.time() - t0, 3)
 
     # ════════════════════════════════════════════════════
     #  ASSEMBLE RESULTS
@@ -498,10 +582,14 @@ def _run_core_pipeline(
         "scoring": scoring,
         "risk_flags": all_risk_flags,
         "proof_list": proof.to_list(),
+        # Phase 3: data richness metadata for the frontend
+        "data_assessment": data_assessment,
+        "github_richness": github_richness,
+        "resume_quality": resume_quality,
     }
 
     pipeline_meta = {
-        "analysis_version": "v3.0",
+        "analysis_version": "v3.1-adaptive",
         "timing": timing,
         "timing_total": round(sum(timing.values()), 3),
         "sufficiency": sufficiency,
@@ -509,6 +597,11 @@ def _run_core_pipeline(
         "is_low_confidence": confidence_score < 0.5,
         "proof_density": proof.get_density_report(),
         "repos_weighted": len(weighted_repos),
+        # Phase 3: data basis metadata
+        "data_basis": data_assessment["data_basis"],
+        "needs_more_data": data_assessment["needs_more_data"],
+        "request_signals": data_assessment["request_signals"],
+        "github_sparse_mode": github_richness.get("is_sparse", False),
     }
 
     return engine_results, pipeline_meta
