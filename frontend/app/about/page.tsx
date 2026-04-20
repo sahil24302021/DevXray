@@ -4,6 +4,7 @@ import { motion, useScroll, useTransform } from "framer-motion";
 import Link from "next/link";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { getCurrentUser } from "@/lib/auth";
+import Logo from "@/components/Logo";
 
 /* ═══════════════════════════════════════════════════════════
    PARTICLE FIELD — Reusable canvas constellation
@@ -118,11 +119,7 @@ export default function AboutPage() {
         <div className="mx-auto max-w-[1200px] flex items-center justify-between py-4 mt-5 px-6 rounded-2xl"
           style={{ background: "rgba(5,5,5,0.85)", borderBottom: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(20px)" }}>
           <Link href="/" className="flex items-center gap-3 no-underline group">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center pulse-glow" style={{ background: "#cdff00" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="#050505" />
-              </svg>
-            </div>
+            <Logo className="w-8 h-8 md:w-10 md:h-10 transition-transform duration-500 group-hover:scale-105" />
             <span className="font-[family-name:var(--font-syne)] font-bold text-[17px] tracking-tight text-white glitch-text">
               Dev<span style={{ color: "#cdff00" }}>Xray</span>
             </span>
@@ -265,9 +262,12 @@ export default function AboutPage() {
       {/* ═══ FOOTER ═══ */}
       <footer className="relative py-12 px-6 z-10 border-t" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
         <div className="mx-auto max-w-[1200px] flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="text-sm font-[family-name:var(--font-syne)] font-semibold text-[#666]">
-            Dev<span style={{ color: "#cdff00" }}>Xray</span>
-          </span>
+          <div className="flex items-center gap-2">
+            <Logo className="w-5 h-5 flex-shrink-0" />
+            <span className="text-sm font-[family-name:var(--font-syne)] font-semibold text-[#666]">
+              Dev<span style={{ color: "#cdff00" }}>Xray</span>
+            </span>
+          </div>
           <p className="text-[11px] text-[#333] font-[family-name:var(--font-space)]">
             © {new Date().getFullYear()} DevXray Intelligence. All rights reserved.
           </p>

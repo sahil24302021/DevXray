@@ -18,6 +18,7 @@ import NavAuthButtons from "@/components/NavAuthButtons";
 import { hasGuestScansRemaining, incrementGuestScan } from "@/lib/scan-gate";
 import { getCurrentUser } from "@/lib/auth";
 import PaywallModal from "@/components/PaywallModal";
+import Logo from "@/components/Logo";
 
 /* ═══════════════════════════════════════════════════════════
    GRAIN OVERLAY
@@ -714,14 +715,7 @@ export default function Home() {
         >
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 sm:gap-3 no-underline group flex-shrink-0">
-            <div
-              className="w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(205,255,0,0.3)] pulse-glow"
-              style={{ background: "#cdff00" }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="#050505" />
-              </svg>
-            </div>
+            <Logo className="w-8 h-8 md:w-10 md:h-10 transition-transform duration-500 group-hover:scale-105" />
             <span className="font-[family-name:var(--font-syne)] font-bold text-[15px] md:text-[17px] tracking-tight text-white glitch-text scan-line">
               Dev<span style={{ color: "#cdff00" }}>Xray</span>
             </span>
@@ -1465,11 +1459,7 @@ export default function Home() {
             style={{ borderColor: "rgba(255,255,255,0.06)" }}
           >
             <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background: "#cdff00" }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="#050505" />
-                </svg>
-              </div>
+              <Logo className="w-6 h-6 flex-shrink-0" />
               <span className="text-sm font-[family-name:var(--font-syne)] font-semibold text-[#666]">
                 Dev<span style={{ color: "#cdff00" }}>Xray</span>
               </span>

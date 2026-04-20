@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { signUpWithEmail, signInWithGoogle, getCurrentUser } from "@/lib/auth";
+import Logo from "@/components/Logo";
 
 export default function SignUpPage() {
   const router = useRouter();
@@ -79,10 +80,8 @@ export default function SignUpPage() {
 
       {/* Logo */}
       <div className="absolute top-6 left-8">
-        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <div className="w-7 h-7 rounded-lg bg-[#cdff00] flex items-center justify-center">
-            <span className="text-[#050505] font-black text-sm">D</span>
-          </div>
+        <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity text-[#cdff00]">
+          <Logo className="w-7 h-7" />
           <span className="font-bold text-white text-sm font-[family-name:var(--font-syne)]">DevXray</span>
         </Link>
       </div>
