@@ -131,6 +131,16 @@ export async function saveCandidate(
 ): Promise<CandidateRecord | null> {
   const record = buildCandidateRecord(result, username);
 
+  // Stamp with current user ID for auth isolation
+  if (isSupabaseAvailable && supabase) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        record.user_id = user.id;
+      }
+    } catch {}
+  }
+
   if (isSupabaseAvailable && supabase) {
     try {
       // First try to find an existing record
@@ -202,10 +212,21 @@ function lsSaveOne(record: CandidateRecord, username: string): void {
 export async function listCandidates(): Promise<CandidateRecord[]> {
   if (isSupabaseAvailable && supabase) {
     try {
-      const { data, error } = await supabase
+      // Get current user for auth isolation
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
+
+      let query = supabase
         .from("candidates")
         .select("*")
         .order("scanned_at", { ascending: false });
+
+      // Filter: show user's own records + legacy records with no user_id
+      if (userId) {
+        query = query.or(`user_id.eq.${userId},user_id.is.null,user_id.eq.`);
+      }
+
+      const { data, error } = await query;
 
       if (!error && data && data.length > 0) {
         return data as CandidateRecord[];

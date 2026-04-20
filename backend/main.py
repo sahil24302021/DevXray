@@ -1618,14 +1618,18 @@ async def _generate_deep_report(
 
     # Sanitize top_languages — this was the direct cause of "unhashable type: dict"
     if github_report:
-        raw_langs = github_report.get("top_languages", [])
-        if raw_langs and isinstance(raw_langs, list) and any(isinstance(l, dict) for l in raw_langs):
-            github_report = dict(github_report)  # shallow copy — don't mutate original
-            github_report["top_languages"] = [
-                l.get("skill_name") or l.get("language") or l.get("name") or str(l)
-                if isinstance(l, dict) else str(l)
-                for l in raw_langs
-            ]
+        # Sanitize ALL list fields that may contain dicts instead of strings
+        FIELDS_TO_FLATTEN = ["top_languages", "verified_skills", "top_skills", "strengths", "weaknesses"]
+        for field in FIELDS_TO_FLATTEN:
+            raw = github_report.get(field, [])
+            if raw and isinstance(raw, list) and any(isinstance(item, dict) for item in raw):
+                if github_report is not None:
+                    github_report = dict(github_report)  # shallow copy
+                github_report[field] = [
+                    item.get("skill_name") or item.get("language") or item.get("name") or str(item)
+                    if isinstance(item, dict) else str(item)
+                    for item in raw
+                ]
 
     # Build date context block — this is the #1 fix for wrong verdicts
     age_ctx = account_age_ctx or {}

@@ -8,6 +8,7 @@ import { BarChart, Bar, Cell, XAxis, Tooltip, ResponsiveContainer } from "rechar
 import InterviewKit from "@/components/report/InterviewKit";
 import ReportErrorBoundary from "@/components/report/ReportErrorBoundary";
 import DataBasisBanner from "@/components/report/DataBasisBanner";
+import Logo from "@/components/Logo";
 
 /* --- Status Badge --- */
 function StatusBadge({ status }: { status: string }) {
@@ -425,9 +426,10 @@ export default function ResumeReportPage() {
       <nav className="sticky top-0 z-50 px-6 md:px-10 pt-4">
         <div className="mx-auto max-w-6xl flex items-center justify-between rounded-2xl px-6 py-3 border border-white/[0.06]"
              style={{ background: "rgba(5, 5, 5, 0.85)", backdropFilter: "blur(20px)" }}>
-          <Link href="/" className="flex items-center gap-2.5 no-underline">
-            <span className="font-[family-name:var(--font-syne)] font-bold text-[15px] tracking-tight text-white">
-              DevXray<span className="text-[#cdff00]">.ai</span>
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 no-underline group flex-shrink-0">
+            <Logo className="w-6 h-6 sm:w-8 sm:h-8 transition-transform duration-500 group-hover:scale-105" />
+            <span className="font-[family-name:var(--font-syne)] font-bold text-[15px] md:text-[17px] tracking-tight text-white glitch-text scan-line">
+              Dev<span style={{ color: "#cdff00" }}>Xray</span>
             </span>
           </Link>
           <div className="flex items-center gap-2">
@@ -865,10 +867,10 @@ export default function ResumeReportPage() {
                 { label: "Total Stars", value: github_intelligence.total_stars },
                 { label: "Authenticity", value: `${github_intelligence.authenticity_score}%` },
                 { label: "Verdict", value: github_intelligence.verdict },
-                { label: "Docs Quality", value: github_intelligence.documentation_quality || "-" },
-                { label: "Coding Patterns", value: github_intelligence.coding_patterns || "-" },
+                { label: "Docs Quality", value: (github_intelligence.documentation_quality as any)?.grade ? `Grade ${(github_intelligence.documentation_quality as any).grade}` : "-" },
+                { label: "Coding Patterns", value: (github_intelligence.coding_patterns as any)?.coding_session || "-" },
                 { label: "Code Health", value: github_intelligence.code_health_score ? `${github_intelligence.code_health_score}/100` : "-" },
-                { label: "Streak", value: github_intelligence.contribution_streak || "-" }
+                { label: "Streak", value: (github_intelligence.contribution_streak as any)?.current_streak_weeks ? `${(github_intelligence.contribution_streak as any).current_streak_weeks}w current` : "-" }
               ].map((stat, i) => (
                 stat.value !== "-" && (
                   <div key={i} className="p-3 rounded-xl bg-black/40 border border-white/5">

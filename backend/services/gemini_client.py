@@ -110,44 +110,55 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     # ── STEP 3: Try OpenRouter (free tier, 100+ models) ────────
     openrouter_key = _os.getenv("OPENROUTER_API_KEY", "")
     if openrouter_key:
-        for attempt in range(2):
+        OR_MODELS = [
+            "meta-llama/llama-3.1-8b-instruct:free",
+            "google/gemma-3-4b-it:free",
+            "mistralai/mistral-7b-instruct:free",
+            "qwen/qwen3-8b:free",
+        ]
+        for or_model in OR_MODELS:
             try:
-                async with _hx.AsyncClient(timeout=30.0) as c:
+                async with _hx.AsyncClient(timeout=25.0) as c:
                     r = await c.post(
                         "https://openrouter.ai/api/v1/chat/completions",
                         headers={
                             "Authorization": f"Bearer {openrouter_key}",
                             "Content-Type": "application/json",
                             "HTTP-Referer": "https://dev-xray.vercel.app",
+                            "X-Title": "DevXray AI",
                         },
                         json={
-                            "model": "meta-llama/llama-3.1-8b-instruct:free",
+                            "model": or_model,
                             "messages": [
-                                {"role": "system", "content": "Reply ONLY with valid JSON. No markdown."},
-                                {"role": "user", "content": prompt}
+                                {"role": "system", "content": "Reply ONLY with valid JSON. No markdown, no explanation."},
+                                {"role": "user", "content": prompt[:12000]}
                             ],
                             "temperature": temperature,
-                            "max_tokens": 4000,
+                            "max_tokens": 3000,
                         }
                     )
+                    if r.status_code == 404:
+                        log.warning(f"[GeminiClient] OpenRouter model {or_model} not found, trying next")
+                        continue
                     r.raise_for_status()
                     raw_body = r.text.strip()
                     if not raw_body:
-                        raise ValueError("Empty response body from OpenRouter")
-                    txt = _j.loads(raw_body)["choices"][0]["message"]["content"].strip()
+                        continue
+                    response_data = _j.loads(raw_body)
+                    txt = response_data["choices"][0]["message"]["content"].strip()
                     txt = txt.replace("```json", "").replace("```", "").strip()
                     result = _j.loads(txt)
-                    log.info("[GeminiClient] OpenRouter succeeded (tertiary)")
+                    log.info(f"[GeminiClient] OpenRouter succeeded with {or_model}")
                     return result
             except Exception as or_err:
-                last_error = or_err
                 err_str = str(or_err).lower()
-                if ("429" in err_str or "rate" in err_str) and attempt == 0:
-                    log.warning("[GeminiClient] OpenRouter rate limited — retrying in 3s")
-                    await _aio.sleep(3)
+                if "429" in err_str or "rate" in err_str:
+                    log.warning(f"[GeminiClient] OpenRouter rate limited on {or_model} — trying next model")
                     continue
-                log.warning(f"[GeminiClient] OpenRouter failed: {or_err} — trying Gemini")
-                break
+                log.warning(f"[GeminiClient] OpenRouter {or_model} failed: {or_err}")
+                last_error = or_err
+                continue
+        log.warning("[GeminiClient] All OpenRouter models failed — trying Gemini")
 
     # ── STEP 4: Gemini flash as last resort ─────────────────────────
     from google.genai import types

@@ -27,6 +27,7 @@ import EvidenceTrail from "@/components/report/EvidenceTrail";
 import RecruiterBrief from "@/components/report/RecruiterBrief";
 import InterviewKit from "@/components/report/InterviewKit";
 import DataBasisBanner from "@/components/report/DataBasisBanner";
+import Logo from "@/components/Logo";
 
 import LoadingState from "@/components/LoadingState";
 import ReportErrorBoundary from "@/components/report/ReportErrorBoundary";
@@ -358,12 +359,8 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             boxShadow: "0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)",
           }}
         >
-          <Link href="/" className="flex items-center gap-2.5 no-underline">
-            <div className="w-6 h-6 rounded-md bg-[#cdff00] flex items-center justify-center shadow-[0_0_15px_rgba(205,255,0,0.2)]">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="#050505" />
-              </svg>
-            </div>
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 no-underline group flex-shrink-0">
+            <Logo className="w-6 h-6 sm:w-8 sm:h-8 transition-transform duration-500 group-hover:scale-105" />
             <span className="font-[family-name:var(--font-syne)] font-bold text-[15px] tracking-tight text-white">
               DevXray<span className="grad-text">.ai</span>
             </span>

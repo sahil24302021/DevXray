@@ -172,7 +172,7 @@ export default function PricingPage() {
         <ParticleField />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }} className="relative z-10">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#cdff00]/20 bg-[#cdff00]/5 text-[#cdff00] text-xs font-semibold mb-6">
-            🚀 TRUSTED BY 200+ HIRING TEAMS ACROSS INDIA
+            TRUSTED BY 200+ HIRING TEAMS ACROSS INDIA
           </div>
           <h1 className="font-[family-name:var(--font-syne)] font-extrabold tracking-[-0.04em] text-white leading-[0.9] mb-6"
             style={{ fontSize: "clamp(2.8rem, 7vw, 5.5rem)" }}>
@@ -201,7 +201,7 @@ export default function PricingPage() {
               <motion.div
                 key={key}
                 variants={fadeUp}
-                className={`rounded-3xl p-6 md:p-8 flex flex-col relative overflow-hidden border transition-all duration-500 ${
+                className={`rounded-3xl p-6 md:p-8 flex flex-col relative overflow-visible border transition-all duration-500 ${
                   isPro
                     ? "border-[#cdff00]/30 bg-[#cdff00]/[0.02] shadow-[0_0_60px_rgba(205,255,0,0.06)]"
                     : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]"
@@ -262,7 +262,7 @@ export default function PricingPage() {
                   </button>
                 )}
                 {key === "enterprise" && (
-                  <a href="mailto:sales@devxray.ai" className="block w-full py-3.5 text-center rounded-xl bg-white/[0.05] text-white border border-white/[0.08] hover:bg-white/[0.08] text-sm font-bold transition-all no-underline">
+                  <a href="/contact" className="block w-full py-3.5 text-center rounded-xl bg-white/[0.05] text-white border border-white/[0.08] hover:bg-white/[0.08] text-sm font-bold transition-all no-underline">
                     Contact Sales →
                   </a>
                 )}
@@ -353,7 +353,13 @@ export default function PricingPage() {
                 </div>
               </div>
               <p className="text-[#888] text-sm leading-relaxed">&ldquo;{quote}&rdquo;</p>
-              <div className="mt-4 text-[#cdff00] text-xs">★★★★★</div>
+              <div className="mt-4 flex gap-0.5">
+                {[...Array(5)].map((_, i) => (
+                  <svg key={i} className="w-3.5 h-3.5 text-[#cdff00]" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                ))}
+              </div>
             </motion.div>
           ))}
         </div>

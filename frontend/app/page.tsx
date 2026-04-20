@@ -389,17 +389,10 @@ function MobileMenu({ isLoggedIn }: { isLoggedIn: boolean }) {
               backdropFilter: "blur(20px)",
             }}
           >
-            <Link
-              href="/compare"
-              onClick={() => setOpen(false)}
-              className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#cdff00] tracking-widest uppercase"
-            >
-              Compare
-            </Link>
-            {["Features", "Process", "About", "Pricing"].map((item) => (
+            {["Features", "Process", "Pricing"].map((item) => (
               <a
                 key={item}
-                href={item === "About" || item === "Pricing" ? `/${item.toLowerCase()}` : `#${item.toLowerCase()}`}
+                href={item === "Pricing" ? `/pricing` : `#${item.toLowerCase()}`}
                 onClick={() => setOpen(false)}
                 className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors tracking-widest uppercase"
               >
@@ -723,16 +716,10 @@ export default function Home() {
 
           {/* Desktop nav links */}
           <div className="hidden md:flex items-center gap-8">
-            <Link
-              href="/compare"
-              className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#cdff00] hover:text-white transition-colors duration-300 no-underline tracking-widest uppercase"
-            >
-              Compare
-            </Link>
-            {["Features", "Process", "About", "Pricing"].map((item) => (
+            {["Features", "Process", "Pricing"].map((item) => (
               <a
                 key={item}
-                href={item === "About" || item === "Pricing" ? `/${item.toLowerCase()}` : `#${item.toLowerCase()}`}
+                href={item === "Pricing" ? `/pricing` : `#${item.toLowerCase()}`}
                 className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors duration-300 no-underline tracking-widest uppercase animated-underline"
               >
                 {item}
@@ -817,10 +804,10 @@ export default function Home() {
                 animate="show"
                 variants={stagger}
               >
-                <motion.span variants={fadeUp} className="block">Decode</motion.span>
+                <motion.span variants={fadeUp} className="block">X-ray</motion.span>
                 <motion.span variants={fadeUp} className="block">developer</motion.span>
                 <motion.span variants={fadeUp} className="block" style={{ color: "#cdff00" }}>
-                  <RotatingText words={["talent.", "truth.", "signal.", "DNA."]} />
+                  <RotatingText words={["truth.", "code.", "signal.", "DNA."]} />
                 </motion.span>
               </motion.h1>
 
@@ -830,26 +817,34 @@ export default function Home() {
                 transition={{ duration: 0.7, delay: 0.7 }}
                 className="text-[#888] text-base sm:text-lg md:text-xl font-light mt-6 md:mt-8 max-w-lg leading-relaxed"
               >
-                Deep forensic analysis of resumes and developer profiles.{" "}
-                Skills verification, authenticity, and coding DNA —{" "}
-                <span className="text-[#ccc] font-normal">everything revealed.</span>
+                Forensic GitHub analysis + resume verification.{" "}
+                Every claim checked against real code —{" "}
+                <span className="text-[#ccc] font-normal">in 60 seconds.</span>
               </motion.p>
 
-              {/* Urgency / social proof */}
+              {/* Social proof bar */}
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, delay: 0.85 }}
-                className="flex items-center gap-4 sm:gap-6 text-xs text-[#555] mt-5 flex-wrap"
+                className="flex items-center gap-3 sm:gap-5 text-xs text-[#555] mt-5 flex-wrap"
               >
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                  127 candidates scanned today
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  37 skills verified
                 </span>
-                <span className="hidden sm:inline">•</span>
-                <span>93% accuracy rate</span>
-                <span className="hidden sm:inline">•</span>
-                <span>Trusted by 200+ hiring teams</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  155+ files per scan
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                  AI-powered
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  60s results
+                </span>
               </motion.div>
 
               {/* Welcome banner for logged-in users */}
@@ -1234,6 +1229,91 @@ export default function Home() {
       </motion.div>
 
       {/* ═══════════════════════════════════════════════
+          HOW IT WORKS — 3 steps
+          ═══════════════════════════════════════════════ */}
+      <section className="relative py-16 md:py-24 px-5 sm:px-6 md:px-12 z-10">
+        <div className="mx-auto max-w-[1000px]">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-12"
+          >
+            <span className="section-tag mb-5 inline-flex">How It Works</span>
+            <h2
+              className="font-[family-name:var(--font-syne)] font-bold text-white tracking-[-0.03em] mt-4"
+              style={{ fontSize: "clamp(1.6rem, 4vw, 2.8rem)" }}
+            >
+              Three steps to{" "}
+              <span style={{ color: "#cdff00" }}>verified truth.</span>
+            </h2>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              { step: "01", title: "Paste GitHub or upload resume", desc: "Drop a GitHub username or PDF resume. DevXray starts scanning immediately." },
+              { step: "02", title: "AI forensic analysis runs", desc: "155+ files read. Every claim verified. Commit patterns analyzed. Skills depth-tested." },
+              { step: "03", title: "Get a hiring verdict", desc: "Score, tier, red flags, verified strengths, and a ready-to-use interview kit. In 60 seconds." },
+            ].map(({ step, title, desc }) => (
+              <motion.div
+                key={step}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: parseInt(step) * 0.1 }}
+                className="relative"
+              >
+                <span
+                  className="font-[family-name:var(--font-syne)] font-black absolute -top-4 -left-2"
+                  style={{ fontSize: "48px", color: "rgba(255,255,255,0.04)" }}
+                >
+                  {step}
+                </span>
+                <div className="relative z-10">
+                  <h3 className="font-[family-name:var(--font-syne)] font-bold text-white mb-2 text-lg">{title}</h3>
+                  <p className="text-sm text-[#888] leading-relaxed">{desc}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* VS Comparison Block */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="rounded-2xl border border-white/[0.06] p-6 md:p-8 mt-16 max-w-3xl mx-auto"
+            style={{ background: "rgba(255,255,255,0.02)" }}
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
+              <div>
+                <p className="text-xs font-bold text-rose-400 uppercase tracking-wider mb-4">Traditional resume screening</p>
+                {["30+ minutes per candidate", "Trusts unverified claims", "Misses 70% of red flags", "Generic questions from Google", "No code verification"].map(item => (
+                  <div key={item} className="flex items-center gap-2 text-sm text-[#666] mb-3">
+                    <svg className="w-4 h-4 text-rose-400/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    {item}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <p className="text-xs font-bold text-[#cdff00] uppercase tracking-wider mb-4">DevXray</p>
+                {["60 seconds per candidate", "Every claim verified against code", "Forensic red flag detection", "Interview questions from their actual code", "155+ files deep-analyzed"].map(item => (
+                  <div key={item} className="flex items-center gap-2 text-sm text-[#ccc] mb-3">
+                    <svg className="w-4 h-4 text-[#cdff00] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════
           FEATURES
           ═══════════════════════════════════════════════ */}
       <section id="features" className="relative py-20 md:py-32 px-5 sm:px-6 md:px-12 z-10">
@@ -1470,13 +1550,13 @@ export default function Home() {
             </p>
 
             <div className="flex items-center gap-5 md:gap-8">
-              {["Privacy", "Terms", "Contact"].map((link) => (
+              {[{ label: "About", href: "/about" }, { label: "Contact", href: "/contact" }, { label: "Pricing", href: "/pricing" }].map(({ label, href }) => (
                 <a
-                  key={link}
-                  href="#"
+                  key={label}
+                  href={href}
                   className="text-[11px] text-[#444] hover:text-[#cdff00] transition-colors duration-300 no-underline font-[family-name:var(--font-space)] tracking-wider uppercase"
                 >
-                  {link}
+                  {label}
                 </a>
               ))}
             </div>

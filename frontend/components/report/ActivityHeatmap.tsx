@@ -14,18 +14,23 @@ export default function ActivityHeatmap({ data }: Props) {
 
   const getIntensity = (count: number) => {
     if (count === 0) return "bg-white/[0.04]";
-    const ratio = count / maxCount;
-    if (ratio > 0.75) return "bg-[#cdff00]";
-    if (ratio > 0.5) return "bg-[#cdff00]/60";
-    if (ratio > 0.25) return "bg-[#cdff00]/35";
+    // Use log scale so small differences in monthly counts are visible
+    const logMax = Math.log(maxCount + 1);
+    const logCount = Math.log(count + 1);
+    const ratio = logCount / logMax;
+    if (ratio > 0.8) return "bg-[#cdff00]";
+    if (ratio > 0.55) return "bg-[#cdff00]/60";
+    if (ratio > 0.3) return "bg-[#cdff00]/35";
     return "bg-[#cdff00]/15";
   };
 
   const getGlow = (count: number) => {
     if (count === 0) return "";
-    const ratio = count / maxCount;
-    if (ratio > 0.75) return "shadow-[0_0_8px_rgba(205,255,0,0.3)]";
-    if (ratio > 0.5) return "shadow-[0_0_6px_rgba(205,255,0,0.2)]";
+    const logMax = Math.log(maxCount + 1);
+    const logCount = Math.log(count + 1);
+    const ratio = logCount / logMax;
+    if (ratio > 0.8) return "shadow-[0_0_8px_rgba(205,255,0,0.3)]";
+    if (ratio > 0.55) return "shadow-[0_0_6px_rgba(205,255,0,0.2)]";
     return "";
   };
 
