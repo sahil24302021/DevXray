@@ -131,7 +131,6 @@ export function buildCandidateRecord(
     // (authenticity_score, organic_commits_percentage, authenticity, etc.)
     // Previously only 5 fields were saved → cached reports showed 0% authenticity.
     report_payload: ghReport as Record<string, unknown>,
-    user_id: "",  // Will be filled in saveCandidate()
   };
 }
 
@@ -237,7 +236,7 @@ export async function listCandidates(): Promise<CandidateRecord[]> {
 
       // Filter: show user's own records + legacy records with no user_id
       if (userId) {
-        query = query.or(`user_id.eq.${userId},user_id.is.null,user_id.eq.`);
+        query = query.or(`user_id.eq.${userId},user_id.is.null`);
       }
 
       const { data, error } = await query;
