@@ -111,10 +111,12 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     openrouter_key = _os.getenv("OPENROUTER_API_KEY", "")
     if openrouter_key:
         OR_MODELS = [
-            "meta-llama/llama-3.1-8b-instruct:free",
-            "google/gemma-3-4b-it:free",
-            "mistralai/mistral-7b-instruct:free",
-            "qwen/qwen3-8b:free",
+            "meta-llama/llama-3.2-3b-instruct:free",     # Works consistently
+            "google/gemma-2-9b-it:free",                    # Google model, usually available
+            "microsoft/phi-3-mini-128k-instruct:free",      # Microsoft, reliable
+            "mistralai/mistral-small-3.2-24b-instruct:free", # Mistral free tier
+            "deepseek/deepseek-r1:free",                    # DeepSeek free
+            "qwen/qwen2.5-7b-instruct:free",               # Qwen free
         ]
         for or_model in OR_MODELS:
             try:
@@ -130,33 +132,47 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                         json={
                             "model": or_model,
                             "messages": [
-                                {"role": "system", "content": "Reply ONLY with valid JSON. No markdown, no explanation."},
-                                {"role": "user", "content": prompt[:12000]}
+                                {"role": "system", "content": "Reply ONLY with valid JSON. No markdown, no explanation, no code blocks."},
+                                {"role": "user", "content": prompt[:10000]}  # Trim to avoid context limits
                             ],
                             "temperature": temperature,
-                            "max_tokens": 3000,
+                            "max_tokens": 2500,
                         }
                     )
-                    if r.status_code == 404:
-                        log.warning(f"[GeminiClient] OpenRouter model {or_model} not found, trying next")
+
+                    if r.status_code in (404, 400, 422):
+                        log.warning(f"[GeminiClient] OpenRouter model {or_model} unavailable ({r.status_code}), trying next")
                         continue
+
+                    if r.status_code == 429:
+                        log.warning(f"[GeminiClient] OpenRouter rate limited on {or_model} — trying next model")
+                        continue
+
                     r.raise_for_status()
                     raw_body = r.text.strip()
                     if not raw_body:
+                        log.warning(f"[GeminiClient] OpenRouter {or_model} returned empty body")
                         continue
+
                     response_data = _j.loads(raw_body)
                     txt = response_data["choices"][0]["message"]["content"].strip()
                     txt = txt.replace("```json", "").replace("```", "").strip()
+                    if not txt:
+                        continue
                     result = _j.loads(txt)
                     log.info(f"[GeminiClient] OpenRouter succeeded with {or_model}")
                     return result
+
+            except _j.JSONDecodeError as je:
+                log.warning(f"[GeminiClient] OpenRouter {or_model} returned invalid JSON: {je}")
+                continue
             except Exception as or_err:
+                last_error = or_err
                 err_str = str(or_err).lower()
                 if "429" in err_str or "rate" in err_str:
                     log.warning(f"[GeminiClient] OpenRouter rate limited on {or_model} — trying next model")
                     continue
                 log.warning(f"[GeminiClient] OpenRouter {or_model} failed: {or_err}")
-                last_error = or_err
                 continue
         log.warning("[GeminiClient] All OpenRouter models failed — trying Gemini")
 

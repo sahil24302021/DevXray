@@ -238,6 +238,54 @@ async def fetch_repo_commits(username: str, repo_name: str, limit: int = 30) -> 
         return result
 
 
+async def _fetch_single_repo_data(username, repo_name, branch, SOURCE_EXTENSIONS, SKIP_DIRS, MAX_FILE_SIZE, MAX_FILES_PER_REPO):
+    """Fetch tree + files + README for a single repo."""
+    tree = await fetch_repo_tree(username, repo_name, branch)
+    tree_paths = [
+        item.get("path", "") if isinstance(item, dict) else str(item)
+        for item in tree
+    ]
+
+    candidate_files = []
+    for item in tree:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path", "")
+        size = item.get("size", 0)
+        item_type = item.get("type", "")
+        if item_type != "blob":
+            continue
+        if size > MAX_FILE_SIZE or size == 0:
+            continue
+        parts = path.split("/")
+        if any(p in SKIP_DIRS for p in parts):
+            continue
+        is_dependency_file = path.endswith("package.json") or path.endswith("requirements.txt") or path.endswith("go.mod")
+        ext = ("." + path.rsplit(".", 1)[-1].lower()) if "." in path else ""
+        if ext not in SOURCE_EXTENSIONS and not is_dependency_file:
+            continue
+        candidate_files.append({"path": path, "size": size})
+
+    candidate_files.sort(key=lambda f: f["size"], reverse=True)
+    files_to_fetch = candidate_files[:MAX_FILES_PER_REPO]
+
+    fetch_tasks = [fetch_file_raw(username, repo_name, f["path"]) for f in files_to_fetch]
+    raw_results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
+
+    files = []
+    for f_info, content in zip(files_to_fetch, raw_results):
+        if isinstance(content, str) and content:
+            files.append({"path": f_info["path"], "content": content})
+
+    readme = ""
+    for readme_name in ["README.md", "readme.md", "README.rst", "README"]:
+        readme = await fetch_file_raw(username, repo_name, readme_name)
+        if readme:
+            break
+
+    return {"files": files, "tree": tree_paths, "readme": readme}
+
+
 async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     For the top repos (by stars, non-fork), fetch per-repo languages, commits,
@@ -249,8 +297,8 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
     SOURCE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java"}
     SKIP_DIRS = {"node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".git"}
     MAX_FILE_SIZE = 50_000  # 50KB
-    MAX_FILES_PER_REPO = 20
-    TOP_REPOS_FOR_FILES = 25
+    MAX_FILES_PER_REPO = 15  # Reduced from 20 — 15 files per repo is plenty
+    TOP_REPOS_FOR_FILES = 10  # Reduced from 25 — 10 repos × 15 files = 150 files, plenty for scoring
     TOP_REPOS_FOR_LANG = 50  # Get ALL repos for language analysis
 
     # Pick top non-fork repos by composite score (Rule 3)
@@ -348,7 +396,7 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
                     commit_with_repo["repo_name"] = repo.get("name", "")
                     all_commits.append(commit_with_repo)
 
-    # ─── Deep file content fetching for top 5 repos ───
+    # ─── Deep file content fetching with per-repo timeouts ───
     repo_data: Dict[str, Dict[str, Any]] = {}
 
     for repo in top_repos_for_files:
@@ -356,71 +404,15 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
         branch = repo.get("default_branch", "main")
 
         try:
-            # Fetch full file tree
-            tree = await fetch_repo_tree(username, repo_name, branch)
-            tree_paths = [
-                item.get("path", "") if isinstance(item, dict) else str(item)
-                for item in tree
-            ]
-
-            # Filter to source files, skipping large/vendor paths
-            candidate_files = []
-            for item in tree:
-                if not isinstance(item, dict):
-                    continue
-                path = item.get("path", "")
-                size = item.get("size", 0)
-                item_type = item.get("type", "")
-
-                if item_type != "blob":
-                    continue
-                if size > MAX_FILE_SIZE or size == 0:
-                    continue
-
-                # Skip vendor/build directories
-                parts = path.split("/")
-                if any(p in SKIP_DIRS for p in parts):
-                    continue
-
-                # Check extension or dependency file
-                is_dependency_file = path.endswith("package.json") or path.endswith("requirements.txt") or path.endswith("go.mod")
-                ext = ""
-                if "." in path:
-                    ext = "." + path.rsplit(".", 1)[-1].lower()
-                if ext not in SOURCE_EXTENSIONS and not is_dependency_file:
-                    continue
-
-                candidate_files.append({"path": path, "size": size})
-
-            # Sort by size descending (larger files = more substance) and take top N
-            candidate_files.sort(key=lambda f: f["size"], reverse=True)
-            files_to_fetch = candidate_files[:MAX_FILES_PER_REPO]
-
-            # Fetch file contents concurrently
-            fetch_tasks = [
-                fetch_file_raw(username, repo_name, f["path"])
-                for f in files_to_fetch
-            ]
-            raw_results = await asyncio.gather(*fetch_tasks, return_exceptions=True)
-
-            files = []
-            for f_info, content in zip(files_to_fetch, raw_results):
-                if isinstance(content, str) and content:
-                    files.append({"path": f_info["path"], "content": content})
-
-            # Fetch README
-            readme = ""
-            for readme_name in ["README.md", "readme.md", "README.rst", "README"]:
-                readme = await fetch_file_raw(username, repo_name, readme_name)
-                if readme:
-                    break
-
-            repo_data[repo_name] = {
-                "files": files,
-                "tree": tree_paths,
-                "readme": readme,
-            }
-
+            # Per-repo timeout of 8 seconds — one slow repo won't block everything
+            repo_result = await asyncio.wait_for(
+                _fetch_single_repo_data(username, repo_name, branch, SOURCE_EXTENSIONS, SKIP_DIRS, MAX_FILE_SIZE, MAX_FILES_PER_REPO),
+                timeout=8.0
+            )
+            repo_data[repo_name] = repo_result
+        except asyncio.TimeoutError:
+            print(f"[GitHub] Repo {repo_name} timed out — skipping")
+            repo_data[repo_name] = {"files": [], "tree": [], "readme": ""}
         except Exception as e:
             print(f"[GitHub] Deep fetch failed for {repo_name}: {e}")
             repo_data[repo_name] = {"files": [], "tree": [], "readme": ""}
@@ -465,29 +457,41 @@ async def fetch_file_raw(username: str, repo_name: str, file_path: str) -> str:
     """
     Fetch the raw content of a single file from a repository.
     Uses the GitHub Contents API with raw media type.
+    Handles rate limits with token rotation and retry.
     """
     cache_key = f"raw:{username}/{repo_name}/{file_path}"
     cached = _get_cached(cache_key)
     if cached:
         return cached
 
-    raw_headers = {
-        **GITHUB_HEADERS,
-        "Accept": "application/vnd.github.v3.raw",
-    }
+    for attempt in range(2):  # retry once on rate limit
+        headers, token = _get_auth_headers()
+        headers["Accept"] = "application/vnd.github.v3.raw"
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"https://api.github.com/repos/{username}/{repo_name}/contents/{file_path}",
-            headers=raw_headers,
-            timeout=10.0,
-        )
-        if response.status_code != 200:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"https://api.github.com/repos/{username}/{repo_name}/contents/{file_path}",
+                    headers=headers,
+                    timeout=10.0,
+                )
+                if response.status_code in (403, 429):
+                    # Rate limited — mark token and try next
+                    if token:
+                        mark_token_rate_limited(token)
+                    if attempt == 0:
+                        await asyncio.sleep(1)
+                        continue
+                    return ""
+                if response.status_code != 200:
+                    return ""
+
+                content = response.text
+                _set_cache(cache_key, content)
+                return content
+        except Exception:
             return ""
-
-        content = response.text
-        _set_cache(cache_key, content)
-        return content
+    return ""
 
 
 async def fetch_pinned_repos(username: str) -> List[Dict[str, Any]]:

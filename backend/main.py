@@ -480,13 +480,13 @@ async def analyze_user(
     try:
         deep_data = await asyncio.wait_for(
             fetch_deep_repo_data(username, repos),
-            timeout=45.0  # was previously unlimited — caused silent partial results
+            timeout=90.0  # Increased from 45s — 17 repos need more time
         )
         if deep_data is None:
             deep_data = {"language_bytes": {}, "all_commits": [], "repos_analyzed": 0, "repo_data": {}}
             log.warning(f"[{username}] deep_data returned None — using empty fallback")
     except asyncio.TimeoutError:
-        log.warning(f"[{username}] fetch_deep_repo_data timed out after 45s — using partial data")
+        log.warning(f"[{username}] fetch_deep_repo_data timed out after 90s — using partial data")
         deep_data = {"language_bytes": {}, "all_commits": [], "repos_analyzed": 0, "repo_data": {}}
     except Exception as e:
         log.warning(f"[{username}] fetch_deep_repo_data failed: {e} — using empty fallback")
@@ -783,7 +783,16 @@ async def analyze_resume_endpoint(
     await emit_progress(job_id, "Reading code files", progress=10, detail="Extracting resume text")
     try:
         resume_data = await parse_resume_with_gemini(content, file.filename)
+        # If extraction failed but we got a minimal structure, proceed with what we have
+        if resume_data.get("_extraction_failed"):
+            log.warning(f"[Resume] Extraction failed for {file.filename} — proceeding with minimal data")
     except ValueError as e:
+        # Return more helpful error
+        if "Could not extract" in str(e):
+            raise HTTPException(
+                status_code=422,
+                detail="Could not read this PDF. Please try: (1) Save as a new PDF from Word/Google Docs, (2) Make sure the PDF has selectable text (not scanned), (3) Try a DOCX format instead."
+            )
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Resume parsing failed: {e}")

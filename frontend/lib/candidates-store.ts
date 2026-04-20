@@ -76,10 +76,12 @@ export function buildCandidateRecord(
     ? ((ghReport as any).top_languages as string[])
     : [];
 
-  // Score: try top-level → github_report → score_breakdown → scoring (legacy)
+  // FIX: Get score from ALL possible locations
   const rawScore = Number(
     result.final_score ||
     (ghReport as any).final_score ||
+    (result as any).score ||
+    (ghReport as any).score ||
     (result.score_breakdown as any)?.final_score ||
     (result.scoring as any)?.final_score ||
     0
@@ -103,21 +105,33 @@ export function buildCandidateRecord(
     ""
   );
 
+  // Get developer tier from all sources
+  const rawTier = (ghReport as any).developer_tier || result.developer_tier;
+  const tierStr = typeof rawTier === "string" ? rawTier :
+    (typeof rawTier === "object" && rawTier ? (rawTier as any).tier || "" : "");
+
   return {
     id: crypto.randomUUID(),
     username,
     name: candidateName,
     avatar_url: avatarUrl,
-    score: Math.round(rawScore),
-    tier: String((result.developer_tier || (ghReport as any).developer_tier) || ""),
+    score: Math.round(rawScore),           // integer for legacy compat
+    final_score: rawScore,                  // FIX: also save as final_score
+    tier: tierStr,
+    developer_tier: tierStr,               // FIX: save both column names
     risk_level: String((result.risk_level || result.risk_assessment || (ghReport as any).risk_level) || ""),
+    hiring_recommendation: hiringText,
     recommendation_summary: hiringText,
     languages: langsArr,
+    top_languages: langsArr,               // FIX: save both column names
+    verified_skills: skillsArr,
+    confidence_score: Number((ghReport as any).confidence_score || result.confidence_score || 0),
     scanned_at: new Date().toISOString(),
     // CRITICAL FIX: Save the FULL result so cached reports retain all data
     // (authenticity_score, organic_commits_percentage, authenticity, etc.)
     // Previously only 5 fields were saved → cached reports showed 0% authenticity.
     report_payload: ghReport as Record<string, unknown>,
+    user_id: "",  // Will be filled in saveCandidate()
   };
 }
 

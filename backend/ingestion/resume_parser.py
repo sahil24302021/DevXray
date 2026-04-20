@@ -122,14 +122,51 @@ def _extract_urls(text: str) -> List[str]:
     return list(set(re.findall(url_pattern, text)))
 
 
+def _build_minimal_resume_from_filename(filename: str) -> Dict[str, Any]:
+    """Return a minimal valid resume structure when PDF extraction fails."""
+    return {
+        "name": "",
+        "email": "",
+        "phone": "",
+        "github_username": "",
+        "github_url": "",
+        "linkedin_url": "",
+        "portfolio_url": "",
+        "other_links": [],
+        "github_repo_links": [],
+        "location": "",
+        "current_role": "",
+        "years_of_experience": 0,
+        "education": [],
+        "technical_skills": {"languages": [], "frameworks": [], "databases": [], "tools": [], "other": []},
+        "work_experience": [],
+        "projects": [],
+        "claims": [],
+        "summary": "Resume text extraction failed — PDF may be image-based or corrupted.",
+        "_parse_error": f"Could not extract text from {filename}",
+        "_extraction_failed": True,
+    }
+
+
 async def parse_resume_with_gemini(file_content: bytes, filename: str) -> Dict[str, Any]:
     """
     Extracts deeply structured data from a resume file using Gemini AI.
     This is the core intelligence of the Resume Analyzer.
     """
     text = _extract_text(file_content, filename)
-    if not text:
-        raise ValueError("Could not extract any text from the uploaded document.")
+
+    # FIX: Don't fail on empty text — try to extract something useful
+    if not text or len(text.strip()) < 50:
+        # Try treating as UTF-8 directly
+        try:
+            text = file_content.decode("utf-8", errors="ignore")
+        except Exception:
+            pass
+
+        # If still empty, return a minimal valid structure instead of crashing
+        if not text or len(text.strip()) < 20:
+            print(f"[ResumeParser] WARNING: Could not extract text from {filename}. Returning minimal structure.")
+            return _build_minimal_resume_from_filename(filename)
 
     cache_key = hashlib.md5(text.encode("utf-8")).hexdigest()
     if cache_key in _resume_parse_cache:

@@ -189,12 +189,12 @@ export default function DashboardPage() {
           username: r.username,
           name: r.name || r.username,
           avatar: r.avatar_url || "",
-          score: Number(r.final_score ?? 0),
-          tier: safeTier(r.developer_tier as string, Number(r.final_score ?? 0)),
-          recommendation: safeRec(r.hiring_recommendation as string, Number(r.final_score ?? 0)),
-          risk: safeRisk(r.risk_level as string, Number(r.final_score ?? 0)),
+          score: Number(r.final_score ?? r.score ?? 0),
+          tier: safeTier(r.developer_tier as string || r.tier as string, Number(r.final_score ?? r.score ?? 0)),
+          recommendation: safeRec(r.hiring_recommendation as string || r.recommendation_summary as string, Number(r.final_score ?? r.score ?? 0)),
+          risk: safeRisk(r.risk_level as string, Number(r.final_score ?? r.score ?? 0)),
           time: formatTime(r.scanned_at),
-          languages: (r.top_languages as string[]) || [],
+          languages: (r.top_languages as string[]) || (r.languages as string[]) || [],
         }));
         setScans(history);
       } catch (err) {
@@ -206,6 +206,29 @@ export default function DashboardPage() {
 
     init();
     return () => { cancelled = true; };
+  }, []);
+
+  // FIX 6: Refresh candidates on window focus (after returning from a scan)
+  useEffect(() => {
+    const handleFocus = async () => {
+      try {
+        const records = await listCandidates();
+        const history: ScanResult[] = records.map((r) => ({
+          username: r.username,
+          name: r.name || r.username,
+          avatar: r.avatar_url || "",
+          score: Number(r.final_score ?? r.score ?? 0),
+          tier: safeTier(r.developer_tier as string || r.tier as string, Number(r.final_score ?? r.score ?? 0)),
+          recommendation: safeRec(r.hiring_recommendation as string || r.recommendation_summary as string, Number(r.final_score ?? r.score ?? 0)),
+          risk: safeRisk(r.risk_level as string, Number(r.final_score ?? r.score ?? 0)),
+          time: formatTime(r.scanned_at),
+          languages: (r.top_languages as string[]) || (r.languages as string[]) || [],
+        }));
+        setScans(history);
+      } catch {}
+    };
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
   // ── Handle scan (wrapped with paywall gate) ──
