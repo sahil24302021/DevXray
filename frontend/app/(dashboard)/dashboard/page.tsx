@@ -343,7 +343,12 @@ export default function DashboardPage() {
             localStorage.setItem("devxray_scans_used", String(current + 1));
           } catch {}
         } catch (err: any) {
-          setScanError(err.message || "Analysis failed. Check if backend is running.");
+          if (err?.code === "scan_limit_reached" || err?.name === "ScanLimitError") {
+            // Server-side limit enforcement — show paywall
+            setShowPaywall(true);
+          } else {
+            setScanError(err.message || "Analysis failed. Check if backend is running.");
+          }
           setScanProgress("");
         } finally {
           setScanning(false);

@@ -27,6 +27,22 @@ function humanizeError(status: number, raw: string): string {
   return raw || `Request failed (${status}).`;
 }
 
+/**
+ * Thrown when the server returns 402 (scan limit reached).
+ * Callers can check `err instanceof ScanLimitError` or `err.code === "scan_limit_reached"`.
+ */
+export class ScanLimitError extends Error {
+  code = "scan_limit_reached";
+  plan: string;
+  limit: number;
+  constructor(plan: string, limit: number) {
+    super(`Scan limit reached on ${plan} plan (${limit} scans). Upgrade for more.`);
+    this.name = "ScanLimitError";
+    this.plan = plan;
+    this.limit = limit;
+  }
+}
+
 export interface JobRequirements {
   job_title?: string;
   job_type?: string;
@@ -296,7 +312,23 @@ export async function analyzeGitHub(
   if (selfReported?.privateRepos != null) params.set("private_repos", String(selfReported.privateRepos));
   if (selfReported?.workCoder != null) params.set("work_coder", String(selfReported.workCoder));
 
-  const res = await fetch(`${API_BASE}/analyze?${params}`);
+  // Send user ID header for server-side scan limit enforcement
+  const headers: Record<string, string> = {};
+  try {
+    const { getCurrentUser } = await import("./auth");
+    const user = await getCurrentUser();
+    if (user?.id) headers["X-User-Id"] = user.id;
+  } catch {}
+
+  const res = await fetch(`${API_BASE}/analyze?${params}`, { headers });
+
+  // Handle 402 (scan limit reached) — throw ScanLimitError so UI can show paywall
+  if (res.status === 402) {
+    const body = await res.json().catch(() => ({ detail: {} }));
+    const detail = typeof body.detail === "object" ? body.detail : {};
+    throw new ScanLimitError(detail.plan || "free", detail.limit || 2);
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(humanizeError(res.status, err.detail || ""));
@@ -330,7 +362,23 @@ export async function analyzeResume(
   if (opts?.jobDescription) form.append("job_description", opts.jobDescription);
   if (opts?.linkedinText) form.append("linkedin_text", opts.linkedinText);
 
-  const res = await fetch(`${API_BASE}/analyze-resume`, { method: "POST", body: form });
+  // Send user ID header for server-side scan limit enforcement
+  const headers: Record<string, string> = {};
+  try {
+    const { getCurrentUser } = await import("./auth");
+    const user = await getCurrentUser();
+    if (user?.id) headers["X-User-Id"] = user.id;
+  } catch {}
+
+  const res = await fetch(`${API_BASE}/analyze-resume`, { method: "POST", body: form, headers });
+
+  // Handle 402 (scan limit reached)
+  if (res.status === 402) {
+    const body = await res.json().catch(() => ({ detail: {} }));
+    const detail = typeof body.detail === "object" ? body.detail : {};
+    throw new ScanLimitError(detail.plan || "free", detail.limit || 2);
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(humanizeError(res.status, err.detail || ""));

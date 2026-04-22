@@ -67,3 +67,55 @@ async def get_recent_scan(username: str, max_age_seconds: int = 3600) -> Optiona
         return None
     except Exception:
         return None
+
+
+async def get_user_scan_profile(user_id: str) -> Optional[Dict[str, Any]]:
+    """Get user's plan and scan counts from Supabase profiles table."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return None
+    try:
+        import httpx
+        url = f"{SUPABASE_URL}/rest/v1/profiles"
+        params = {
+            "id": f"eq.{user_id}",
+            "select": "plan,github_scans_used,resume_scans_used",
+        }
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            if resp.status_code == 200:
+                results = resp.json()
+                if results:
+                    return results[0]
+        return None
+    except Exception:
+        return None
+
+
+async def increment_scan_count(user_id: str, scan_type: str) -> bool:
+    """Increment github_scans_used or resume_scans_used in profiles table."""
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return False
+    field = "github_scans_used" if scan_type == "github" else "resume_scans_used"
+    try:
+        import httpx
+        profile = await get_user_scan_profile(user_id)
+        if not profile:
+            return False
+        new_val = (profile.get(field, 0) or 0) + 1
+        url = f"{SUPABASE_URL}/rest/v1/profiles"
+        params = {"id": f"eq.{user_id}"}
+        headers = {
+            "apikey": SUPABASE_SERVICE_KEY,
+            "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+            "Content-Type": "application/json",
+            "Prefer": "return=minimal",
+        }
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.patch(url, json={field: new_val}, params=params, headers=headers)
+            return resp.status_code in (200, 204)
+    except Exception:
+        return False

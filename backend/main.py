@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Header
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List, Dict, Any
@@ -58,6 +58,49 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Simple in-memory cache fallback
 CACHE_TTL = 1800  # 30 minutes — longer cache prevents inconsistent re-runs
+
+# ─── Server-side plan limits (mirrors frontend/lib/plans.ts) ───
+PLAN_LIMITS = {
+    "free": {"github": 2, "resume": 2},
+    "starter": {"github": 10, "resume": 10},
+    "pro": {"github": 100, "resume": 100},
+    "enterprise": {"github": 999999, "resume": 999999},
+}
+
+async def _check_scan_limit(user_id: str | None, scan_type: str) -> None:
+    """Raise 402 if user has exceeded their plan's scan limit."""
+    if not user_id:
+        return  # No user ID header — skip server-side check
+    try:
+        from lib.supabase_client import get_user_scan_profile
+        profile = await get_user_scan_profile(user_id)
+        if not profile:
+            return  # Profile not found — allow (new user)
+        plan = profile.get("plan", "free") or "free"
+        limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
+        limit = limits.get(scan_type, 2)
+        field = "github_scans_used" if scan_type == "github" else "resume_scans_used"
+        used = profile.get(field, 0) or 0
+        if used >= limit:
+            raise HTTPException(
+                status_code=402,
+                detail={"error": "scan_limit_reached", "plan": plan, "limit": limit, "used": used},
+            )
+    except HTTPException:
+        raise  # Re-raise 402
+    except Exception as e:
+        log.debug(f"Scan limit check skipped: {e}")  # Non-fatal — allow scan
+
+async def _increment_scan_after_success(user_id: str | None, scan_type: str) -> None:
+    """Increment the user's scan count after a successful analysis."""
+    if not user_id:
+        return
+    try:
+        from lib.supabase_client import increment_scan_count
+        await increment_scan_count(user_id, scan_type)
+        log.info(f"Scan count incremented for user {user_id[:8]}... ({scan_type})")
+    except Exception as e:
+        log.debug(f"Scan count increment skipped: {e}")
 
 # Try Redis first, fall back to in-memory dict
 _redis_client = None
@@ -417,6 +460,7 @@ async def analyze_user(
     job_id: Optional[str] = None,
     private_repos: Optional[bool] = None,
     work_coder: Optional[bool] = None,
+    user_id: Optional[str] = Header(None, alias="X-User-Id"),
 ):
     """
     Developer Intelligence Analysis — GitHub-only mode.
@@ -447,6 +491,9 @@ async def analyze_user(
             return recent_scan
     except Exception as e:
         log.debug(f"Supabase scan lookup skipped: {e}")
+
+    # ── Server-side scan limit enforcement ──
+    await _check_scan_limit(user_id, "github")
 
     log.info(f"Starting analysis for {username}")
     await emit_progress(job_id, "Fetching GitHub profile", progress=5, detail="Connecting to GitHub API")
@@ -736,6 +783,9 @@ async def analyze_user(
         f"Confidence: {pipeline_meta.get('confidence_score', 0)}"
     )
 
+    # Increment scan count after successful analysis
+    await _increment_scan_after_success(user_id, "github")
+
     await emit_progress(job_id, "Building report", progress=100, detail="Complete", done=True)
     return report
 
@@ -754,6 +804,7 @@ async def analyze_resume_endpoint(
     company_name: Optional[str] = Form(None),
     additional_notes: Optional[str] = Form(None),
     linkedin_text: Optional[str] = Form(None),
+    user_id: Optional[str] = Header(None, alias="X-User-Id"),
 ):
     """
     Developer Intelligence + Resume Analysis.
@@ -765,6 +816,9 @@ async def analyze_resume_endpoint(
     content = await file.read()
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Maximum 5MB.")
+
+    # ── Server-side scan limit enforcement ──
+    await _check_scan_limit(user_id, "resume")
 
     # Build job requirements dict
     job_requirements = None
@@ -1223,6 +1277,9 @@ async def analyze_resume_endpoint(
     )
 
     # ═══ Build Final Response ═══
+    # Increment scan count after successful analysis
+    await _increment_scan_after_success(user_id, "resume")
+
     return {
         "resume_data": resume_data,
         "github_intelligence": github_report,
