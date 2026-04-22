@@ -62,7 +62,7 @@ export default function Dropzone({ onFileSelect, isLoading }: DropzoneProps) {
 
   return (
     <div
-      className="relative w-full max-w-lg mt-12 mx-auto sm:mx-0"
+      className="relative w-full max-w-lg mt-8 sm:mt-12 mx-auto sm:mx-0"
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
@@ -81,7 +81,7 @@ export default function Dropzone({ onFileSelect, isLoading }: DropzoneProps) {
           scale: isDragActive ? 1.02 : 1,
           borderColor: isDragActive ? "rgba(205,255,0,0.5)" : "rgba(255,255,0,0.06)",
         }}
-        className="relative group overflow-hidden rounded-2xl border cursor-pointer border-white/[0.06] p-8 text-center"
+        className="relative group overflow-hidden rounded-2xl border cursor-pointer border-white/[0.06] p-6 sm:p-8 text-center"
         style={{
           background: isDragActive ? "rgba(205,255,0,0.02)" : "rgba(5,5,5,0.4)",
           backdropFilter: "blur(20px)",

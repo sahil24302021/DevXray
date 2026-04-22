@@ -106,7 +106,7 @@ export default function ContactPage() {
       </div>
 
       {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-50 px-6 md:px-12 py-4"
+      <nav className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-6 md:px-12 py-3 sm:py-4"
         style={{ background: "rgba(5,5,5,0.8)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}
       >
         <div className="max-w-6xl mx-auto flex items-center justify-between">
@@ -116,18 +116,18 @@ export default function ContactPage() {
               Dev<span style={{ color: "#cdff00" }}>Xray</span>
             </span>
           </Link>
-          <div className="flex items-center gap-6">
-            <Link href="/" className="text-xs font-medium text-[#666] hover:text-white transition-colors no-underline uppercase tracking-widest">Home</Link>
-            <Link href="/pricing" className="text-xs font-medium text-[#666] hover:text-white transition-colors no-underline uppercase tracking-widest">Pricing</Link>
-            <Link href="/about" className="text-xs font-medium text-[#666] hover:text-white transition-colors no-underline uppercase tracking-widest">About</Link>
+          <div className="flex items-center gap-3 sm:gap-6">
+            <Link href="/" className="hidden sm:inline text-xs font-medium text-[#666] hover:text-white transition-colors no-underline uppercase tracking-widest">Home</Link>
+            <Link href="/pricing" className="hidden sm:inline text-xs font-medium text-[#666] hover:text-white transition-colors no-underline uppercase tracking-widest">Pricing</Link>
+            <Link href="/about" className="hidden sm:inline text-xs font-medium text-[#666] hover:text-white transition-colors no-underline uppercase tracking-widest">About</Link>
           </div>
         </div>
       </nav>
 
       {/* Main Content */}
-      <section className="relative pt-32 pb-20 px-6 md:px-12 z-10">
+      <section className="relative pt-24 sm:pt-32 pb-12 sm:pb-20 px-4 sm:px-6 md:px-12 z-10">
         <div className="max-w-5xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-20">
 
             {/* Left — Info */}
             <motion.div
@@ -302,13 +302,13 @@ export default function ContactPage() {
       </section>
 
       {/* Footer */}
-      <footer className="relative z-10 border-t border-white/[0.04] py-8 px-6 md:px-12">
+      <footer className="relative z-10 border-t border-white/[0.04] py-6 sm:py-8 px-4 sm:px-6 md:px-12">
         <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <Logo className="w-5 h-5" />
             <span className="text-xs text-[#555]">DevXray &mdash; AI-Powered Developer Intelligence</span>
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 sm:gap-6">
             <Link href="/pricing" className="text-xs text-[#555] hover:text-white transition-colors no-underline">Pricing</Link>
             <Link href="/about" className="text-xs text-[#555] hover:text-white transition-colors no-underline">About</Link>
             <Link href="/" className="text-xs text-[#555] hover:text-white transition-colors no-underline">Home</Link>

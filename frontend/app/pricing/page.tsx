@@ -150,40 +150,39 @@ export default function PricingPage() {
       <Script src="https://checkout.razorpay.com/v1/checkout.js" />
 
       {/* ═══ NAV ═══ */}
-      <nav className="fixed top-0 left-0 right-0 z-50 px-5 md:px-8">
-        <div className="mx-auto max-w-[1200px] flex items-center justify-between py-4 mt-5 px-6 rounded-2xl"
+      <nav className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-5 md:px-8">
+        <div className="mx-auto max-w-[1200px] flex items-center justify-between py-3 sm:py-4 mt-3 sm:mt-5 px-4 sm:px-6 rounded-2xl"
           style={{ background: "rgba(5,5,5,0.85)", borderBottom: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(20px)" }}>
-          <Link href="/" className="flex items-center gap-3 no-underline group">
-            <Logo className="w-8 h-8 md:w-10 md:h-10 transition-transform duration-500 group-hover:scale-105" />
-            <span className="font-[family-name:var(--font-syne)] font-bold text-[17px] tracking-tight text-white">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 no-underline group">
+            <Logo className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 transition-transform duration-500 group-hover:scale-105" />
+            <span className="font-[family-name:var(--font-syne)] font-bold text-[15px] sm:text-[17px] tracking-tight text-white">
               Dev<span style={{ color: "#cdff00" }}>Xray</span>
             </span>
           </Link>
-          <div className="flex items-center gap-6">
-            <Link href="/" className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">Home</Link>
-            <Link href="/about" className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">About</Link>
-            <Link href={isLoggedIn ? "/dashboard" : "/signin"} className="magnetic-btn !py-2.5 !px-5 !text-[11px]">{isLoggedIn ? "Dashboard" : "Get Started"}</Link>
+          <div className="flex items-center gap-3 sm:gap-6">
+            <Link href="/" className="hidden sm:inline text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">Home</Link>
+            <Link href="/about" className="hidden sm:inline text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">About</Link>
+            <Link href={isLoggedIn ? "/dashboard" : "/signin"} className="magnetic-btn !py-2 sm:!py-2.5 !px-4 sm:!px-5 !text-[10px] sm:!text-[11px]">{isLoggedIn ? "Dashboard" : "Get Started"}</Link>
           </div>
         </div>
       </nav>
 
       {/* ═══ HERO ═══ */}
-      <section className="relative pt-40 pb-20 px-6 md:px-12 z-10 text-center">
+      <section className="relative pt-28 sm:pt-40 pb-12 sm:pb-20 px-4 sm:px-6 md:px-12 z-10 text-center">
         <ParticleField />
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }} className="relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#cdff00]/20 bg-[#cdff00]/5 text-[#cdff00] text-xs font-semibold mb-6">
-            TRUSTED BY 200+ HIRING TEAMS ACROSS INDIA
+          <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full border border-[#cdff00]/20 bg-[#cdff00]/5 text-[#cdff00] text-[10px] sm:text-xs font-semibold mb-4 sm:mb-6">
+            TRUSTED BY 200+ HIRING TEAMS
           </div>
-          <h1 className="font-[family-name:var(--font-syne)] font-extrabold tracking-[-0.04em] text-white leading-[0.9] mb-6"
-            style={{ fontSize: "clamp(2.8rem, 7vw, 5.5rem)" }}>
+          <h1 className="font-[family-name:var(--font-syne)] font-extrabold tracking-[-0.04em] text-white leading-[0.9] mb-4 sm:mb-6"
+            style={{ fontSize: "clamp(2rem, 7vw, 5.5rem)" }}>
             Stop guessing.<br /><span style={{ color: "#cdff00" }}>Start knowing.</span>
           </h1>
-          <p className="text-[#666] text-lg max-w-2xl mx-auto mb-8 font-light">
+          <p className="text-[#666] text-sm sm:text-lg max-w-2xl mx-auto mb-6 sm:mb-8 font-light">
             Every fake skill, every inflated claim, every AI-generated repo — DevXray finds it in 60 seconds.
-            One bad hire costs ₹8–15 lakhs. Our Pro plan costs ₹2,499/month.
           </p>
-          <div className="flex items-center justify-center gap-6 text-sm text-[#555] flex-wrap">
-            <span>✓ No credit card for free tier</span>
+          <div className="flex items-center justify-center gap-3 sm:gap-6 text-xs sm:text-sm text-[#555] flex-wrap">
+            <span>✓ No credit card</span>
             <span>✓ Cancel anytime</span>
             <span>✓ INR billing + GST</span>
           </div>
@@ -283,14 +282,14 @@ export default function PricingPage() {
           <p className="text-[#555] text-sm max-w-lg mx-auto mb-8">
             Recruitment fees, onboarding, lost productivity, re-hiring costs. DevXray Pro at ₹2,499/month pays for itself the moment it prevents a single bad hire.
           </p>
-          <div className="grid grid-cols-3 gap-8 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-8 text-center">
             {[
               { val: "60s", label: "Average scan time" },
-              { val: "93%", label: "False claim detection rate" },
-              { val: "17+", label: "Skills verified per report" },
+              { val: "93%", label: "False claim detection" },
+              { val: "17+", label: "Skills verified" },
             ].map(({ val, label }) => (
               <div key={label}>
-                <div className="text-3xl font-black text-[#cdff00] mb-1" style={{ fontFamily: "var(--font-syne)" }}>{val}</div>
+                <div className="text-2xl sm:text-3xl font-black text-[#cdff00] mb-1" style={{ fontFamily: "var(--font-syne)" }}>{val}</div>
                 <div className="text-[#555] text-xs">{label}</div>
               </div>
             ))}

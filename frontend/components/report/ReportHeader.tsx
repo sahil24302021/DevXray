@@ -142,12 +142,12 @@ export default function ReportHeader({ data }: Props) {
             <ScoreSegment value={data.score_breakdown.breakdown.growth} max={15} color="#fbbf24" />
             <ScoreSegment value={data.score_breakdown.breakdown.authenticity} max={15} color="#f472b6" />
           </div>
-          <div className="flex justify-between text-[9px] text-slate-500 font-medium uppercase tracking-wider">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" />Code</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-violet-400" />Skills</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />Consistency</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" />Growth</span>
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-pink-400" />Auth</span>
+          <div className="flex flex-wrap justify-center gap-2 sm:gap-4 text-[9px] text-slate-500 font-medium uppercase tracking-wider">
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 shrink-0 rounded-full bg-blue-400" />Code</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 shrink-0 rounded-full bg-violet-400" />Skills</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 shrink-0 rounded-full bg-emerald-400" />Consistency</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 shrink-0 rounded-full bg-amber-400" />Growth</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 shrink-0 rounded-full bg-pink-400" />Auth</span>
           </div>
         </div>
       )}

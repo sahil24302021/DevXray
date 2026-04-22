@@ -115,36 +115,36 @@ export default function AboutPage() {
       <div className="grain-overlay" />
 
       {/* ═══ NAV ═══ */}
-      <nav className="fixed top-0 left-0 right-0 z-50 px-5 md:px-8">
-        <div className="mx-auto max-w-[1200px] flex items-center justify-between py-4 mt-5 px-6 rounded-2xl"
+      <nav className="fixed top-0 left-0 right-0 z-50 px-4 sm:px-5 md:px-8">
+        <div className="mx-auto max-w-[1200px] flex items-center justify-between py-3 sm:py-4 mt-3 sm:mt-5 px-4 sm:px-6 rounded-2xl"
           style={{ background: "rgba(5,5,5,0.85)", borderBottom: "1px solid rgba(255,255,255,0.06)", backdropFilter: "blur(20px)" }}>
-          <Link href="/" className="flex items-center gap-3 no-underline group">
-            <Logo className="w-8 h-8 md:w-10 md:h-10 transition-transform duration-500 group-hover:scale-105" />
-            <span className="font-[family-name:var(--font-syne)] font-bold text-[17px] tracking-tight text-white glitch-text">
+          <Link href="/" className="flex items-center gap-2 sm:gap-3 no-underline group">
+            <Logo className="w-7 h-7 sm:w-8 sm:h-8 md:w-10 md:h-10 transition-transform duration-500 group-hover:scale-105" />
+            <span className="font-[family-name:var(--font-syne)] font-bold text-[15px] sm:text-[17px] tracking-tight text-white glitch-text">
               Dev<span style={{ color: "#cdff00" }}>Xray</span>
             </span>
           </Link>
-          <div className="flex items-center gap-6">
-            <Link href="/" className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">Home</Link>
-            <Link href="/pricing" className="text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">Pricing</Link>
-            <Link href={isLoggedIn ? "/dashboard" : "/signin"} className="magnetic-btn !py-2.5 !px-5 !text-[11px]">{isLoggedIn ? "Dashboard" : "Get Started"}</Link>
+          <div className="flex items-center gap-3 sm:gap-6">
+            <Link href="/" className="hidden sm:inline text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">Home</Link>
+            <Link href="/pricing" className="hidden sm:inline text-[12px] font-[family-name:var(--font-space)] font-medium text-[#666] hover:text-[#cdff00] transition-colors no-underline tracking-widest uppercase animated-underline">Pricing</Link>
+            <Link href={isLoggedIn ? "/dashboard" : "/signin"} className="magnetic-btn !py-2 sm:!py-2.5 !px-4 sm:!px-5 !text-[10px] sm:!text-[11px]">{isLoggedIn ? "Dashboard" : "Get Started"}</Link>
           </div>
         </div>
       </nav>
 
       {/* ═══ HERO ═══ */}
-      <section className="relative min-h-[70vh] flex items-center px-6 md:px-12 pt-32 pb-20 z-10">
+      <section className="relative min-h-[50vh] sm:min-h-[70vh] flex items-center px-4 sm:px-6 md:px-12 pt-24 sm:pt-32 pb-12 sm:pb-20 z-10">
         <ParticleField count={35} />
-        <div className="absolute right-[-10%] top-[10%] w-[400px] h-[400px] bg-[radial-gradient(circle,rgba(205,255,0,0.08)_0%,transparent_70%)] blur-[60px] animate-[blob-morph_10s_ease-in-out_infinite]" />
+        <div className="absolute right-[-10%] top-[10%] w-[300px] sm:w-[400px] h-[300px] sm:h-[400px] bg-[radial-gradient(circle,rgba(205,255,0,0.08)_0%,transparent_70%)] blur-[60px] animate-[blob-morph_10s_ease-in-out_infinite]" />
 
         <motion.div className="relative mx-auto max-w-[1200px] w-full" style={{ y: y1 }}>
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }} className="section-tag mb-8">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }} className="section-tag mb-4 sm:mb-8">
             About the Technology
           </motion.div>
 
           <motion.h1
-            className="font-[family-name:var(--font-syne)] font-extrabold tracking-[-0.04em] text-white leading-[0.9] mb-8"
-            style={{ fontSize: "clamp(2.8rem, 7vw, 6rem)" }}
+            className="font-[family-name:var(--font-syne)] font-extrabold tracking-[-0.04em] text-white leading-[0.9] mb-6 sm:mb-8"
+            style={{ fontSize: "clamp(2rem, 7vw, 6rem)" }}
             initial="hidden" animate="show" variants={stagger}
           >
             <motion.span variants={fadeUp} className="block">The AI engine</motion.span>
@@ -153,7 +153,7 @@ export default function AboutPage() {
 
           <motion.p
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
-            className="text-[#888] text-lg md:text-xl font-light max-w-2xl leading-relaxed"
+            className="text-[#888] text-base sm:text-lg md:text-xl font-light max-w-2xl leading-relaxed"
           >
             DevXray&apos;s analysis pipeline processes GitHub repositories, resumes, and developer profiles through six forensic-grade modules to deliver hiring intelligence with 99.2% accuracy.
           </motion.p>
@@ -161,7 +161,7 @@ export default function AboutPage() {
       </section>
 
       {/* ═══ PIPELINE ═══ */}
-      <section className="relative py-32 px-6 md:px-12 z-10">
+      <section className="relative py-16 sm:py-32 px-4 sm:px-6 md:px-12 z-10">
         <div className="mx-auto max-w-[1200px]">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-20">
             <span className="section-tag mb-5 block">Analysis Pipeline</span>
@@ -194,7 +194,7 @@ export default function AboutPage() {
       </section>
 
       {/* ═══ TECH STACK ═══ */}
-      <section className="relative py-32 px-6 md:px-12 z-10 border-t" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+      <section className="relative py-16 sm:py-32 px-4 sm:px-6 md:px-12 z-10 border-t" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
         <div className="mx-auto max-w-[1200px]">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="mb-20 text-center">
             <span className="section-tag mb-5 inline-flex">Built With</span>
@@ -204,7 +204,7 @@ export default function AboutPage() {
           </motion.div>
 
           <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {techStack.map((tech, i) => (
               <motion.div key={i} variants={fadeUp}
                 className="p-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] text-center hover:border-[#cdff00]/20 transition-all duration-500 group">
@@ -240,14 +240,14 @@ export default function AboutPage() {
       </section>
 
       {/* ═══ CTA ═══ */}
-      <section className="relative py-24 px-6 md:px-12 z-10">
+      <section className="relative py-16 sm:py-24 px-4 sm:px-6 md:px-12 z-10">
         <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }}
-          className="mx-auto max-w-[800px] text-center p-16 rounded-3xl border border-[#cdff00]/20"
+          className="mx-auto max-w-[800px] text-center p-8 sm:p-16 rounded-3xl border border-[#cdff00]/20"
           style={{ background: "linear-gradient(135deg, rgba(205,255,0,0.04), rgba(124,58,237,0.03))" }}>
-          <h2 className="font-[family-name:var(--font-syne)] font-extrabold text-3xl md:text-4xl text-white mb-5 tracking-tight">
+          <h2 className="font-[family-name:var(--font-syne)] font-extrabold text-2xl sm:text-3xl md:text-4xl text-white mb-5 tracking-tight">
             Ready to see the <span style={{ color: "#cdff00" }}>signal?</span>
           </h2>
-          <p className="text-[#777] text-base font-light mb-10 max-w-md mx-auto">
+          <p className="text-[#777] text-sm sm:text-base font-light mb-8 sm:mb-10 max-w-md mx-auto">
             Start analyzing developer profiles in seconds. No setup required.
           </p>
           <Link href={isLoggedIn ? "/dashboard" : "/signin"} className="magnetic-btn">

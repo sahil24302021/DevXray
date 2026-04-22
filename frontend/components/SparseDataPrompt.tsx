@@ -37,7 +37,7 @@ export default function SparseDataPrompt({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl border border-amber-500/20 p-5 mb-5"
+      className="rounded-2xl border border-amber-500/20 p-4 sm:p-5 mb-5"
       style={{ background: "rgba(251, 191, 36, 0.04)" }}
     >
       <div className="flex items-start gap-3 mb-4">
@@ -75,7 +75,7 @@ export default function SparseDataPrompt({
             Are your main repositories private (work, client projects, NDA
             code)?
           </p>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             {(
               [
                 { value: true, label: "Yes, mostly private" },
@@ -125,7 +125,7 @@ export default function SparseDataPrompt({
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-5 pt-4 border-t border-white/[0.06]">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-5 pt-4 border-t border-white/[0.06]">
         <button
           onClick={onSkip}
           className="text-xs text-slate-500 hover:text-slate-400 transition-colors"

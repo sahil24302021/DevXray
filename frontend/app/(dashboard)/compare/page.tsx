@@ -395,13 +395,13 @@ export default function ComparePage() {
   const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 
   return (
-    <div className="min-h-screen p-6 md:p-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
+    <div className="min-h-screen p-4 pt-14 sm:p-6 md:p-8 lg:pt-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-        <h1 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-syne)" }}>
+        <h1 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-syne)" }}>
           Candidate <span style={{ color: "#cdff00" }}>Comparison</span>
         </h1>
-        <p className="text-[#555] text-sm">Compare two candidates side-by-side using GitHub profiles or resume PDFs</p>
+        <p className="text-[#555] text-xs sm:text-sm">Compare two candidates side-by-side using GitHub profiles or resume PDFs</p>
       </motion.div>
 
       {/* Candidate input panels */}
@@ -480,15 +480,19 @@ export default function ComparePage() {
                 const av = devA!.dims[key]; const bv = devB!.dims[key];
                 const winner = av > bv ? "A" : bv > av ? "B" : "tie";
                 return (
-                  <div key={key} className="grid grid-cols-[1fr_100px_1fr] gap-4 items-center px-6 py-3.5 border-b" style={{ borderColor: "rgba(255,255,255,0.03)" }}>
-                    <div className="flex items-center gap-3">
+                  <div key={key} className="flex flex-col sm:grid sm:grid-cols-[1fr_100px_1fr] gap-2 sm:gap-4 items-center px-4 sm:px-6 py-3 sm:py-3.5 border-b" style={{ borderColor: "rgba(255,255,255,0.03)" }}>
+                    {/* Label on mobile shown first */}
+                    <div className="sm:hidden text-center w-full">
+                      <span className="text-[11px] text-[#555]">{label}</span>
+                    </div>
+                    <div className="flex items-center gap-3 w-full">
                       <div className="flex-1 h-2 rounded-full overflow-hidden bg-white/[0.04]">
                         <div className="h-full rounded-full transition-all duration-700 ml-auto"
                           style={{ width: `${av}%`, background: winner === "A" ? "#cdff00" : "#555" }} />
                       </div>
                       <span className={`text-sm font-bold w-8 text-right ${winner === "A" ? "text-[#cdff00]" : "text-[#555]"}`}>{av}</span>
                     </div>
-                    <div className="text-center">
+                    <div className="hidden sm:block text-center">
                       <span className="text-[11px] text-[#555]">{label}</span>
                       {winner !== "tie" && (
                         <div className="text-[9px] mt-0.5" style={{ color: "#cdff00" }}>

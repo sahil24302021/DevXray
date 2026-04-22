@@ -216,39 +216,39 @@ export default function CandidatesPage() {
     .slice(0, 2);
 
   return (
-    <div className="min-h-screen p-6 md:p-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
+    <div className="min-h-screen p-4 pt-14 sm:p-6 md:p-8 lg:pt-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-start justify-between mb-8">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6 sm:mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-syne)" }}>
+          <h1 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-syne)" }}>
             Candidates <span style={{ color: "#cdff00" }}>({candidates.length})</span>
           </h1>
-          <p className="text-[#555] text-sm">
+          <p className="text-[#555] text-xs sm:text-sm">
             {loading ? "Loading candidates…" : candidates.length === 0
               ? "No candidates yet — run a GitHub scan to populate this dashboard"
               : "All analyzed candidates — search, filter, and compare"}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {selected.size > 0 && selected.size < 2 && (
-            <button disabled className="px-4 py-2 text-xs font-bold text-[#555] rounded-xl cursor-not-allowed"
+            <button disabled className="px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-bold text-[#555] rounded-xl cursor-not-allowed"
               style={{ background: "rgba(205,255,0,0.1)", border: "1px solid rgba(205,255,0,0.2)" }} title="Select 2 candidates to compare">
-              Select 1 more to compare
+              Select 1 more
             </button>
           )}
           {selected.size >= 2 && selectedUsernames.length >= 2 && (
             <Link href={`/compare?a=${selectedUsernames[0]}&b=${selectedUsernames[1]}`}
-              className="px-4 py-2 text-xs font-bold text-[#050505] rounded-xl no-underline hover:opacity-90 transition-all shadow-[0_0_15px_rgba(205,255,0,0.2)]"
+              className="px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-bold text-[#050505] rounded-xl no-underline hover:opacity-90 transition-all shadow-[0_0_15px_rgba(205,255,0,0.2)]"
               style={{ background: "#cdff00" }}>
-              Compare {selected.size} Selected
+              Compare {selected.size}
             </Link>
           )}
           <Link href="/bulk-upload"
-            className="px-4 py-2 text-xs font-bold text-white rounded-xl no-underline border border-white/10 hover:border-white/20 transition-all">
+            className="px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-bold text-white rounded-xl no-underline border border-white/10 hover:border-white/20 transition-all">
             + Bulk Upload
           </Link>
           <button onClick={load}
-            className="px-3 py-2 text-xs font-bold text-[#555] hover:text-white rounded-xl border border-white/[0.06] hover:border-white/10 transition-all">
+            className="px-3 py-2 text-[10px] sm:text-xs font-bold text-[#555] hover:text-white rounded-xl border border-white/[0.06] hover:border-white/10 transition-all">
             ↻ Refresh
           </button>
         </div>
@@ -272,8 +272,8 @@ export default function CandidatesPage() {
 
       {/* Filters */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
-        className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="relative flex-1 min-w-[200px] max-w-[320px]">
+        className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 mb-6">
+        <div className="relative w-full sm:flex-1 sm:min-w-[200px] sm:max-w-[320px]">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#444]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
             <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" strokeLinecap="round" />
           </svg>
@@ -283,17 +283,17 @@ export default function CandidatesPage() {
           />
         </div>
 
-        <div className="flex items-center gap-1 p-1 rounded-xl" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="flex items-center gap-1 p-1 rounded-xl overflow-x-auto no-scrollbar" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
           {(["all", "S-Tier", "A-Tier", "B-Tier", "C-Tier"] as const).map(t => (
             <button key={t} onClick={() => { setTierFilter(t); setPage(1); }}
-              className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${tierFilter === t ? "bg-[#cdff00] text-[#050505]" : "text-[#555] hover:text-white"}`}>
-              {t === "all" ? "All Tiers" : t}
+              className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap shrink-0 ${tierFilter === t ? "bg-[#cdff00] text-[#050505]" : "text-[#555] hover:text-white"}`}>
+              {t === "all" ? "All" : t}
             </button>
           ))}
         </div>
 
         <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
-          className="px-3 py-2.5 rounded-xl text-sm text-[#888] border outline-none"
+          className="px-3 py-2.5 rounded-xl text-sm text-[#888] border outline-none w-full sm:w-auto"
           style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.08)" }}>
           <option value="score">Sort: Score</option>
           <option value="name">Sort: Name</option>
@@ -332,95 +332,138 @@ export default function CandidatesPage() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — Desktop */}
       {!loading && paginated.length > 0 && (
-        <motion.div variants={stagger} initial="hidden" animate="show"
-          className="rounded-2xl border overflow-hidden"
-          style={{ background: "rgba(255,255,255,0.01)", borderColor: "rgba(255,255,255,0.06)" }}>
-          {/* Header */}
-          <div className="grid gap-4 px-5 py-3 border-b text-[10px] font-bold uppercase tracking-wider text-[#444]"
-            style={{ gridTemplateColumns: "24px 2fr 1fr 60px 1fr 1.5fr 80px 32px", borderColor: "rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.01)" }}>
-            <div />
-            <div>Candidate</div>
-            <div>Score</div>
-            <div>Trend</div>
-            <div>Risk</div>
-            <div>Recommendation</div>
-            <div>Scanned</div>
-            <div />
-          </div>
+        <>
+          {/* Desktop table view */}
+          <motion.div variants={stagger} initial="hidden" animate="show"
+            className="hidden md:block rounded-2xl border overflow-hidden"
+            style={{ background: "rgba(255,255,255,0.01)", borderColor: "rgba(255,255,255,0.06)" }}>
+            {/* Header */}
+            <div className="grid gap-4 px-5 py-3 border-b text-[10px] font-bold uppercase tracking-wider text-[#444]"
+              style={{ gridTemplateColumns: "24px 2fr 1fr 60px 1fr 1.5fr 80px 32px", borderColor: "rgba(255,255,255,0.04)", background: "rgba(255,255,255,0.01)" }}>
+              <div />
+              <div>Candidate</div>
+              <div>Score</div>
+              <div>Trend</div>
+              <div>Risk</div>
+              <div>Recommendation</div>
+              <div>Scanned</div>
+              <div />
+            </div>
 
-          {paginated.map((c) => {
-            const tier = (c.developer_tier as string) || scoreToTier(Number(c.final_score ?? c.score ?? 0));
-            const risk = (c.risk_level as string) || scoreToRisk(Number(c.final_score ?? c.score ?? 0));
-            const _fs = Number(c.final_score ?? c.score ?? 0);
-            const rec = (c.hiring_recommendation as string) || (_fs >= 80 ? "Strong Hire" : _fs >= 65 ? "Likely Hire" : _fs >= 50 ? "Conditional" : "Not Recommended");
-            const langs = (c.top_languages as string[]) ?? [];
+            {paginated.map((c) => {
+              const tier = (c.developer_tier as string) || scoreToTier(Number(c.final_score ?? c.score ?? 0));
+              const risk = (c.risk_level as string) || scoreToRisk(Number(c.final_score ?? c.score ?? 0));
+              const _fs = Number(c.final_score ?? c.score ?? 0);
+              const rec = (c.hiring_recommendation as string) || (_fs >= 80 ? "Strong Hire" : _fs >= 65 ? "Likely Hire" : _fs >= 50 ? "Conditional" : "Not Recommended");
+              const langs = (c.top_languages as string[]) ?? [];
 
-            return (
-              <motion.div key={c.id} variants={fadeIn}
-                className="grid gap-4 px-5 py-4 border-b items-center hover:bg-white/[0.01] transition-colors group"
-                style={{ gridTemplateColumns: "24px 2fr 1fr 60px 1fr 1.5fr 80px 32px", borderColor: "rgba(255,255,255,0.03)" }}>
-                {/* Checkbox */}
-                <div className={`w-4 h-4 rounded border cursor-pointer flex items-center justify-center transition-all ${selected.has(c.id) ? "border-[#cdff00] bg-[#cdff00]" : "border-white/15 hover:border-white/30"}`}
-                  onClick={() => toggleSelect(c.id)}>
-                  {selected.has(c.id) && (
-                    <svg width="8" height="7" viewBox="0 0 8 7" fill="none">
-                      <path d="M1 3.5L3 5.5L7 1.5" stroke="#050505" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </div>
-
-                {/* Name + avatar */}
-                <div className="flex items-center gap-3 min-w-0">
-                  <Avatar name={c.name || c.username} avatar={c.avatar_url} />
-                  <div className="min-w-0">
-                    <Link href={`/report/${c.username}`} className="text-[13px] font-semibold text-white hover:text-[#cdff00] transition-colors no-underline block truncate">
-                      {c.name || c.username}
-                    </Link>
-                    <p className="text-[11px] text-[#444]">@{c.username}
-                      {langs.length > 0 && <span className="ml-2 text-[#333]">{langs.slice(0, 2).join(", ")}</span>}
-                    </p>
+              return (
+                <motion.div key={c.id} variants={fadeIn}
+                  className="grid gap-4 px-5 py-4 border-b items-center hover:bg-white/[0.01] transition-colors group"
+                  style={{ gridTemplateColumns: "24px 2fr 1fr 60px 1fr 1.5fr 80px 32px", borderColor: "rgba(255,255,255,0.03)" }}>
+                  <div className={`w-4 h-4 rounded border cursor-pointer flex items-center justify-center transition-all ${selected.has(c.id) ? "border-[#cdff00] bg-[#cdff00]" : "border-white/15 hover:border-white/30"}`}
+                    onClick={() => toggleSelect(c.id)}>
+                    {selected.has(c.id) && (
+                      <svg width="8" height="7" viewBox="0 0 8 7" fill="none">
+                        <path d="M1 3.5L3 5.5L7 1.5" stroke="#050505" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
                   </div>
-                </div>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Avatar name={c.name || c.username} avatar={c.avatar_url} />
+                    <div className="min-w-0">
+                      <Link href={`/report/${c.username}`} className="text-[13px] font-semibold text-white hover:text-[#cdff00] transition-colors no-underline block truncate">
+                        {c.name || c.username}
+                      </Link>
+                      <p className="text-[11px] text-[#444]">@{c.username}
+                        {langs.length > 0 && <span className="ml-2 text-[#333]">{langs.slice(0, 2).join(", ")}</span>}
+                      </p>
+                    </div>
+                  </div>
+                  <ScoreBadge score={Number(c.final_score ?? c.score ?? 0)} tier={tier} />
+                  <TrendSparkline username={c.username} />
+                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full inline-block"
+                    style={{ background: `${RISK_COLORS[risk] ?? "#fbbf24"}18`, color: RISK_COLORS[risk] ?? "#fbbf24" }}>
+                    {risk}
+                  </span>
+                  <span className="text-[11px] font-semibold" style={{ color: REC_COLORS[rec] || "#ccc" }}>
+                    {rec}
+                  </span>
+                  <span className="text-[11px] text-[#444]">{formatDate(c.scanned_at)}</span>
+                  <button onClick={() => handleDelete(c.username)}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity text-[#333] hover:text-[#fb7185]" title="Remove">
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </motion.div>
+              );
+            })}
+          </motion.div>
 
-                {/* Score */}
-                <ScoreBadge score={Number(c.final_score ?? c.score ?? 0)} tier={tier} />
+          {/* Mobile card view */}
+          <motion.div variants={stagger} initial="hidden" animate="show"
+            className="md:hidden space-y-3">
+            {paginated.map((c) => {
+              const tier = (c.developer_tier as string) || scoreToTier(Number(c.final_score ?? c.score ?? 0));
+              const risk = (c.risk_level as string) || scoreToRisk(Number(c.final_score ?? c.score ?? 0));
+              const _fs = Number(c.final_score ?? c.score ?? 0);
+              const rec = (c.hiring_recommendation as string) || (_fs >= 80 ? "Strong Hire" : _fs >= 65 ? "Likely Hire" : _fs >= 50 ? "Conditional" : "Not Recommended");
+              const langs = (c.top_languages as string[]) ?? [];
 
-                {/* Trend sparkline */}
-                <TrendSparkline username={c.username} />
-
-                {/* Risk */}
-                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full inline-block"
-                  style={{ background: `${RISK_COLORS[risk] ?? "#fbbf24"}18`, color: RISK_COLORS[risk] ?? "#fbbf24" }}>
-                  {risk}
-                </span>
-
-                {/* Recommendation */}
-                <span className="text-[11px] font-semibold" style={{ color: REC_COLORS[rec] || "#ccc" }}>
-                  {rec}
-                </span>
-
-                {/* Date */}
-                <span className="text-[11px] text-[#444]">{formatDate(c.scanned_at)}</span>
-
-                {/* Delete */}
-                <button onClick={() => handleDelete(c.username)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-[#333] hover:text-[#fb7185]" title="Remove">
-                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </motion.div>
-            );
-          })}
-        </motion.div>
+              return (
+                <motion.div key={c.id} variants={fadeIn}
+                  className="rounded-xl border p-4 group"
+                  style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-5 h-5 rounded border cursor-pointer flex items-center justify-center transition-all shrink-0 ${selected.has(c.id) ? "border-[#cdff00] bg-[#cdff00]" : "border-white/15"}`}
+                      onClick={() => toggleSelect(c.id)}>
+                      {selected.has(c.id) && (
+                        <svg width="8" height="7" viewBox="0 0 8 7" fill="none">
+                          <path d="M1 3.5L3 5.5L7 1.5" stroke="#050505" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                    <Avatar name={c.name || c.username} avatar={c.avatar_url} />
+                    <div className="min-w-0 flex-1">
+                      <Link href={`/report/${c.username}`} className="text-sm font-semibold text-white hover:text-[#cdff00] transition-colors no-underline block truncate">
+                        {c.name || c.username}
+                      </Link>
+                      <p className="text-[11px] text-[#444] truncate">@{c.username}{langs.length > 0 && ` · ${langs.slice(0, 2).join(", ")}`}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <ScoreBadge score={Number(c.final_score ?? c.score ?? 0)} tier={tier} />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                      style={{ background: `${RISK_COLORS[risk] ?? "#fbbf24"}18`, color: RISK_COLORS[risk] ?? "#fbbf24" }}>
+                      {risk} Risk
+                    </span>
+                    <span className="text-[10px] font-semibold" style={{ color: REC_COLORS[rec] || "#ccc" }}>
+                      {rec}
+                    </span>
+                    <span className="ml-auto text-[10px] text-[#444]">{formatDate(c.scanned_at)}</span>
+                    <button onClick={() => handleDelete(c.username)}
+                      className="text-[#444] hover:text-[#fb7185] p-1" title="Remove">
+                      <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        </>
       )}
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-5">
-          <span className="text-[12px] text-[#444]">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-5">
+          <span className="text-[11px] sm:text-[12px] text-[#444]">
             Showing {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, filtered.length)} of {filtered.length}
           </span>
           <div className="flex items-center gap-1">
@@ -428,7 +471,7 @@ export default function CandidatesPage() {
               className="w-8 h-8 rounded-lg flex items-center justify-center border border-white/[0.06] text-[#555] hover:text-white hover:border-white/15 transition-all disabled:opacity-30">
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6" strokeLinecap="round" /></svg>
             </button>
-            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map(n => (
+            {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1).map(n => (
               <button key={n} onClick={() => setPage(n)}
                 className={`w-8 h-8 rounded-lg text-[12px] font-semibold transition-all ${page === n ? "text-[#050505] bg-[#cdff00]" : "text-[#555] hover:text-white border border-white/[0.06]"}`}>
                 {n}

@@ -158,22 +158,21 @@ export default function BulkUploadPage() {
   const fadeUp = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 
   return (
-    <div className="min-h-screen p-6 md:p-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
+    <div className="min-h-screen p-4 pt-14 sm:p-6 md:p-8 lg:pt-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-8">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="section-tag text-[10px] py-1 px-3">Pro Feature</span>
           </div>
-          <h1 className="text-2xl font-bold text-white" style={{ fontFamily: "var(--font-syne)" }}>
+          <h1 className="text-xl sm:text-2xl font-bold text-white" style={{ fontFamily: "var(--font-syne)" }}>
             Bulk Resume <span style={{ color: "#cdff00" }}>Analysis</span>
           </h1>
-          <p className="text-[#555] text-sm mt-1">Upload up to 100 PDF resumes — each is analyzed against the real backend</p>
+          <p className="text-[#555] text-xs sm:text-sm mt-1">Upload up to 100 PDF resumes — each analyzed against the real backend</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {done && doneFiles.length > 0 && (
             <button onClick={() => {
-              // Export CSV of results
               const csv = [
                 "Candidate,Score,Tier,Recommendation,Risk,Languages",
                 ...doneFiles.map(f =>
@@ -185,7 +184,7 @@ export default function BulkUploadPage() {
               const a = document.createElement("a");
               a.href = url; a.download = "devxray-bulk-results.csv"; a.click();
               URL.revokeObjectURL(url);
-            }} className="px-4 py-2 text-xs font-bold text-white rounded-xl border border-white/10 hover:border-white/20 transition-colors flex items-center gap-2">
+            }} className="px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-bold text-white rounded-xl border border-white/10 hover:border-white/20 transition-colors flex items-center gap-2">
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -193,7 +192,7 @@ export default function BulkUploadPage() {
             </button>
           )}
           <button onClick={clearAll}
-            className="px-4 py-2 text-xs font-bold text-[#555] hover:text-white rounded-xl border border-white/[0.06] hover:border-white/10 transition-all">
+            className="px-3 sm:px-4 py-2 text-[10px] sm:text-xs font-bold text-[#555] hover:text-white rounded-xl border border-white/[0.06] hover:border-white/10 transition-all">
             Clear All
           </button>
         </div>
@@ -299,8 +298,8 @@ export default function BulkUploadPage() {
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
-              <h3 className="text-base font-bold text-white mb-1">{dragging ? "Drop your PDFs here" : "Drag & drop up to 100 PDF resumes"}</h3>
-              <p className="text-[#444] text-sm mb-4">or click to browse files · PDF only · Max 10MB per file</p>
+              <h3 className="text-sm sm:text-base font-bold text-white mb-1">{dragging ? "Drop your PDFs here" : "Drag & drop PDF resumes"}</h3>
+              <p className="text-[#444] text-xs sm:text-sm mb-4">or click to browse · PDF only · Max 10MB per file</p>
               <div className="flex items-center gap-2 flex-wrap justify-center">
                 <span className="px-3 py-1 rounded-full text-[11px] font-semibold"
                   style={{ background: "rgba(205,255,0,0.08)", color: "#cdff00", border: "1px solid rgba(205,255,0,0.15)" }}>
@@ -362,7 +361,7 @@ export default function BulkUploadPage() {
                 <AnimatePresence>
                   {files.map((file) => (
                     <motion.div key={file.id} variants={fadeUp}
-                      className="flex items-center gap-4 px-5 py-3.5 hover:bg-white/[0.01] transition-colors">
+                      className="flex items-center gap-3 sm:gap-4 px-3 sm:px-5 py-3 sm:py-3.5 hover:bg-white/[0.01] transition-colors">
                       {/* PDF icon */}
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-[9px] font-bold"
                         style={{ background: "rgba(251,65,65,0.1)", color: "#fb4141", border: "1px solid rgba(251,65,65,0.2)" }}>
@@ -380,7 +379,7 @@ export default function BulkUploadPage() {
                         </div>
                       </div>
                       {/* Status / score */}
-                      <div className="w-32 shrink-0">
+                      <div className="w-20 sm:w-32 shrink-0">
                         {file.status === "done" ? (
                           <div className="flex items-center gap-2 justify-end">
                             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"

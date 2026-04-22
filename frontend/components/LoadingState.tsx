@@ -142,7 +142,7 @@ export default function LoadingState({ username, jobId }: { username?: string; j
   const totalProgress = ((completedSteps.size + (activeStep < PIPELINE_STEPS.length ? 0.5 : 0)) / PIPELINE_STEPS.length) * 100;
 
   return (
-    <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-6 relative overflow-hidden z-[100] fixed inset-0">
+    <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden z-[100] fixed inset-0">
       <div className="grain-overlay" />
       {/* Background effects */}
       <div className="absolute inset-0 pointer-events-none">

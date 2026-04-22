@@ -114,22 +114,22 @@ export default function SettingsPage() {
   const fadeUp = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.35 } } };
 
   return (
-    <div className="min-h-screen p-6 md:p-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-syne)" }}>
+    <div className="min-h-screen p-4 pt-14 sm:p-6 md:p-8 lg:pt-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-6 sm:mb-8">
+        <h1 className="text-xl sm:text-2xl font-bold text-white mb-1" style={{ fontFamily: "var(--font-syne)" }}>
           Account <span style={{ color: "#cdff00" }}>Settings</span>
         </h1>
-        <p className="text-[#555] text-sm">Manage your profile, API keys, team, and integrations</p>
+        <p className="text-[#555] text-xs sm:text-sm">Manage your profile, API keys, team, and integrations</p>
       </motion.div>
 
-      <div className="flex gap-8">
-        {/* Sidebar nav */}
+      <div className="flex flex-col md:flex-row gap-6 md:gap-8">
+        {/* Sidebar nav — horizontal scroll on mobile */}
         <motion.aside initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}
-          className="w-44 shrink-0">
-          <nav className="space-y-0.5">
+          className="md:w-44 shrink-0">
+          <nav className="flex md:flex-col gap-1 overflow-x-auto no-scrollbar pb-2 md:pb-0">
             {NAV_TABS.map(t => (
               <button key={t.id} onClick={() => setTab(t.id)}
-                className={`w-full text-left px-4 py-2.5 rounded-xl text-[13px] font-medium transition-all ${
+                className={`whitespace-nowrap md:w-full text-left px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-[12px] sm:text-[13px] font-medium transition-all shrink-0 ${
                   tab === t.id ? "bg-[#cdff00]/10 text-[#cdff00]" : "text-[#555] hover:text-white hover:bg-white/[0.02]"
                 }`}>
                 {t.label}
@@ -161,7 +161,7 @@ export default function SettingsPage() {
                       <p className="text-[11px] text-[#444] mt-1">JPG, PNG or GIF. Max 2MB.</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {[
                       { label: "Full Name", value: user?.fullName || "DevXray User" },
                       { label: "Email", value: user?.email || "user@devxray.ai" },
@@ -293,7 +293,7 @@ export default function SettingsPage() {
                       Upgrade to Enterprise
                     </Link>
                   </div>
-                  <div className="grid grid-cols-3 gap-4 mt-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5">
                     {[
                       { label: "Scans Used", value: "47 / 100", pct: 47 },
                       { label: "Bulk Uploads", value: "3 / 10", pct: 30 },
@@ -323,7 +323,7 @@ export default function SettingsPage() {
 
             {/* ── INTEGRATIONS ── */}
             {tab === "integrations" && (
-              <motion.div variants={fadeUp} className="grid grid-cols-2 gap-4">
+              <motion.div variants={fadeUp} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {integrations.map(integ => (
                   <div key={integ.name} className="rounded-2xl p-5 border flex items-start gap-4 transition-all hover:border-white/12"
                     style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>

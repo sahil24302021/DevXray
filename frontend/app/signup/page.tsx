@@ -79,15 +79,15 @@ export default function SignUpPage() {
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[#cdff00]/[0.03] blur-[120px] rounded-full mix-blend-screen pointer-events-none" />
 
       {/* Logo */}
-      <div className="absolute top-6 left-8">
+      <div className="absolute top-4 left-4 sm:top-6 sm:left-8">
         <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity text-[#cdff00]">
-          <Logo className="w-7 h-7" />
+          <Logo className="w-6 h-6 sm:w-7 sm:h-7" />
           <span className="font-bold text-white text-sm font-[family-name:var(--font-syne)]">DevXray</span>
         </Link>
       </div>
 
       <div className="relative z-10 w-full max-w-sm px-4">
-        <div className="bg-[#0a0a0a] border border-[#222] rounded-2xl p-8 shadow-2xl">
+        <div className="bg-[#0a0a0a] border border-[#222] rounded-2xl p-6 sm:p-8 shadow-2xl">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-[family-name:var(--font-syne)] font-bold text-white mb-2">
               Create your account

@@ -132,10 +132,10 @@ export default function HowWeScorePage() {
   const fadeUp = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] as const } } };
 
   return (
-    <div className="min-h-screen" style={{ fontFamily: "var(--font-dm-sans)" }}>
+    <div className="min-h-screen pt-8 sm:pt-0" style={{ fontFamily: "var(--font-dm-sans)" }}>
 
       {/* Hero */}
-      <section className="px-6 md:px-10 pt-12 pb-10">
+      <section className="px-4 sm:px-6 md:px-10 pt-8 sm:pt-12 pb-8 sm:pb-10">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
           <span className="section-tag mb-4 inline-flex">Scoring Methodology</span>
           <h1 className="font-extrabold tracking-[-0.03em] text-white mb-4" style={{ fontFamily: "var(--font-syne)", fontSize: "clamp(2rem, 4vw, 3.2rem)", lineHeight: 1.1 }}>
@@ -160,7 +160,7 @@ export default function HowWeScorePage() {
       </section>
 
       {/* Score overview calculator */}
-      <section className="px-6 md:px-10 py-8 border-t" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+      <section className="px-4 sm:px-6 md:px-10 py-6 sm:py-8 border-t" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
         <motion.div initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
           <h2 className="text-lg font-bold text-white mb-6" style={{ fontFamily: "var(--font-syne)" }}>Score Composition</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
@@ -221,16 +221,16 @@ export default function HowWeScorePage() {
       </section>
 
       {/* Score examples */}
-      <section className="px-6 md:px-10 py-8 border-t" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+      <section className="px-4 sm:px-6 md:px-10 py-6 sm:py-8 border-t" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
         <h2 className="text-lg font-bold text-white mb-6" style={{ fontFamily: "var(--font-syne)" }}>Real Score Examples</h2>
         <div className="space-y-3">
           {SCORE_EXAMPLES.map(ex => (
             <motion.div key={ex.score} initial={{ opacity: 0, x: -10 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}
-              className="flex items-center gap-5 rounded-2xl p-4 border"
+              className="flex items-center gap-3 sm:gap-5 rounded-2xl p-3 sm:p-4 border"
               style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.06)" }}>
-              <div className="w-14 h-14 rounded-xl flex flex-col items-center justify-center shrink-0"
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex flex-col items-center justify-center shrink-0"
                 style={{ background: `${ex.color}12`, border: `1px solid ${ex.color}30` }}>
-                <span className="text-xl font-black" style={{ color: ex.color, fontFamily: "var(--font-syne)" }}>{ex.score}</span>
+                <span className="text-lg sm:text-xl font-black" style={{ color: ex.color, fontFamily: "var(--font-syne)" }}>{ex.score}</span>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
@@ -252,7 +252,7 @@ export default function HowWeScorePage() {
       </section>
 
       {/* Red flags */}
-      <section className="px-6 md:px-10 py-8 border-t" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+      <section className="px-4 sm:px-6 md:px-10 py-6 sm:py-8 border-t" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
         <h2 className="text-lg font-bold text-white mb-2" style={{ fontFamily: "var(--font-syne)" }}>Red Flag Detection</h2>
         <p className="text-[#555] text-sm mb-6">Automatic penalty applied when any of these patterns are detected with medium or high confidence.</p>
         <div className="grid md:grid-cols-2 gap-3">
@@ -277,7 +277,7 @@ export default function HowWeScorePage() {
       </section>
 
       {/* CTA */}
-      <section className="px-6 md:px-10 py-12 border-t text-center" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+      <section className="px-4 sm:px-6 md:px-10 py-8 sm:py-12 border-t text-center" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
         <Link href="/dashboard" className="magnetic-btn inline-flex items-center gap-2 no-underline">
           Start Analyzing
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">

@@ -1311,3 +1311,23 @@ body {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   MOBILE UTILITIES
+   ═══════════════════════════════════════════════════════════ */
+
+/* Hide scrollbar while keeping scroll functional — used on tier pills, settings tabs, etc. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Ensure touch targets meet minimum 44px on mobile */
+@media (max-width: 640px) {
+  .magnetic-btn {
+    min-height: 44px;
+  }
+}
+

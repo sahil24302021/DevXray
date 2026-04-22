@@ -373,18 +373,18 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen p-6 md:p-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
+    <div className="min-h-screen p-4 pt-14 sm:p-6 md:p-8 lg:pt-8" style={{ fontFamily: "var(--font-dm-sans)" }}>
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between mb-6">
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <p className="text-[#444] text-xs mb-1" style={{ fontFamily: "var(--font-space)" }}>
+          <p className="text-[#444] text-[10px] sm:text-xs mb-1" style={{ fontFamily: "var(--font-space)" }}>
             {new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
           </p>
-          <h1 className="text-2xl font-bold text-white" style={{ fontFamily: "var(--font-syne)" }}>
+          <h1 className="text-xl sm:text-2xl font-bold text-white" style={{ fontFamily: "var(--font-syne)" }}>
             Welcome back, <span style={{ color: "#cdff00" }}>{userName}</span>
           </h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {/* Scan counter badges */}
           {gateProfile && (
             <div className="hidden md:flex items-center gap-2">
@@ -409,35 +409,36 @@ export default function DashboardPage() {
             </div>
           )}
           <div
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg"
             style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
           >
             <div className={`w-2 h-2 rounded-full ${backendOnline === null ? "bg-[#fbbf24] animate-pulse" : backendOnline ? "bg-[#34d399]" : "bg-[#fb7185]"}`} />
-            <span className="text-[10px] text-[#555]">
+            <span className="text-[10px] text-[#555] hidden sm:inline">
               {backendOnline === null ? "Checking..." : backendOnline ? "Backend Online" : "Backend Offline"}
             </span>
           </div>
           <Link
             href="/bulk-upload"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-[#050505] no-underline hover:opacity-90 transition-all"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold text-[#050505] no-underline hover:opacity-90 transition-all"
             style={{ background: "#cdff00" }}
           >
             <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
               <path d="M12 5v14M5 12l7-7 7 7" />
             </svg>
-            Bulk Upload
+            <span className="hidden sm:inline">Bulk Upload</span>
+            <span className="sm:hidden">Upload</span>
           </Link>
         </div>
       </motion.div>
 
       {/* ── Plan usage stats ── */}
       {gateProfile && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-3 gap-4 mb-6">
-          <div className="rounded-xl border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
-            <div className="text-[#555] text-xs mb-1">GitHub Scans Used</div>
-            <div className="text-2xl font-black text-white" style={{ fontFamily: "var(--font-syne)" }}>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
+            <div className="text-[#555] text-[10px] sm:text-xs mb-1">GitHub Scans</div>
+            <div className="text-xl sm:text-2xl font-black text-white" style={{ fontFamily: "var(--font-syne)" }}>
               {gateProfile.github_scans_used}
-              <span className="text-[#555] text-sm font-normal">/{PLANS[gateProfile.plan]?.github_scans === Infinity ? "∞" : PLANS[gateProfile.plan]?.github_scans ?? 2}</span>
+              <span className="text-[#555] text-xs sm:text-sm font-normal">/{PLANS[gateProfile.plan]?.github_scans === Infinity ? "∞" : PLANS[gateProfile.plan]?.github_scans ?? 2}</span>
             </div>
             <div className="mt-2 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.05)" }}>
               <div className="h-full rounded-full bg-[#cdff00] transition-all duration-700" style={{
@@ -445,11 +446,11 @@ export default function DashboardPage() {
               }} />
             </div>
           </div>
-          <div className="rounded-xl border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
-            <div className="text-[#555] text-xs mb-1">Resume Scans Used</div>
-            <div className="text-2xl font-black text-white" style={{ fontFamily: "var(--font-syne)" }}>
+          <div className="rounded-xl border p-3 sm:p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
+            <div className="text-[#555] text-[10px] sm:text-xs mb-1">Resume Scans</div>
+            <div className="text-xl sm:text-2xl font-black text-white" style={{ fontFamily: "var(--font-syne)" }}>
               {gateProfile.resume_scans_used}
-              <span className="text-[#555] text-sm font-normal">/{PLANS[gateProfile.plan]?.resume_scans === Infinity ? "∞" : PLANS[gateProfile.plan]?.resume_scans ?? 2}</span>
+              <span className="text-[#555] text-xs sm:text-sm font-normal">/{PLANS[gateProfile.plan]?.resume_scans === Infinity ? "∞" : PLANS[gateProfile.plan]?.resume_scans ?? 2}</span>
             </div>
             <div className="mt-2 h-1 rounded-full" style={{ background: "rgba(255,255,255,0.05)" }}>
               <div className="h-full rounded-full bg-violet-400 transition-all duration-700" style={{
@@ -457,9 +458,9 @@ export default function DashboardPage() {
               }} />
             </div>
           </div>
-          <div className="rounded-xl border p-4" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
-            <div className="text-[#555] text-xs mb-1">Current Plan</div>
-            <div className="text-2xl font-black text-white capitalize" style={{ fontFamily: "var(--font-syne)" }}>{gateProfile.plan}</div>
+          <div className="rounded-xl border p-3 sm:p-4 col-span-2 sm:col-span-1" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.07)" }}>
+            <div className="text-[#555] text-[10px] sm:text-xs mb-1">Current Plan</div>
+            <div className="text-xl sm:text-2xl font-black text-white capitalize" style={{ fontFamily: "var(--font-syne)" }}>{gateProfile.plan}</div>
             {gateProfile.plan === "free" && (
               <Link href="/pricing" className="mt-2 inline-block text-xs text-[#cdff00] hover:underline no-underline">
                 Upgrade for more scans →
@@ -473,14 +474,14 @@ export default function DashboardPage() {
       {gateProfile && gateProfile.plan === "free" && (
         gateProfile.github_scans_used >= 1 || gateProfile.resume_scans_used >= 1
       ) && (
-        <div className="mb-6 flex items-center justify-between rounded-xl border border-amber-500/20 bg-amber-500/5 px-5 py-3">
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 sm:px-5 py-3">
           <div className="flex items-center gap-3">
-            <span className="text-amber-400">⚡</span>
-            <span className="text-sm text-[#aaa]">
-              You have <strong className="text-white">{2 - gateProfile.github_scans_used} GitHub</strong> and <strong className="text-white">{2 - gateProfile.resume_scans_used} resume</strong> scans remaining on your free plan.
+            <span className="text-amber-400 shrink-0">⚡</span>
+            <span className="text-xs sm:text-sm text-[#aaa]">
+              You have <strong className="text-white">{2 - gateProfile.github_scans_used} GitHub</strong> and <strong className="text-white">{2 - gateProfile.resume_scans_used} resume</strong> scans remaining.
             </span>
           </div>
-          <Link href="/pricing" className="shrink-0 px-4 py-2 rounded-lg bg-[#cdff00] text-black text-xs font-black hover:bg-[#b8e600] transition-all no-underline">
+          <Link href="/pricing" className="shrink-0 px-4 py-2 rounded-lg bg-[#cdff00] text-black text-xs font-black hover:bg-[#b8e600] transition-all no-underline w-full sm:w-auto text-center">
             Upgrade Now
           </Link>
         </div>
@@ -495,23 +496,25 @@ export default function DashboardPage() {
         className="rounded-2xl p-5 border mb-6"
         style={{ background: "rgba(205,255,0,0.03)", borderColor: "rgba(205,255,0,0.12)" }}
       >
-        <div className="flex items-center gap-3">
-          <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#cdff00" strokeWidth="2">
-            <circle cx="11" cy="11" r="8" />
-            <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
-          </svg>
-          <input
-            type="text"
-            value={scanInput}
-            onChange={(e) => setScanInput(e.target.value)}
-            placeholder="Enter GitHub username to analyze (e.g. torvalds, gaearon)..."
-            disabled={scanning}
-            className="flex-1 bg-transparent text-white text-sm placeholder-[#555] outline-none disabled:opacity-50"
-          />
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex items-center gap-3 flex-1">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#cdff00" strokeWidth="2" className="shrink-0">
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+            </svg>
+            <input
+              type="text"
+              value={scanInput}
+              onChange={(e) => setScanInput(e.target.value)}
+              placeholder="Enter GitHub username..."
+              disabled={scanning}
+              className="flex-1 bg-transparent text-white text-sm placeholder-[#555] outline-none disabled:opacity-50 min-w-0"
+            />
+          </div>
           <button
             type="submit"
             disabled={scanning || !scanInput.trim()}
-            className="px-5 py-2 rounded-xl text-sm font-bold text-[#050505] transition-all hover:opacity-90 disabled:opacity-50 flex items-center gap-2"
+            className="px-5 py-2.5 sm:py-2 rounded-xl text-sm font-bold text-[#050505] transition-all hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-2 shrink-0"
             style={{ background: "#cdff00" }}
           >
             {scanning ? (
@@ -561,7 +564,7 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* Main grid */}
-      <div className="grid lg:grid-cols-[1fr_320px] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
         {/* Left column */}
         <div className="space-y-5">
           {/* Recent scans */}

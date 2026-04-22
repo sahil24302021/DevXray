@@ -118,14 +118,14 @@ export default function PaywallModal({
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: "spring", damping: 20 }}
-              className="w-full max-w-2xl rounded-3xl border border-white/10 overflow-hidden"
+              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-white/10"
               style={{
                 background:
                   "linear-gradient(135deg, #0d0d0d 0%, #111 100%)",
               }}
             >
               {/* Header */}
-              <div className="relative p-8 pb-6 text-center border-b border-white/[0.06]">
+              <div className="relative p-5 sm:p-8 pb-4 sm:pb-6 text-center border-b border-white/[0.06]">
                 {trigger === "pricing" ? (
                   <>
                     <h2 className="font-bold text-3xl text-white mb-2" style={{ fontFamily: "var(--font-syne)" }}>
