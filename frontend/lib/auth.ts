@@ -93,6 +93,14 @@ export async function signInWithGoogle(): Promise<{ error: string | null }> {
 export async function signOut(): Promise<void> {
   if (!isSupabaseAvailable || !supabase) return;
   await supabase.auth.signOut();
+
+  // Clear all DevXray localStorage to prevent data leaking between accounts
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("devxray_candidates");
+    localStorage.removeItem("devxray_score_history");
+    localStorage.removeItem("devxray_scans_used");
+    localStorage.removeItem("devxray_guest_scans");
+  }
 }
 
 // ─── Subscribe to auth state changes ─────────────────────────

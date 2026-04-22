@@ -161,6 +161,7 @@ export async function saveCandidate(
         .from("candidates")
         .select("id")
         .eq("username", username)
+        .eq("user_id", record.user_id)
         .maybeSingle();
 
       if (existing) {
@@ -234,9 +235,16 @@ export async function listCandidates(): Promise<CandidateRecord[]> {
         .select("*")
         .order("scanned_at", { ascending: false });
 
-      // Filter: show user's own records + legacy records with no user_id
+      // Filter: show ONLY the current user's own records (strict isolation)
       if (userId) {
-        query = query.or(`user_id.eq.${userId},user_id.is.null`);
+        query = query.eq("user_id", userId);
+      } else {
+        // No logged-in user → return localStorage only, never query Supabase
+        return lsGetAll().sort((a, b) => {
+          const da = new Date(a.scanned_at || 0).getTime();
+          const db = new Date(b.scanned_at || 0).getTime();
+          return db - da;
+        });
       }
 
       const { data, error } = await query;
