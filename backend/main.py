@@ -1388,14 +1388,153 @@ async def get_shared_report(token: str):
     raise HTTPException(status_code=404, detail="Report not found or expired")
 
 
+def _build_personalized_fallback_kit(
+    candidate_name: str,
+    top_repo_names: list,
+    top_skills: list,
+    risk_flags: list,
+    weaknesses: list,
+    final_score: float,
+    difficulty: str,
+    role: str,
+) -> dict:
+    """Build a unique fallback interview kit referencing the candidate's actual data."""
+    # Pick the most interesting repo for questions
+    primary_repo = top_repo_names[0] if top_repo_names else "your primary project"
+    secondary_repo = top_repo_names[1] if len(top_repo_names) > 1 else None
+    primary_skill = top_skills[0] if top_skills else "your primary technology"
+
+    opening_questions = [
+        {
+            "question": (
+                f"{candidate_name}, walk me through the architecture of {primary_repo}. "
+                f"What problem does it solve, and what were the hardest technical decisions you made?"
+            ),
+            "purpose": "Assess project ownership and communication clarity"
+        },
+    ]
+    if secondary_repo:
+        opening_questions.append({
+            "question": (
+                f"How does {secondary_repo} differ from {primary_repo} in terms of complexity? "
+                f"Which one challenged you more and why?"
+            ),
+            "purpose": "Assess ability to compare trade-offs across projects"
+        })
+
+    technical_deep_dives = []
+    for skill in top_skills[:4]:
+        repo_ref = primary_repo if top_repo_names else "your projects"
+        technical_deep_dives.append({
+            "skill": skill,
+            "question": (
+                f"In {repo_ref}, how did you use {skill}? Walk me through a specific "
+                f"technical decision you made with it and the trade-offs you considered."
+            ),
+            "follow_up": f"If you had to replace {skill} with an alternative in {repo_ref}, what would you choose and why?",
+            "red_flag_answer": f"Cannot explain how {skill} was used beyond surface-level or tutorial examples.",
+            "good_answer_looks_like": f"Discusses real architecture decisions, failure modes, and why {skill} was chosen over alternatives."
+        })
+    if not technical_deep_dives:
+        technical_deep_dives.append({
+            "skill": "Software Architecture",
+            "question": f"Describe how you structured {primary_repo}. What patterns did you use and why?",
+            "follow_up": "How would you refactor it if you started today?",
+            "red_flag_answer": "Cannot describe the project structure or explain design choices.",
+            "good_answer_looks_like": "Describes clear separation of concerns, mentions specific patterns, and identifies areas for improvement."
+        })
+
+    gap_probing = []
+    for w in weaknesses[:3]:
+        w_text = w if isinstance(w, str) else str(w)
+        gap_probing.append({
+            "question": f"Our analysis of {candidate_name}'s profile flagged a gap in: {w_text}. Can you walk me through your experience with this?",
+            "probes_for": f"Self-awareness about {w_text} and concrete plan to improve"
+        })
+    for f in risk_flags[:3]:
+        gap_probing.append({
+            "question": f"We detected: {f}. Can you explain what was happening and walk me through your typical workflow?",
+            "probes_for": f"Clarifying: {f}"
+        })
+    if not gap_probing:
+        gap_probing.append({
+            "question": f"What aspect of building {primary_repo} did you find most difficult, and what would you do differently?",
+            "probes_for": "Self-awareness and growth mindset"
+        })
+
+    # Tailor system design to their actual tech
+    if "React" in top_skills or "Next.js" in top_skills or "TypeScript" in top_skills:
+        sys_design_problem = f"If {primary_repo} needed to support 100K concurrent users, how would you re-architect the frontend and backend?"
+    elif "Python" in top_skills or "FastAPI" in top_skills or "Django" in top_skills:
+        sys_design_problem = f"Design a scalable API layer for {primary_repo} that handles 10x its current traffic with sub-200ms latency."
+    else:
+        sys_design_problem = f"If {primary_repo} needed to handle 10x its current load, what would you change? Start with diagnosing the bottleneck."
+
+    score_context = "strong" if final_score >= 70 else "moderate" if final_score >= 50 else "developing"
+
+    return {
+        "opening_questions": opening_questions,
+        "technical_deep_dives": technical_deep_dives,
+        "gap_probing_questions": gap_probing,
+        "system_design_challenge": {
+            "problem": sys_design_problem,
+            "what_to_look_for": [
+                "Identifies real bottlenecks in their own project",
+                "Mentions caching, queuing, or load-balancing strategies",
+                "Discusses database scaling (indexing, sharding, read replicas)",
+                "Shows awareness of monitoring and failure modes"
+            ],
+            "time_allocation": "20 minutes"
+        },
+        "culture_fit_questions": [
+            {
+                "question": f"Tell me about a time you received critical feedback on code you wrote for {primary_repo} or a similar project. How did you respond?",
+                "good_signal": "Accepted feedback constructively, iterated on the code, and improved the process.",
+                "red_flag": "Became defensive, dismissed the feedback, or showed no growth from the experience."
+            },
+            {
+                "question": "Describe a situation where you had to ship something you weren't fully satisfied with. What trade-offs did you make?",
+                "good_signal": "Shows pragmatism, documents tech debt, and has a plan to revisit.",
+                "red_flag": "Either ships without quality standards or cannot ship due to perfectionism."
+            }
+        ],
+        "coding_challenge": {
+            "problem": (
+                f"Given {candidate_name}'s {score_context} profile in {primary_skill}: "
+                f"implement a function relevant to {primary_repo}'s domain while explaining your thought process."
+            ),
+            "difficulty": difficulty,
+            "what_it_tests": f"Genuine fluency in {primary_skill}, problem decomposition, and edge-case awareness"
+        },
+        "closing_questions": [
+            f"What would you improve in {primary_repo} if you had unlimited time?",
+            "How do you decide when a feature is ready to ship versus needs more work?",
+            "What's the most interesting technical problem you want to solve next?"
+        ],
+        "overall_interview_strategy": (
+            f"This interview kit is personalized for {candidate_name} (DevXray score: {final_score}/100, {score_context} profile). "
+            f"Focus on verifying genuine depth in {', '.join(top_skills[:3]) if top_skills else 'their stated skills'} "
+            f"by referencing their actual projects ({', '.join(top_repo_names[:3]) if top_repo_names else 'their portfolio'}). "
+            f"{'Probe risk flags carefully before proceeding to system design.' if risk_flags else 'Profile is clean -- focus on technical depth and growth potential.'}"
+        ),
+        "time_allocation": {
+            "technical": "35 min",
+            "behavioral": "15 min",
+            "system_design": "20 min",
+            "q_and_a": "10 min"
+        }
+    }
+
+
 @app.post("/api/interview-prep")
 async def generate_interview_prep(request: Request):
     """
-    Generate a complete interview kit from a DevXray report.
-    HRs use this before every technical interview.
-    
+    Generate a complete, personalized interview kit from a DevXray report.
+    Every kit is unique -- references the candidate's actual repos, skills,
+    and detected weaknesses.
+
     Input: { "report": {...}, "role": "Backend Engineer", "difficulty": "senior" }
-    Output: structured interview kit with 15 questions, red flags to probe,
+    Output: structured interview kit with personalized questions, red flags to probe,
             technical challenges, and expected answers
     """
     try:
@@ -1410,25 +1549,77 @@ async def generate_interview_prep(request: Request):
     if not report:
         raise HTTPException(status_code=400, detail="Report required")
 
+    # ── Extract candidate-specific data ──────────────────────────────
+    candidate_name = (
+        report.get("name")
+        or report.get("basic_info", {}).get("name")
+        or report.get("basic_info", {}).get("login")
+        or "the candidate"
+    )
+    github_username = (
+        report.get("username")
+        or report.get("basic_info", {}).get("login", "unknown")
+    )
+
+    # Get top non-fork repo names
+    repos = report.get("repositories") or report.get("repos") or []
+    top_repo_names = [
+        r.get("name", "")
+        for r in repos
+        if not r.get("is_fork", r.get("fork", False)) and r.get("name")
+    ][:5]
+    # Fallback: try top_repos or projects
+    if not top_repo_names:
+        for src_key in ("top_repos", "projects"):
+            src = report.get(src_key, [])
+            if isinstance(src, list) and src:
+                top_repo_names = [
+                    p.get("name", p.get("repo_name", ""))
+                    for p in src if p.get("name") or p.get("repo_name")
+                ][:5]
+                if top_repo_names:
+                    break
+
     top_skills = [s.get("skill_name", "") for s in report.get("top_skills", [])[:5]]
     risk_flags = [f.get("flag", "") for f in report.get("risk_flags", [])[:3]]
     weaknesses = report.get("weaknesses", [])[:3]
     final_score = report.get("final_score", 0)
     stuffer = report.get("authenticity", {}).get("commit_timeline_forensics", {}).get("stuffer_detected", False)
 
-    prompt = f"""You are the world's best technical interviewer.
-Generate a complete interview kit for this candidate.
+    # ── Build personalized prompt ────────────────────────────────────
+    repos_str = ", ".join(top_repo_names) if top_repo_names else "no specific repos found"
+    skills_str = ", ".join(top_skills) if top_skills else "not detected"
+    flags_str = "; ".join(risk_flags) if risk_flags else "none"
+    weak_str = "; ".join(str(w) for w in weaknesses) if weaknesses else "none identified"
+
+    prompt = f"""You are the world's best technical interviewer preparing a PERSONALIZED interview kit.
+IMPORTANT RULES:
+- You MUST reference {candidate_name}'s actual project names in your questions (listed below).
+- Do NOT generate generic questions. Every question must feel specific to THIS candidate.
+- Do NOT use any emoji or emoticons anywhere in the output. Use plain text only.
 
 CANDIDATE PROFILE:
+- Candidate name: {candidate_name}
+- GitHub username: {github_username}
 - Role being hired for: {role}
 - Seniority level: {difficulty}
 - DevXray score: {final_score}/100
-- Top verified skills: {top_skills}
-- Risk flags detected: {risk_flags}
-- Weaknesses found: {weaknesses}
+- Top GitHub repositories: {repos_str}
+- Top verified skills: {skills_str}
+- Risk flags detected: {flags_str}
+- Weaknesses found: {weak_str}
 - Commit stuffer detected: {stuffer}
 
-Generate a complete interview kit. Return ONLY this JSON:
+INSTRUCTIONS:
+1. In opening_questions, ask {candidate_name} about a SPECIFIC repo from their list above.
+2. In technical_deep_dives, each question MUST name one of their repos and ask how they used the skill there.
+3. In gap_probing_questions, reference their specific weaknesses and risk flags by name.
+4. In system_design_challenge, base the problem on one of their actual projects and ask how they would scale it.
+5. In coding_challenge, tailor it to their verified skill set.
+6. In overall_interview_strategy, mention {candidate_name} by name and reference their specific strengths/weaknesses.
+7. NEVER use emoji. Keep all text professional and plain.
+
+Return ONLY this JSON (no markdown, no commentary):
 {{
     "opening_questions": [
         {{"question": "...", "purpose": "build rapport / assess communication"}}
@@ -1436,7 +1627,7 @@ Generate a complete interview kit. Return ONLY this JSON:
     "technical_deep_dives": [
         {{
             "skill": "which skill this tests",
-            "question": "technical question",
+            "question": "technical question referencing their specific repo",
             "follow_up": "harder follow-up if they answer correctly",
             "red_flag_answer": "what answer would concern you",
             "good_answer_looks_like": "what a strong answer covers"
@@ -1446,7 +1637,7 @@ Generate a complete interview kit. Return ONLY this JSON:
         {{"question": "...", "probes_for": "which gap/risk this targets"}}
     ],
     "system_design_challenge": {{
-        "problem": "a relevant system design problem for this role",
+        "problem": "a system design problem based on their actual project",
         "what_to_look_for": ["key concepts they should mention"],
         "time_allocation": "20 minutes"
     }},
@@ -1454,12 +1645,12 @@ Generate a complete interview kit. Return ONLY this JSON:
         {{"question": "...", "good_signal": "...", "red_flag": "..."}}
     ],
     "coding_challenge": {{
-        "problem": "a short relevant coding problem",
+        "problem": "a coding problem tailored to their skill set",
         "difficulty": "{difficulty}",
         "what_it_tests": "..."
     }},
-    "closing_questions": ["questions candidate should ask you — absence is a red flag"],
-    "overall_interview_strategy": "1 paragraph on how to approach this specific candidate",
+    "closing_questions": ["questions candidate should ask you -- absence is a red flag"],
+    "overall_interview_strategy": "1 paragraph on how to approach {candidate_name} specifically",
     "time_allocation": {{
         "technical": "40 min",
         "behavioral": "15 min",
@@ -1470,78 +1661,21 @@ Generate a complete interview kit. Return ONLY this JSON:
 
     try:
         from services.gemini_client import generate_json
-        result = await asyncio.wait_for(generate_json(prompt, temperature=0), timeout=25.0)
+        result = await asyncio.wait_for(generate_json(prompt, temperature=0.7), timeout=25.0)
         return {"success": True, "interview_kit": result, "role": role, "difficulty": difficulty}
     except (asyncio.TimeoutError, Exception) as e:
         log.warning(f"Interview prep AI generation failed (likely quota issue): {e}")
-        # Generate a structured fallback kit from the raw report data
-        fallback_kit = {
-            "opening_questions": [
-                {"question": "Can you walk me through your most complex project?", "purpose": "Assess communication and project ownership"}
-            ],
-            "technical_deep_dives": [
-                {
-                    "skill": s,
-                    "question": f"How have you used {s} in production? What were the hardest scaling issues?",
-                    "follow_up": "How did you monitor or debug it in production?",
-                    "red_flag_answer": "Only describes tutorial-level usage or lacks understanding of failure modes.",
-                    "good_answer_looks_like": "Discusses real-world trade-offs, architecture decisions, and edge cases."
-                } for s in top_skills
-            ] if top_skills else [
-                {
-                    "skill": "Software Architecture",
-                    "question": "Describe a time you had to refactor a significant part of a codebase. What was your approach?",
-                    "follow_up": "How did you ensure you didn't break existing functionality?",
-                    "red_flag_answer": "Never refactored code or did it without tests/planning.",
-                    "good_answer_looks_like": "Mentions adding tests first, gradual rollouts, and defining clear boundaries."
-                }
-            ],
-            "gap_probing_questions": [
-                {
-                    "question": f"Our analysis flagged a potential gap in: {w}. Can you speak to your experience with this?",
-                    "probes_for": f"Self-awareness and plan to improve {w}"
-                } for w in weaknesses
-            ] if weaknesses else [
-                {
-                    "question": "What is an area of backend development you feel you are currently weak in and trying to improve?",
-                    "probes_for": "Self-awareness and continuous learning"
-                }
-            ],
-            "system_design_challenge": {
-                "problem": "Design a highly available URL shortener (like bit.ly) or a rate-limiter suitable for this role's level.",
-                "what_to_look_for": ["Data modeling", "Caching strategies", "Database partitioning", "Latency vs throughput trade-offs"],
-                "time_allocation": "20 minutes"
-            },
-            "culture_fit_questions": [
-                {
-                    "question": "Tell me about a time you strongly disagreed with a technical decision made by your team or manager.",
-                    "good_signal": "Approached the disagreement with data, communicated respectfully, and committed to the team's final decision.",
-                    "red_flag": "Became defensive, undermined the decision, or just gave up without explaining their technical stance."
-                }
-            ],
-            "coding_challenge": {
-                "problem": "Implement a function that finds the longest substring without repeating characters.",
-                "difficulty": difficulty,
-                "what_it_tests": "Algorithmic thinking and edge-case handling (empty strings, all identical characters)"
-            },
-            "closing_questions": ["What does your deployment pipeline typically look like?", "How do you handle technical debt?"],
-            "overall_interview_strategy": "This is a fallback interview kit automatically generated from the candidate's top tools because AI generation was unavailable. Focus on probing the depth of their knowledge in their top listed skills.",
-            "time_allocation": {
-                "technical": "30 min",
-                "behavioral": "15 min",
-                "system_design": "20 min",
-                "q_and_a": "10 min"
-            }
-        }
-        # Include risk flag probes if any exist
-        if risk_flags:
-            fallback_kit["gap_probing_questions"].extend([
-                {
-                    "question": f"I noticed an irregularity regarding: {f}. Can you elaborate on your experience here?",
-                    "probes_for": f"Clarifying the risk flag: {f}"
-                } for f in risk_flags
-            ])
-            
+        # Build a personalized fallback kit instead of generic hardcoded questions
+        fallback_kit = _build_personalized_fallback_kit(
+            candidate_name=candidate_name,
+            top_repo_names=top_repo_names,
+            top_skills=top_skills,
+            risk_flags=risk_flags,
+            weaknesses=weaknesses,
+            final_score=final_score,
+            difficulty=difficulty,
+            role=role,
+        )
         return {"success": True, "interview_kit": fallback_kit, "role": role, "difficulty": difficulty, "is_fallback": True}
 
 def _deep_sanitize(obj, depth=0):

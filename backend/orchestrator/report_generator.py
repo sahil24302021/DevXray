@@ -1031,14 +1031,14 @@ def _generate_interview_questions(
     repos: List[Dict] = None,
     code_analysis: Dict = None,
 ) -> List[Dict[str, str]]:
-    """Generate interview questions that reference THIS developer's specific repos."""
+    """Generate interview questions that reference THIS developer's specific repos and weaknesses."""
     questions = []
     repos = repos or []
     code_analysis = code_analysis or {}
 
-    # Find the most interesting repo to reference
+    # Find the most interesting repos to reference
     non_forks = [r for r in repos if not r.get("is_fork", r.get("fork", False))]
-    interesting_repo = None
+    interesting_repos = []
     if non_forks:
         def repo_interest(r):
             return (
@@ -1046,11 +1046,15 @@ def _generate_interview_questions(
                 (10 if r.get("description") else 0) +
                 r.get("_fork_commit_count", r.get("commit_count", 0))
             )
-        interesting_repo = max(non_forks, key=repo_interest)
+        interesting_repos = sorted(non_forks, key=repo_interest, reverse=True)[:3]
 
-    repo_name = interesting_repo.get("name", "your projects") if interesting_repo else "your projects"
-    repo_lang = interesting_repo.get("language", top_skills[0]["skill_name"] if top_skills else "your stack") if interesting_repo else "your stack"
-    repo_desc = interesting_repo.get("description", "") if interesting_repo else ""
+    repo1 = interesting_repos[0] if len(interesting_repos) > 0 else None
+    repo2 = interesting_repos[1] if len(interesting_repos) > 1 else None
+
+    repo_name = repo1.get("name", "your projects") if repo1 else "your projects"
+    repo_lang = repo1.get("language", top_skills[0]["skill_name"] if top_skills else "your stack") if repo1 else "your stack"
+    repo_desc = repo1.get("description", "") if repo1 else ""
+    repo2_name = repo2.get("name", "") if repo2 else ""
 
     # Q1: Architecture deep-dive on THEIR specific repo
     q1_context = f" ({repo_desc[:60]})" if repo_desc else ""
@@ -1060,10 +1064,10 @@ def _generate_interview_questions(
             f"Walk me through the architecture of {repo_name}{q1_context}. "
             f"What were the hardest technical decisions, and what would you change if you started today?"
         ),
-        "why": f"Your most substantial original project — tests whether you genuinely wrote and understand the codebase",
+        "why": f"Your most substantial original project -- tests whether you genuinely wrote and understand the codebase",
     })
 
-    # Q2: Based on specific authenticity or code findings
+    # Q2: Based on specific authenticity or code findings — ALWAYS repo-specific
     test_ratio = code_analysis.get("test_ratio", code_analysis.get("metrics", {}).get("test_ratio", 0) if isinstance(code_analysis.get("metrics"), dict) else 0)
     auth_flags = [f for f in risk_flags if isinstance(f, dict) and
                   any(kw in str(f.get("flag", "")).lower() for kw in ["commit", "bulk", "fork", "clone"])]
@@ -1073,55 +1077,85 @@ def _generate_interview_questions(
         questions.append({
             "category": "Code Authenticity",
             "question": (
-                f"Your GitHub history shows {flag_detail.lower()}. Can you explain what was happening "
-                f"during that period and walk me through your typical commit workflow?"
+                f"Your GitHub history on {repo_name} shows {flag_detail.lower()}. Can you explain what was happening "
+                f"during that period and walk me through your typical commit workflow for that project?"
             ),
-            "why": "Authenticates that you wrote the code yourself and can explain your development process",
+            "why": f"Authenticates that you wrote the code in {repo_name} yourself and can explain your development process",
         })
     elif test_ratio is not None and float(test_ratio or 0) < 0.05:
         questions.append({
             "category": "Engineering Practices",
             "question": (
                 f"We noticed {repo_name} has very limited test coverage. Walk me through how you think "
-                f"about testing — and what it would take to add meaningful tests to that project specifically."
+                f"about testing -- what would it take to add meaningful tests to {repo_name} specifically?"
             ),
-            "why": f"Tests are sparse across your repos — this probes engineering maturity and self-awareness",
+            "why": f"Tests are sparse in {repo_name} -- probes engineering maturity and self-awareness",
+        })
+    elif weaknesses:
+        # Probe a specific detected weakness instead of a generic hardcoded question
+        weakness_text = weaknesses[0] if isinstance(weaknesses[0], str) else str(weaknesses[0])
+        target_repo = repo2_name if repo2_name else repo_name
+        questions.append({
+            "category": "Weakness Probing",
+            "question": (
+                f"Our analysis flagged \"{weakness_text}\" as a gap. "
+                f"Looking at {target_repo}, how would you address this in your next iteration of the project?"
+            ),
+            "why": f"Probes self-awareness about detected weakness: {weakness_text}",
+        })
+    else:
+        # Even the else case references their repo
+        questions.append({
+            "category": "Engineering Practices",
+            "question": (
+                f"What is the biggest piece of technical debt in {repo_name}, and how would you tackle it?"
+            ),
+            "why": f"Tests awareness of code quality issues in their own project",
         })
 
-    # Q3: Skill-specific to their primary verified technology
+    # Q3: Skill-specific to their primary verified technology — tied to their repo
     if top_skills:
         primary = top_skills[0]
         score_display = primary.get("formatted_score", f"{primary.get('skill_score', 0)}/10")
+        target_repo = repo2_name if repo2_name else repo_name
         questions.append({
             "category": "Skill Verification",
             "question": (
-                f"In {repo_name}, how did you use {primary['skill_name']}? "
-                f"Walk me through a specific technical decision you made with it."
+                f"In {target_repo}, how did you use {primary['skill_name']}? "
+                f"Walk me through a specific technical decision you made with it and the trade-offs you weighed."
             ),
-            "why": f"Your primary verified skill ({score_display}) — confirms genuine depth vs surface-level usage",
+            "why": f"Your primary verified skill ({score_display}) -- confirms genuine depth vs surface-level usage in {target_repo}",
         })
 
-    # Q4: Role-specific
+    # Q4: Role-specific referencing their projects
     role = role_fit.get("primary_role", "")
     if role:
         questions.append({
             "category": "Role Experience",
             "question": (
-                f"As a {role}, what's the most complex production problem you've debugged? "
-                f"Walk me through your diagnosis process."
+                f"As a {role}, what is the hardest bug you've debugged in {repo_name} or a similar project? "
+                f"Walk me through your diagnosis process step by step."
             ),
-            "why": f"Assesses real-world {role} experience beyond project work",
+            "why": f"Assesses real-world {role} debugging experience on their own codebase",
         })
 
     # Q5: System design applied to their actual project
-    if interesting_repo:
+    if repo1:
         questions.append({
             "category": "System Design",
             "question": (
                 f"If {repo_name} needed to handle 10x its current load, what would you change? "
-                f"Start with diagnosing the bottleneck."
+                f"Start with diagnosing where the bottleneck would be."
             ),
-            "why": "Tests architectural thinking applied to their real code, not a textbook scenario",
+            "why": f"Tests architectural thinking applied to {repo_name}, not a textbook scenario",
+        })
+    elif repo2:
+        questions.append({
+            "category": "System Design",
+            "question": (
+                f"If {repo2_name} had to serve 1000 concurrent users, what architectural changes would you make?"
+            ),
+            "why": "Tests scaling thinking on their actual project",
         })
     else:
         questions.append({
