@@ -133,6 +133,7 @@ def get_li_at_status() -> dict:
             "Cookie is fresh — LinkedIn should work." if has_cookie and (age_hours is None or age_hours < 24)
             else "Cookie is old (>24h) — may be expired. Update via Settings." if has_cookie
             else "No li_at cookie set. LinkedIn Voyager API unavailable. Update via Settings."
+        )
     }
 
 
