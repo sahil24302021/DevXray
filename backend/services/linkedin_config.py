@@ -18,6 +18,10 @@ from typing import Dict, Optional
 # Key: "li_at" → Value: (cookie_string, set_at_timestamp)
 _runtime_cookie_store: dict = {}
 
+# Live fetch status — tracks whether the last Voyager API call succeeded or failed
+# Updated by the scraper after each attempt so the Settings page can show real status
+_last_fetch_status: dict = {"success": None, "timestamp": 0.0, "error": ""}
+
 import httpx as _httpx_li
 
 def _get_supabase_creds():
@@ -129,8 +133,47 @@ def get_li_at_status() -> dict:
             "Cookie is fresh — LinkedIn should work." if has_cookie and (age_hours is None or age_hours < 24)
             else "Cookie is old (>24h) — may be expired. Update via Settings." if has_cookie
             else "No li_at cookie set. LinkedIn Voyager API unavailable. Update via Settings."
-        )
     }
+
+
+def update_fetch_status(success: bool, error: str = ""):
+    """Called by the scraper after each Voyager API attempt to track live status."""
+    _last_fetch_status["success"] = success
+    _last_fetch_status["timestamp"] = time.time()
+    _last_fetch_status["error"] = error
+
+
+def get_linkedin_connection_status() -> dict:
+    """
+    Return the live LinkedIn connection status for the Settings page.
+    Combines cookie presence with actual fetch results.
+    """
+    cookie_info = get_li_at_status()
+    last_ok = _last_fetch_status.get("success")
+    last_ts = _last_fetch_status.get("timestamp", 0)
+    last_err = _last_fetch_status.get("error", "")
+
+    if last_ok is True and last_ts > 0:
+        connected = True
+        status_label = "connected"
+    elif last_ok is False and last_ts > 0:
+        connected = False
+        status_label = "session_expired" if "401" in last_err or "403" in last_err or "expired" in last_err.lower() else "fetch_failed"
+    else:
+        connected = None
+        status_label = "untested"
+
+    return {
+        "connected": connected,
+        "status": status_label,
+        "has_cookie": cookie_info["has_cookie"],
+        "cookie_source": cookie_info["source"],
+        "cookie_age_hours": cookie_info["age_hours"],
+        "last_fetch_at": last_ts if last_ts > 0 else None,
+        "last_fetch_ago_minutes": round((time.time() - last_ts) / 60, 1) if last_ts > 0 else None,
+        "last_error": last_err or None,
+    }
+
 
 def get_csrf_token() -> str:
     """
@@ -368,7 +411,7 @@ def get_authenticated_browser_headers() -> Dict[str, str]:
 # SCRAPE CACHE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-CACHE_TTL = 3600  # 1 hour cache for scraped data
+CACHE_TTL = 86400  # 24 hour cache for scraped data — avoids repeated LinkedIn requests
 _scrape_cache: Dict[str, dict] = {}
 _cache_timestamps: Dict[str, float] = {}
 

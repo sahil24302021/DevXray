@@ -51,11 +51,17 @@ export default function SettingsPage() {
   const [liMessage, setLiMessage] = useState("");
   const [cookieStatus, setCookieStatus] = useState<any>(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
+  const [linkedinStatus, setLinkedinStatus] = useState<any>(null);
 
   useEffect(() => {
     import("@/lib/auth").then((mod) => {
       mod.getCurrentUser().then(setUser);
     });
+    // Auto-fetch LinkedIn status on mount
+    fetch(`${BACKEND_URL}/api/linkedin/status`)
+      .then(r => r.json())
+      .then(setLinkedinStatus)
+      .catch(() => {});
   }, []);
 
   const copyKey = (key: string, label: string) => {
@@ -88,6 +94,8 @@ export default function SettingsPage() {
         setLiStatus("success");
         setLiMessage(data.message);
         setLiCookie("");
+        // Refresh status indicator
+        fetch(`${BACKEND_URL}/api/linkedin/status`).then(r => r.json()).then(setLinkedinStatus).catch(() => {});
       } else {
         setLiStatus("error");
         setLiMessage(data.detail || "Failed to update cookie");
@@ -355,6 +363,45 @@ export default function SettingsPage() {
             {tab === "linkedin" && (
               <>
                 <motion.div variants={fadeUp} className="rounded-2xl p-6 border" style={{ background: "rgba(255,255,255,0.02)", borderColor: "rgba(255,255,255,0.08)" }}>
+                  {/* Live connection status banner */}
+                  {linkedinStatus && (
+                    <div className={`flex items-center gap-3 rounded-xl px-4 py-3 mb-5 border ${
+                      linkedinStatus.connected === true
+                        ? "border-emerald-500/20 bg-emerald-500/5"
+                        : linkedinStatus.connected === false
+                        ? "border-red-500/20 bg-red-500/5"
+                        : "border-white/10 bg-white/[0.02]"
+                    }`}>
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                        linkedinStatus.connected === true
+                          ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+                          : linkedinStatus.connected === false
+                          ? "bg-red-400 animate-pulse shadow-[0_0_8px_rgba(251,113,133,0.5)]"
+                          : "bg-zinc-500"
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-[13px] font-semibold ${
+                          linkedinStatus.connected === true ? "text-emerald-400" : linkedinStatus.connected === false ? "text-red-400" : "text-zinc-400"
+                        }`}>
+                          {linkedinStatus.connected === true && "Connected"}
+                          {linkedinStatus.connected === false && linkedinStatus.status === "session_expired" && "Session Expired \u2014 Update Cookie"}
+                          {linkedinStatus.connected === false && linkedinStatus.status !== "session_expired" && "Connection Failed"}
+                          {linkedinStatus.connected === null && !linkedinStatus.has_cookie && "Not Configured"}
+                          {linkedinStatus.connected === null && linkedinStatus.has_cookie && "Untested \u2014 Run a Scan to Verify"}
+                        </p>
+                        <p className="text-[11px] text-[#555] mt-0.5">
+                          {linkedinStatus.last_fetch_ago_minutes
+                            ? `Last checked ${linkedinStatus.last_fetch_ago_minutes < 60 ? `${Math.round(linkedinStatus.last_fetch_ago_minutes)}m` : `${Math.round(linkedinStatus.last_fetch_ago_minutes / 60)}h`} ago`
+                            : "No fetch attempts yet"}
+                          {linkedinStatus.cookie_source && linkedinStatus.cookie_source !== "none" && ` \u00b7 Cookie: ${linkedinStatus.cookie_source.replace("_", " ")}`}
+                        </p>
+                      </div>
+                      {linkedinStatus.connected === false && (
+                        <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 shrink-0">ACTION NEEDED</span>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa" }}>ADMIN</span>
                     <h2 className="text-sm font-bold text-white">LinkedIn Cookie Manager</h2>

@@ -2123,6 +2123,21 @@ async def batch_analyze_resumes_endpoint(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# LinkedIn Connection Status (public — used by Settings page)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/linkedin/status")
+async def linkedin_connection_status():
+    """
+    Public endpoint — returns the live LinkedIn connection status.
+    Used by the Settings page to show green/red indicator.
+    No admin secret required.
+    """
+    from services.linkedin_config import get_linkedin_connection_status
+    return get_linkedin_connection_status()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ADMIN: LinkedIn Cookie Management
 # ═══════════════════════════════════════════════════════════════════════════════
 

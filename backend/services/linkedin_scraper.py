@@ -35,7 +35,7 @@ from services.linkedin_config import (
     get_authenticated_browser_headers, get_random_headers,
     get_google_cse_key, get_google_cse_cx,
     is_strategy_enabled, rate_limit_check, rate_limit_record,
-    get_delay, cache_get, cache_set,
+    get_delay, cache_get, cache_set, update_fetch_status,
 )
 
 
@@ -104,6 +104,7 @@ async def _strategy_voyager_api(username: str) -> Optional[Dict[str, Any]]:
     Hit LinkedIn's internal Voyager API — same API their frontend uses.
     Returns fully structured JSON: experiences, skills, education, certs.
     Requires li_at session cookie.
+    Retries up to 3 times with exponential backoff.
     """
     if not is_strategy_enabled("voyager_api"):
         return None
@@ -113,48 +114,73 @@ async def _strategy_voyager_api(username: str) -> Optional[Dict[str, Any]]:
         print("[LinkedIn·S1] Voyager API skipped — no li_at cookie configured")
         return None
 
-    # LinkedIn Voyager profile endpoint
+    # LinkedIn Voyager profile endpoint — FullProfileWithEntities for maximum data
     profile_url = (
         f"https://www.linkedin.com/voyager/api/identity/dash/profiles"
         f"?q=memberIdentity&memberIdentity={username}"
-        f"&decorationId=com.linkedin.voyager.dash.deco.identity.profile.WebTopCardCore-24"
+        f"&decorationId=com.linkedin.voyager.dash.deco.identity.profile.FullProfileWithEntities-93"
     )
 
-    try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            resp = await client.get(profile_url, headers=headers)
+    max_retries = 3
+    last_error = ""
 
-            if resp.status_code == 401 or resp.status_code == 403:
-                print(f"[LinkedIn·S1] Voyager API: auth failed (status {resp.status_code}) — li_at may be expired")
-                return None
-            if resp.status_code == 429:
-                print("[LinkedIn·S1] Voyager API: rate limited (429)")
-                return None
-            if resp.status_code != 200:
-                print(f"[LinkedIn·S1] Voyager API: status {resp.status_code}")
-                return None
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                resp = await client.get(profile_url, headers=headers)
 
-            data = resp.json()
-            elements = data.get("elements", [])
-            if not elements:
-                # Try the included array
-                elements = data.get("included", [])
+                if resp.status_code in (401, 403):
+                    last_error = f"auth_failed_{resp.status_code}"
+                    print(f"[LinkedIn·S1] Voyager API: auth failed (status {resp.status_code}) — li_at expired")
+                    update_fetch_status(False, f"Auth failed: HTTP {resp.status_code} — li_at cookie expired")
+                    return None  # No point retrying auth failures
 
-            if not elements:
-                print("[LinkedIn·S1] Voyager API: empty response")
-                return None
+                if resp.status_code == 429:
+                    wait = 2 ** attempt
+                    print(f"[LinkedIn·S1] Voyager API: rate limited (429), retry {attempt}/{max_retries} in {wait}s")
+                    last_error = "rate_limited_429"
+                    await asyncio.sleep(wait)
+                    continue
 
-            # Parse the Voyager response into structured data
-            result = _parse_voyager_response(data)
-            if result:
-                result["_source"] = "voyager_api"
-                result["_quality"] = "FULL"
-                print(f"[LinkedIn·S1] ✓ Voyager API success: {result.get('full_name', '?')}")
-            return result
+                if resp.status_code != 200:
+                    last_error = f"http_{resp.status_code}"
+                    print(f"[LinkedIn·S1] Voyager API: status {resp.status_code}, retry {attempt}/{max_retries}")
+                    await asyncio.sleep(2 ** attempt)
+                    continue
 
-    except Exception as e:
-        print(f"[LinkedIn·S1] Voyager API error: {e}")
-        return None
+                data = resp.json()
+                elements = data.get("elements", [])
+                if not elements:
+                    elements = data.get("included", [])
+
+                if not elements:
+                    print("[LinkedIn·S1] Voyager API: empty response")
+                    last_error = "empty_response"
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+
+                # Parse the Voyager response into structured data
+                result = _parse_voyager_response(data)
+                if result:
+                    result["_source"] = "voyager_api"
+                    result["_quality"] = "FULL"
+                    print(f"[LinkedIn·S1] ✓ Voyager API success (attempt {attempt}): {result.get('full_name', '?')}")
+                    update_fetch_status(True)
+                return result
+
+        except httpx.TimeoutException:
+            last_error = "timeout"
+            wait = 2 ** attempt
+            print(f"[LinkedIn·S1] Voyager API timeout, retry {attempt}/{max_retries} in {wait}s")
+            await asyncio.sleep(wait)
+        except Exception as e:
+            last_error = str(e)[:100]
+            print(f"[LinkedIn·S1] Voyager API error (attempt {attempt}): {e}")
+            await asyncio.sleep(2 ** attempt)
+
+    # All retries exhausted
+    update_fetch_status(False, f"All {max_retries} retries failed: {last_error}")
+    return None
 
 
 def _parse_voyager_response(data: dict) -> Optional[Dict[str, Any]]:
@@ -1442,6 +1468,11 @@ async def scrape_linkedin(url: str) -> Dict[str, Any]:
             "Check: work history dates, endorsements, connections count, and activity level."
         )
         result["source"] = "none"
+        # Check if failure was specifically due to expired session
+        has_cookie = bool(get_li_at())
+        if has_cookie:
+            result["error"] = "linkedin_session_expired"
+            result["message"] = "Please update your li_at cookie in Settings"
         print(f"[LinkedIn] ✗ All strategies failed for {clean_url}")
         print(f"[LinkedIn] Strategy log: {strategy_summary}")
 
