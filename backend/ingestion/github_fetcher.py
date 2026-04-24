@@ -55,14 +55,39 @@ async def fetch_user_profile(username: str) -> Optional[Dict[str, Any]]:
         # Normalize timestamp and check for future date
         created_at = user.get("created_at", "")
         data_error = False
+        account_age_years = 0
         if created_at:
             try:
                 from datetime import datetime, timezone
                 dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                 if dt > datetime.now(timezone.utc):
                     data_error = True
+                else:
+                    account_age_years = round((datetime.now(timezone.utc) - dt).days / 365.25, 1)
             except Exception:
                 pass
+
+        public_repos = user.get("public_repos", 0)
+        followers = user.get("followers", 0)
+        # total_private_repos is only visible if user authorized OAuth; otherwise 0
+        total_private_repos = user.get("total_private_repos", 0) or user.get("owned_private_repos", 0) or 0
+
+        # Private-heavy profile detection:
+        # If public_repos < 5, account > 2 years old, followers > 10 → flag it
+        private_heavy = (
+            public_repos < 5
+            and account_age_years > 2
+            and followers > 10
+        )
+        # Estimate private repos if API doesn't expose them
+        estimated_private = total_private_repos
+        if estimated_private == 0 and account_age_years > 2 and public_repos < 5:
+            # Conservative estimate: experienced devs average ~3-5 private repos per year
+            estimated_private = int(account_age_years * 3)
+        visibility_ratio = (
+            public_repos / max(1, public_repos + estimated_private)
+            if (public_repos + estimated_private) > 0 else 1.0
+        )
                 
         profile = {
             "username": user.get("login", username),
@@ -71,11 +96,21 @@ async def fetch_user_profile(username: str) -> Optional[Dict[str, Any]]:
             "name": user.get("name", ""),
             "company": user.get("company", ""),
             "location": user.get("location", ""),
-            "public_repos": user.get("public_repos", 0),
-            "followers": user.get("followers", 0),
+            "public_repos": public_repos,
+            "followers": followers,
             "following": user.get("following", 0),
             "created_at": created_at,
             "data_error": data_error,
+            # Private-heavy profile signals
+            "account_age_years": account_age_years,
+            "total_private_repos": total_private_repos,
+            "estimated_private_repos": estimated_private,
+            "visibility_ratio": round(visibility_ratio, 2),
+            "private_heavy_profile": private_heavy,
+            "public_gists": user.get("public_gists", 0),
+            "hireable": user.get("hireable", False),
+            "blog": user.get("blog", ""),
+            "twitter_username": user.get("twitter_username", ""),
         }
         _set_cache(cache_key, profile)
         return profile

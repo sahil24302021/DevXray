@@ -7,9 +7,18 @@ interface Props {
   tier: DeveloperTier;
   docQuality: DocumentationQuality;
   score: number;
+  privateRepoIndicator?: boolean;
+  privateRepoDisclaimer?: string;
+  scoreAdjustmentNote?: string;
+  experienceConfidence?: string;
+  alternativeSignals?: string[];
 }
 
-export default function ExecutiveSummary({ tier, docQuality, score }: Props) {
+export default function ExecutiveSummary({ 
+  tier, docQuality, score,
+  privateRepoIndicator, privateRepoDisclaimer, scoreAdjustmentNote,
+  experienceConfidence, alternativeSignals,
+}: Props) {
   if (!tier) return null;
 
   return (
@@ -28,6 +37,66 @@ export default function ExecutiveSummary({ tier, docQuality, score }: Props) {
       <div className="absolute top-0 left-0 right-0 h-[2px]"
         style={{ background: "linear-gradient(90deg, transparent, #cdff00, transparent)" }}
       />
+
+      {/* ─── Private Repository Disclaimer Banner ─── */}
+      {privateRepoIndicator && privateRepoDisclaimer && (
+        <div
+          className="rounded-xl p-4 mb-6 border flex items-start gap-3"
+          style={{
+            background: "rgba(251, 191, 36, 0.06)",
+            borderColor: "rgba(251, 191, 36, 0.18)",
+          }}
+        >
+          <svg className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold text-amber-400 mb-1">
+              {privateRepoDisclaimer}
+            </p>
+            {scoreAdjustmentNote && (
+              <p className="text-[11px] text-amber-400/70 mb-2">
+                {scoreAdjustmentNote}
+              </p>
+            )}
+            {alternativeSignals && alternativeSignals.length > 0 && (
+              <div className="mt-2 pt-2 border-t" style={{ borderColor: "rgba(251, 191, 36, 0.12)" }}>
+                <p className="text-[10px] font-bold text-amber-400/60 uppercase tracking-wider mb-1.5">
+                  Alternative Signals Detected
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {alternativeSignals.slice(0, 6).map((sig, i) => (
+                    <span
+                      key={i}
+                      className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                      style={{
+                        background: "rgba(251, 191, 36, 0.08)",
+                        color: "rgba(251, 191, 36, 0.75)",
+                        border: "1px solid rgba(251, 191, 36, 0.12)",
+                      }}
+                    >
+                      {sig}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {experienceConfidence && (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Experience Confidence:</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  experienceConfidence === "high" ? "bg-emerald-500/10 text-emerald-400" :
+                  experienceConfidence === "medium" ? "bg-amber-500/10 text-amber-400" :
+                  experienceConfidence === "low_private_heavy" ? "bg-amber-500/10 text-amber-400" :
+                  "bg-red-500/10 text-red-400"
+                }`}>
+                  {experienceConfidence === "low_private_heavy" ? "Low (Private Repos)" : experienceConfidence}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex items-start justify-between gap-6 flex-col md:flex-row">
         

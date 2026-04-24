@@ -561,7 +561,12 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                 insight: "Based on repository structure and readme presence.",
                 score: 0, repos_with_descriptions: 0, repos_with_topics: 0, repos_with_pages: 0, total_assessed: 0
               }} 
-              score={score} 
+              score={score}
+              privateRepoIndicator={(data2 as any).private_repo_indicator}
+              privateRepoDisclaimer={(data2 as any).private_repo_disclaimer}
+              scoreAdjustmentNote={(data2 as any).score_adjustment_note}
+              experienceConfidence={(data2 as any).experience_confidence}
+              alternativeSignals={(data2 as any).alternative_signals}
             />
           </ReportErrorBoundary>
 

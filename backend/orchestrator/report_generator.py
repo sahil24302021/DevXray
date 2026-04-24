@@ -105,6 +105,152 @@ def _format_hiring_recommendation(rec: Any) -> dict:
     return {"summary": "Insufficient data", "recommendation": {}, "reasoning": []}
 
 
+def _analyze_private_heavy_profile(
+    profile: Dict[str, Any],
+    repos: Optional[List[Dict[str, Any]]],
+    scoring: Dict[str, Any],
+    linkedin_data: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Detect private-heavy GitHub profiles and compute fair scoring adjustments.
+
+    Returns a dict with:
+      - private_repo_indicator (bool): True if this is a private-heavy profile
+      - experience_confidence: "high" | "medium" | "low_private_heavy" | "insufficient"
+      - experience_floor_bonus: int (0-15) score adjustment
+      - disclaimer: str (human-readable message for the UI)
+      - alternative_signals: list of corroborating signals found
+      - private_heavy_question: str (interview question if applicable)
+    """
+    public_repos = profile.get("public_repos", 0)
+    account_age = profile.get("account_age_years", 0) or profile.get("_account_age_years", 0)
+    followers = profile.get("followers", 0)
+    is_private_heavy = profile.get("private_heavy_profile", False)
+    visibility_ratio = profile.get("visibility_ratio", 1.0)
+    final_score = scoring.get("final_score", 0)
+
+    repos = repos or []
+    non_fork_repos = [r for r in repos if not r.get("is_fork", False)]
+
+    result = {
+        "private_repo_indicator": False,
+        "experience_confidence": "high",
+        "experience_floor_bonus": 0,
+        "score_adjustment_note": "",
+        "disclaimer": "",
+        "alternative_signals": [],
+        "visibility_ratio": visibility_ratio,
+        "private_heavy_question": "",
+    }
+
+    # ── Detect private-heavy profile ──
+    # Broader detection: also catch profiles with < 5 non-fork repos + old account
+    if not is_private_heavy and account_age > 3 and len(non_fork_repos) < 5:
+        is_private_heavy = True
+
+    if not is_private_heavy:
+        # Determine experience confidence for normal profiles
+        if len(non_fork_repos) >= 10 and account_age > 1:
+            result["experience_confidence"] = "high"
+        elif len(non_fork_repos) >= 3 or account_age > 1:
+            result["experience_confidence"] = "medium"
+        elif account_age < 0.5 and len(non_fork_repos) < 2:
+            result["experience_confidence"] = "insufficient"
+        return result
+
+    result["private_repo_indicator"] = True
+    result["experience_confidence"] = "low_private_heavy"
+
+    # ── Collect alternative signals ──
+    alt_signals = []
+
+    # 1. Followers (peers follow experienced devs)
+    if followers >= 50:
+        alt_signals.append(f"{followers} followers — strong peer recognition")
+    elif followers >= 10:
+        alt_signals.append(f"{followers} followers — moderate peer network")
+
+    # 2. Stars received across repos
+    total_stars = sum(r.get("stars", 0) for r in repos)
+    if total_stars >= 50:
+        alt_signals.append(f"{total_stars} total stars — work is recognized by community")
+    elif total_stars >= 10:
+        alt_signals.append(f"{total_stars} total stars — some community recognition")
+
+    # 3. GitHub bio, company, location, blog
+    if profile.get("company"):
+        alt_signals.append(f"Company: {profile['company']}")
+    if profile.get("blog"):
+        alt_signals.append(f"Website/blog: {profile['blog']}")
+    if profile.get("bio") and len(profile["bio"]) > 20:
+        alt_signals.append("Detailed bio suggests professional presence")
+    if profile.get("twitter_username"):
+        alt_signals.append(f"Twitter: @{profile['twitter_username']}")
+
+    # 4. Gists
+    gist_count = profile.get("public_gists", 0)
+    if gist_count >= 5:
+        alt_signals.append(f"{gist_count} public gists — shares code snippets")
+
+    # 5. LinkedIn data (if scraped)
+    if linkedin_data and linkedin_data.get("accessible"):
+        li_exp = linkedin_data.get("experiences", [])
+        li_skills = linkedin_data.get("skills", [])
+        if li_exp:
+            alt_signals.append(f"LinkedIn: {len(li_exp)} work positions verified")
+        if li_skills:
+            alt_signals.append(f"LinkedIn: {len(li_skills)} skills listed")
+        if linkedin_data.get("connections", 0) >= 200:
+            alt_signals.append(f"LinkedIn: {linkedin_data['connections']}+ connections")
+
+    # 6. Account age as experience signal
+    if account_age >= 5:
+        alt_signals.append(f"GitHub account is {account_age:.0f} years old — long-term developer")
+    elif account_age >= 3:
+        alt_signals.append(f"GitHub account is {account_age:.1f} years old")
+
+    result["alternative_signals"] = alt_signals
+
+    # ── Calculate experience floor bonus ──
+    bonus = 0
+    if account_age > 3 and public_repos < 5:
+        # Base bonus for old accounts with sparse public work
+        bonus = 10
+        # Extra points for alternative signals
+        if len(alt_signals) >= 4:
+            bonus = 15
+        elif len(alt_signals) >= 2:
+            bonus = 12
+        # Don't over-adjust if score is already reasonable
+        if final_score >= 55:
+            bonus = min(bonus, 8)
+        if final_score >= 70:
+            bonus = 0  # Already scored well, no adjustment needed
+
+    result["experience_floor_bonus"] = bonus
+    if bonus > 0:
+        result["score_adjustment_note"] = f"Score adjusted +{bonus} to account for likely private repository activity"
+
+    # ── Build disclaimer ──
+    age_display = f"{account_age:.0f}" if account_age >= 1 else f"{account_age:.1f}"
+    result["disclaimer"] = (
+        f"Limited Visibility: This developer has {public_repos} public "
+        f"{'repo' if public_repos == 1 else 'repos'} but their account is "
+        f"{age_display} years old. Score reflects only visible activity — "
+        f"actual experience may be significantly higher."
+    )
+
+    # ── Interview question for private-heavy profiles ──
+    result["private_heavy_question"] = (
+        f"Your GitHub shows limited public activity but your account is "
+        f"{age_display} years old. Can you walk us through what you've been "
+        f"building professionally? What's the most technically complex system "
+        f"you've worked on?"
+    )
+
+    return result
+
+
 def generate_report(
     profile: Dict[str, Any],
     projects: List[Dict[str, Any]],
@@ -131,6 +277,22 @@ def generate_report(
     final_score = scoring.get("final_score", 0)
     breakdown = scoring.get("score_breakdown", {})
     benchmark = scoring.get("benchmark", {})
+
+    # ── Private-heavy profile detection & score adjustment ──
+    private_analysis = _analyze_private_heavy_profile(
+        profile=profile,
+        repos=repos_param,
+        scoring=scoring,
+    )
+    floor_bonus = private_analysis.get("experience_floor_bonus", 0)
+    if floor_bonus > 0:
+        final_score = min(100, final_score + floor_bonus)
+        # Enforce minimum score floor of 40 for private-heavy profiles
+        final_score = max(40, final_score)
+        log.info(
+            f"[PrivateHeavy] {username}: applied +{floor_bonus} floor bonus → {final_score} "
+            f"(confidence: {private_analysis['experience_confidence']})"
+        )
 
     # ── Normalize authenticity score to 0-100 ONCE here ──
     # BUG 9 FIX: Use scoring_engine.normalize_authenticity as single source of truth
@@ -399,6 +561,21 @@ def generate_report(
         "truth_score": truth.get("truth_score", 0),
     }
 
+    # ─── Private-Heavy Profile Section ───
+    report["private_repo_indicator"] = private_analysis["private_repo_indicator"]
+    report["experience_confidence"] = private_analysis["experience_confidence"]
+    report["private_repo_disclaimer"] = private_analysis["disclaimer"] if private_analysis["private_repo_indicator"] else ""
+    report["score_adjustment_note"] = private_analysis["score_adjustment_note"]
+    report["alternative_signals"] = private_analysis["alternative_signals"]
+    report["visibility_ratio"] = private_analysis["visibility_ratio"]
+
+    # Add private-heavy interview question to interview_questions
+    if private_analysis["private_repo_indicator"] and private_analysis["private_heavy_question"]:
+        report["interview_questions"] = report.get("interview_questions", []) + [{
+            "category": "Private Repository Activity",
+            "question": private_analysis["private_heavy_question"],
+        }]
+
     return report
 
 
@@ -485,6 +662,13 @@ def normalize_report(report: Dict[str, Any]) -> Dict[str, Any]:
         "organic_commits_note": "",
         "account_age_years": 0,
         "percentile": 0,
+        # Private-heavy profile fields
+        "private_repo_indicator": False,
+        "experience_confidence": "high",
+        "private_repo_disclaimer": "",
+        "score_adjustment_note": "",
+        "alternative_signals": [],
+        "visibility_ratio": 1.0,
     }
 
     for key, default_val in defaults.items():
