@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any
 SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.environ.get("NEXT_PUBLIC_SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
-async def save_scan_result(username: str, report: Dict[str, Any]) -> bool:
+async def save_scan_result(username: str, report: Dict[str, Any], user_id: Optional[str] = None) -> bool:
     """Save a scan result to Supabase scans table."""
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         return False
@@ -29,6 +29,8 @@ async def save_scan_result(username: str, report: Dict[str, Any]) -> bool:
             "scanned_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "final_score": report.get("final_score", 0),
         }
+        if user_id:
+            payload["user_id"] = user_id
         async with httpx.AsyncClient(timeout=5.0) as client:
             resp = await client.post(url, json=payload, headers=headers)
             return resp.status_code in (200, 201)

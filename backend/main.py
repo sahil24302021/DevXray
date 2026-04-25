@@ -152,6 +152,9 @@ ALLOWED_ORIGINS = [
     # Production Vercel frontend
     "https://dev-xray.vercel.app",
     "https://www.dev-xray.vercel.app",
+    # Custom domain
+    "https://devxray.com",
+    "https://www.devxray.com",
 ]
 
 # Add production frontend URL if set
@@ -171,6 +174,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── Security Headers Middleware ───
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 # ─── API Key Authentication Middleware (PDF Guide: "Add API key authentication") ───
 # Set DEVXRAY_API_KEYS="key1,key2,key3" in env to enable.
@@ -472,6 +485,19 @@ async def analyze_user(
     if not username:
         raise HTTPException(status_code=400, detail="Username parameter is required")
 
+    # ── Input validation: GitHub username format ──
+    import re
+    username = username.strip()
+    if len(username) > 39:
+        raise HTTPException(status_code=400, detail="Username too long (max 39 characters)")
+    if any(c in username for c in ("..", "/", "\\", "%", "<", ">", ";")):
+        raise HTTPException(status_code=400, detail="Username contains invalid characters")
+    if not re.match(r"^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$", username):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid GitHub username. Must start with alphanumeric, contain only alphanumerics or single hyphens, max 39 chars."
+        )
+
     username_lower = username.lower()
     now = time.time()
 
@@ -771,8 +797,8 @@ async def analyze_user(
 
     # Persist scan result to Supabase so it survives Render restarts
     try:
-        from lib.supabase_client import save_scan_result  # create this helper
-        await save_scan_result(username_lower, report)
+        from lib.supabase_client import save_scan_result
+        await save_scan_result(username_lower, report, user_id=user_id)
         log.info(f"Scan result persisted to Supabase for {username}")
     except Exception as e:
         log.debug(f"Supabase persist skipped: {e}")  # non-fatal
@@ -1584,6 +1610,7 @@ def _build_personalized_fallback_kit(
 
 
 @app.post("/api/interview-prep")
+@limiter.limit("3/minute")
 async def generate_interview_prep(request: Request):
     """
     Generate a complete, personalized interview kit from a DevXray report.
