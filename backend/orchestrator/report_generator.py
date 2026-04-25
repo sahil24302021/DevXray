@@ -1,5 +1,5 @@
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Union
 from collections import Counter
 
@@ -249,6 +249,257 @@ def _analyze_private_heavy_profile(
     )
 
     return result
+
+
+def _build_verification_matrix(
+    resume_data: Optional[Dict[str, Any]],
+    repos: Optional[List[Dict[str, Any]]],
+    skills: Dict[str, Any],
+    profile: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Cross-reference resume claims against GitHub evidence.
+    Returns a list of verified/partial/not_found skill entries.
+    """
+    if not resume_data:
+        return []
+
+    resume_skills = resume_data.get("skills", [])
+    if not resume_skills:
+        return []
+
+    repos = repos or []
+    # Build a set of languages/topics from GitHub repos
+    github_languages = set()
+    github_topics = set()
+    for r in repos:
+        lang = (r.get("language") or "").lower()
+        if lang:
+            github_languages.add(lang)
+        for t in r.get("topics", []):
+            github_topics.add(t.lower())
+
+    # Build set of detected skills from DIP
+    dip_skills = set()
+    for s in skills.get("top_skills", []):
+        dip_skills.add(s.get("skill_name", "").lower())
+
+    account_age = profile.get("account_age_years", 0)
+
+    matrix = []
+    for skill in resume_skills:
+        skill_name = skill if isinstance(skill, str) else skill.get("name", str(skill))
+        skill_lower = skill_name.lower().strip()
+        years_claimed = None
+        if isinstance(skill, dict):
+            years_claimed = skill.get("years", None)
+
+        # Check evidence sources
+        in_github_lang = skill_lower in github_languages
+        in_github_topics = skill_lower in github_topics
+        in_dip = skill_lower in dip_skills
+
+        # Also check partial matches (e.g., "react" in "reactjs")
+        partial_github = any(skill_lower in l or l in skill_lower for l in github_languages)
+        partial_dip = any(skill_lower in s or s in skill_lower for s in dip_skills)
+
+        if in_github_lang or in_dip:
+            status = "verified"
+            source = "GitHub repos" if in_github_lang else "Code analysis"
+            evidence = f"Found in {sum(1 for r in repos if (r.get('language') or '').lower() == skill_lower)} repos" if in_github_lang else "Detected in source code"
+        elif in_github_topics or partial_github or partial_dip:
+            status = "partial"
+            source = "GitHub topics" if in_github_topics else "Related matches"
+            evidence = "Related technology found in repos"
+        else:
+            status = "not_found"
+            source = "Resume only"
+            evidence = "No GitHub evidence found"
+
+        entry = {
+            "skill": skill_name,
+            "status": status,
+            "source": source,
+            "evidence": evidence,
+        }
+
+        # Flag if years claimed exceeds account age
+        if years_claimed and account_age > 0 and years_claimed > account_age + 1:
+            entry["flag"] = f"Claims {years_claimed}yr but GitHub account is {account_age:.0f}yr old"
+
+        matrix.append(entry)
+
+    return matrix
+
+
+def _build_career_timeline(
+    profile: Dict[str, Any],
+    repos: Optional[List[Dict[str, Any]]],
+    all_commits: Optional[List[Dict[str, Any]]],
+) -> Dict[str, Any]:
+    """
+    Reconstruct a career timeline from GitHub data.
+    """
+    created_at = profile.get("created_at", "")
+    repos = repos or []
+    all_commits = all_commits or []
+
+    timeline = {
+        "account_created": created_at[:10] if created_at else "Unknown",
+        "first_commit_date": None,
+        "most_active_period": None,
+        "recent_activity_level": "none",
+        "commits_last_90_days": 0,
+        "total_public_commits": len(all_commits),
+    }
+
+    if not all_commits:
+        # Try to get dates from repos
+        repo_dates = []
+        for r in repos:
+            pushed = r.get("pushed_at") or r.get("created_at") or ""
+            if pushed:
+                repo_dates.append(pushed[:10])
+        if repo_dates:
+            repo_dates.sort()
+            timeline["first_commit_date"] = repo_dates[0]
+
+        return timeline
+
+    # Parse commit dates
+    commit_dates = []
+    for c in all_commits:
+        d = c.get("date", "")
+        if d and len(d) >= 10:
+            commit_dates.append(d[:10])
+
+    if commit_dates:
+        commit_dates.sort()
+        timeline["first_commit_date"] = commit_dates[0]
+
+        # Most active month
+        from collections import Counter
+        months = Counter(d[:7] for d in commit_dates)
+        if months:
+            most_active_month, count = months.most_common(1)[0]
+            timeline["most_active_period"] = f"{most_active_month} ({count} commits)"
+
+        # Recent activity (last 90 days)
+        try:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=90)
+            cutoff_str = cutoff.strftime("%Y-%m-%d")
+            recent = sum(1 for d in commit_dates if d >= cutoff_str)
+            timeline["commits_last_90_days"] = recent
+            if recent >= 50:
+                timeline["recent_activity_level"] = "very_active"
+            elif recent >= 20:
+                timeline["recent_activity_level"] = "active"
+            elif recent >= 5:
+                timeline["recent_activity_level"] = "moderate"
+            elif recent >= 1:
+                timeline["recent_activity_level"] = "low"
+            else:
+                timeline["recent_activity_level"] = "none"
+        except Exception:
+            pass
+
+    return timeline
+
+
+def _build_alternative_signals_summary(multi_source: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Summarize all alternative (non-GitHub) signals for the report UI.
+    """
+    if not multi_source:
+        return {"platforms_verified": [], "signals": []}
+
+    platforms = []
+    signals = []
+
+    # StackOverflow
+    so = multi_source.get("stackoverflow", {})
+    so_raw = so.get("raw", {})
+    so_scored = so.get("scored", {})
+    if so_raw.get("found"):
+        rep = so_raw.get("reputation", 0)
+        answers = so_raw.get("answer_count", 0)
+        platforms.append("StackOverflow")
+        signals.append({
+            "platform": "StackOverflow",
+            "icon": "stackoverflow",
+            "headline": f"{rep:,} reputation · {answers} answers",
+            "top_tags": so_raw.get("top_tags", [])[:5],
+            "score": so_scored.get("so_score", 0),
+        })
+
+    # LeetCode
+    lc = multi_source.get("leetcode", {})
+    lc_raw = lc.get("raw", {})
+    lc_scored = lc.get("scored", {})
+    if lc_raw.get("found"):
+        total = lc_raw.get("total_solved", 0)
+        platforms.append("LeetCode")
+        signals.append({
+            "platform": "LeetCode",
+            "icon": "leetcode",
+            "headline": f"{total} problems solved",
+            "difficulty": {
+                "easy": lc_raw.get("easy_solved", 0),
+                "medium": lc_raw.get("medium_solved", 0),
+                "hard": lc_raw.get("hard_solved", 0),
+            },
+            "score": lc_scored.get("lc_score", 0),
+        })
+
+    # npm packages
+    npm = multi_source.get("npm", {})
+    npm_raw = npm.get("raw", {})
+    if npm_raw.get("total_packages", 0) > 0:
+        total_downloads = sum(
+            p.get("weekly_downloads", 0)
+            for p in npm_raw.get("packages", [])
+        )
+        platforms.append("npm")
+        signals.append({
+            "platform": "npm",
+            "icon": "npm",
+            "headline": f"{npm_raw['total_packages']} packages · {total_downloads:,} weekly downloads",
+            "score": multi_source.get("packages", {}).get("scored", {}).get("publication_score", 0),
+        })
+
+    # Dev.to
+    devto = multi_source.get("devto", {})
+    devto_raw = devto.get("raw", {})
+    devto_scored = devto.get("scored", {})
+    if devto_raw.get("found"):
+        articles = devto_raw.get("article_count", 0)
+        reactions = devto_raw.get("total_reactions", 0)
+        platforms.append("Dev.to")
+        signals.append({
+            "platform": "Dev.to",
+            "icon": "devto",
+            "headline": f"{articles} articles · {reactions:,} reactions",
+            "score": devto_scored.get("devto_score", 0),
+        })
+
+    # Gists
+    gists = multi_source.get("gists", {})
+    gists_raw = gists.get("raw", [])
+    gists_scored = gists.get("scored", {})
+    if gists_raw and len(gists_raw) > 0:
+        platforms.append("Gists")
+        signals.append({
+            "platform": "GitHub Gists",
+            "icon": "gist",
+            "headline": f"{len(gists_raw)} gists · {len(gists_scored.get('languages', []))} languages",
+            "score": gists_scored.get("gist_score", 0),
+        })
+
+    return {
+        "platforms_verified": platforms,
+        "signals": signals,
+        "total_external_score": sum(s.get("score", 0) for s in signals),
+    }
 
 
 def generate_report(
@@ -576,6 +827,22 @@ def generate_report(
             "question": private_analysis["private_heavy_question"],
         }]
 
+    # ─── Verification Matrix: Resume claims vs GitHub evidence ───
+    report["verification_matrix"] = _build_verification_matrix(
+        resume_data=resume_data,
+        repos=repos_param,
+        skills=skills,
+        profile=profile,
+    )
+
+    # ─── Career Timeline reconstruction ───
+    all_commits = deep_data.get("all_commits", []) if deep_data else []
+    report["career_timeline"] = _build_career_timeline(
+        profile=profile,
+        repos=repos_param,
+        all_commits=all_commits,
+    )
+
     return report
 
 
@@ -669,6 +936,10 @@ def normalize_report(report: Dict[str, Any]) -> Dict[str, Any]:
         "score_adjustment_note": "",
         "alternative_signals": [],
         "visibility_ratio": 1.0,
+        # Multi-source signal fields
+        "verification_matrix": [],
+        "career_timeline": {},
+        "alternative_signals_summary": {"platforms_verified": [], "signals": []},
     }
 
     for key, default_val in defaults.items():

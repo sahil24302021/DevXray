@@ -27,6 +27,7 @@ import EvidenceTrail from "@/components/report/EvidenceTrail";
 import RecruiterBrief from "@/components/report/RecruiterBrief";
 import InterviewKit from "@/components/report/InterviewKit";
 import DataBasisBanner from "@/components/report/DataBasisBanner";
+import VerificationMatrix from "@/components/report/VerificationMatrix";
 import Logo from "@/components/Logo";
 
 import LoadingState from "@/components/LoadingState";
@@ -567,6 +568,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
               scoreAdjustmentNote={(data2 as any).score_adjustment_note}
               experienceConfidence={(data2 as any).experience_confidence}
               alternativeSignals={(data2 as any).alternative_signals}
+              alternativeSignalsSummary={(data2 as any).alternative_signals_summary}
             />
           </ReportErrorBoundary>
 
@@ -624,6 +626,13 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           <ReportErrorBoundary section="Evidence Trail">
             <EvidenceTrail items={(data2 as any).evidence_trail} />
           </ReportErrorBoundary>
+
+          {/* -- Verification Matrix (Resume vs GitHub) -- */}
+          {(data2 as any).verification_matrix && (data2 as any).verification_matrix.length > 0 && (
+            <ReportErrorBoundary section="Verification Matrix">
+              <VerificationMatrix matrix={(data2 as any).verification_matrix} />
+            </ReportErrorBoundary>
+          )}
 
           {/* -- Authenticity + Commit Intelligence -- */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5 print:block print:space-y-5">

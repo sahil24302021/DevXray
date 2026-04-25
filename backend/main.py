@@ -624,18 +624,56 @@ async def analyze_user(
         "packages": {"scored": pkg_scored},
     }
 
-    # ─── Calculate multi-source bonus (FIX 11: only when found) ───
+    # ─── Calculate multi-source bonus (threshold-based for accuracy) ───
     multi_source_bonus = 0.0
+
+    # StackOverflow: +5 if reputation > 1000
     if so_data.get("found"):
-        multi_source_bonus += min(float(so_scored.get("so_score", 0)), 5.0)
+        so_rep = so_data.get("reputation", 0)
+        if so_rep >= 1000:
+            multi_source_bonus += 5.0
+        elif so_rep >= 200:
+            multi_source_bonus += 3.0
+        elif so_rep > 0:
+            multi_source_bonus += 1.0
+
+    # LeetCode: +5 if 100+ problems solved
     if lc_data.get("found"):
-        multi_source_bonus += min(float(lc_scored.get("lc_score", 0)) * 0.25, 5.0)
-    if len(gists_data) > 0:
-        multi_source_bonus += min(float(gists_scored.get("gist_score", 0)) * 0.5, 3.0)
-    if devto_data.get("found"):
-        multi_source_bonus += min(float(devto_scored.get("devto_score", 0)) * 0.5, 3.0)
+        lc_solved = lc_data.get("total_solved", 0)
+        if lc_solved >= 100:
+            multi_source_bonus += 5.0
+        elif lc_solved >= 30:
+            multi_source_bonus += 3.0
+        elif lc_solved > 0:
+            multi_source_bonus += 1.0
+
+    # npm: +5 if packages have > 1000 weekly downloads total
     if npm_data.get("total_packages", 0) > 0:
-        multi_source_bonus += min(float(pkg_scored.get("publication_score", 0)) * 0.5, 4.0)
+        total_downloads = sum(p.get("weekly_downloads", 0) for p in npm_data.get("packages", []))
+        if total_downloads >= 1000:
+            multi_source_bonus += 5.0
+        elif total_downloads >= 100:
+            multi_source_bonus += 3.0
+        else:
+            multi_source_bonus += 1.0
+
+    # Portfolio/Blog: +5 if profile has website that exists
+    blog_url = profile.get("blog", "")
+    if blog_url and len(blog_url) > 5:
+        multi_source_bonus += 2.0  # Existence is enough; we don't HTTP-check during scoring
+
+    # Gists: up to +2
+    if len(gists_data) > 0:
+        multi_source_bonus += min(len(gists_data) * 0.3, 2.0)
+
+    # Dev.to: up to +2
+    if devto_data.get("found"):
+        devto_articles = devto_data.get("article_count", 0)
+        if devto_articles >= 5:
+            multi_source_bonus += 2.0
+        elif devto_articles > 0:
+            multi_source_bonus += 1.0
+
     multi_source_bonus = min(multi_source_bonus, 15.0)  # Cap at +15 total
 
     log.info(
@@ -784,6 +822,9 @@ async def analyze_user(
     report["verification_sources"] = _build_verification_sources(
         username, so_data, npm_data, lc_data, devto_data, gists_data, None, None
     )
+    # Build structured alternative signals summary for the report UI
+    from orchestrator.report_generator import _build_alternative_signals_summary
+    report["alternative_signals_summary"] = _build_alternative_signals_summary(multi_source_data)
 
     # Inject date context into report so frontend never shows wrong dates
     report["account_age_context"] = account_age_ctx

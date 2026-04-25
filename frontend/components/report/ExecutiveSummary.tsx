@@ -12,12 +12,13 @@ interface Props {
   scoreAdjustmentNote?: string;
   experienceConfidence?: string;
   alternativeSignals?: string[];
+  alternativeSignalsSummary?: { platforms_verified?: string[]; signals?: any[] };
 }
 
 export default function ExecutiveSummary({ 
   tier, docQuality, score,
   privateRepoIndicator, privateRepoDisclaimer, scoreAdjustmentNote,
-  experienceConfidence, alternativeSignals,
+  experienceConfidence, alternativeSignals, alternativeSignalsSummary,
 }: Props) {
   if (!tier) return null;
 
@@ -128,6 +129,24 @@ export default function ExecutiveSummary({
               </div>
             ))}
           </div>
+
+          {/* Also verified on external platforms */}
+          {alternativeSignalsSummary?.platforms_verified && alternativeSignalsSummary.platforms_verified.length > 0 && (
+            <div className="mt-4 pt-3 border-t border-white/[0.04]">
+              <p className="text-[11px] text-slate-400">
+                <span className="text-slate-500 font-semibold">Also verified on: </span>
+                {alternativeSignalsSummary.platforms_verified.map((p, i) => (
+                  <span key={p}>
+                    <span className="text-[#cdff00]/80 font-medium">{p}</span>
+                    <span className="text-emerald-400 ml-0.5">✓</span>
+                    {i < alternativeSignalsSummary.platforms_verified!.length - 1 && (
+                      <span className="text-slate-600 mx-1">·</span>
+                    )}
+                  </span>
+                ))}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Right: Docs Score & Signal Strength */}
