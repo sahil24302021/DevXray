@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, File, UploadFile, Form, Header
+from fastapi import FastAPI, HTTPException, Request, File, UploadFile, Form, Header
 from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List, Dict, Any
@@ -424,7 +424,6 @@ def _build_verification_sources(
 # ═══════════════════════════════════════════════════════
 #  SSE PROGRESS STREAMING
 # ═══════════════════════════════════════════════════════
-from fastapi import Request
 from fastapi.responses import StreamingResponse
 
 progress_queues: dict = {}  # job_id -> asyncio.Queue
