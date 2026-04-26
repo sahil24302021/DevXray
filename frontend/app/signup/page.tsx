@@ -18,7 +18,7 @@ export default function SignUpPage() {
   // ✅ If already signed in, go to dashboard
   useEffect(() => {
     getCurrentUser().then((user) => {
-      if (user) router.replace("/dashboard");
+      if (user) router.replace("/");
     });
   }, [router]);
 
@@ -40,10 +40,10 @@ export default function SignUpPage() {
       return;
     }
 
-    // ✅ Show success, then redirect to dashboard
+    // ✅ Show success, then redirect to landing page
     setSuccess(true);
     setLoading(false);
-    setTimeout(() => router.push("/dashboard"), 1500);
+    setTimeout(() => router.push("/"), 1500);
   };
 
   const handleGoogle = async () => {

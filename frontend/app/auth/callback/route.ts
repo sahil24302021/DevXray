@@ -33,6 +33,6 @@ export async function GET(request: Request) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // ✅ Redirect to dashboard after auth
-  return NextResponse.redirect(`${origin}/dashboard`)
+  // ✅ Redirect to landing page after auth — user clicks Dashboard manually
+  return NextResponse.redirect(`${origin}/`)
 }

@@ -9,18 +9,18 @@ import Logo from "@/components/Logo";
 function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // ✅ Default to dashboard after sign in
-  const redirect = searchParams.get("redirect") || "/dashboard";
+  // ✅ Default to landing page after sign in
+  const redirect = searchParams.get("redirect") || "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ If already signed in, go to dashboard
+  // ✅ If already signed in, go to landing page
   useEffect(() => {
     getCurrentUser().then((user) => {
-      if (user) router.replace("/dashboard");
+      if (user) router.replace("/");
     });
   }, [router]);
 
