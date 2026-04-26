@@ -508,7 +508,9 @@ export default function DashboardPage() {
               <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
             </svg>
             <input
-              type="text"
+              type="search"
+              inputMode="text"
+              enterKeyHint="search"
               value={scanInput}
               onChange={(e) => setScanInput(e.target.value)}
               placeholder="Enter GitHub username..."
@@ -548,7 +550,7 @@ export default function DashboardPage() {
       </motion.form>
 
       {/* Stats row */}
-      <motion.div variants={stagger} initial="hidden" animate="show" className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <motion.div variants={stagger} initial="hidden" animate="show" className="grid grid-cols-1 min-[380px]:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {STATS.map((stat) => (
           <motion.div
             key={stat.label}
@@ -569,7 +571,7 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* Main grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] xl:grid-cols-[1fr_320px] gap-6">
         {/* Left column */}
         <div className="space-y-5">
           {/* Recent scans */}
@@ -649,7 +651,7 @@ export default function DashboardPage() {
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-[13px] font-semibold text-white truncate">{c.name || c.username}</p>
-                            <p className="text-[11px] text-[#444]">
+                            <p className="text-[11px] text-[#444] truncate">
                               @{c.username} · {c.time}
                               {c.languages.length > 0 && c.languages[0] !== "Unknown" && (
                                 <span className="ml-2 text-[#333]">{c.languages.slice(0, 2).join(", ")}</span>

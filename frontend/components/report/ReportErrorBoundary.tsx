@@ -64,6 +64,6 @@ export default class ReportErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    return <div className="overflow-x-auto">{this.props.children}</div>;
   }
 }

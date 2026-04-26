@@ -529,7 +529,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             </motion.div>
 
             {/* Score Radar */}
-            <div className="print:hidden">
+            <div className="print:hidden max-w-[340px] sm:max-w-none mx-auto w-full">
               <ScoreRadar dimensions={data2.score_dimensions ?? []} />
             </div>
           </div>
