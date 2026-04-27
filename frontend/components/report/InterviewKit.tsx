@@ -255,38 +255,178 @@ ${topRepos.length > 0 ? `Reference their actual projects: ${topRepos.join(", ")}
             }
           ],
 
-      system_design_challenge: {
-        problem: score >= 70 
-          ? `Design a real-time notification system for a SaaS product with 100,000 active users. Users need push, email, and in-app notifications. Handle delivery guarantees and user preferences.`
-          : `Design a simple REST API for a to-do app with user authentication, task CRUD, and due date reminders. Focus on database schema and authentication flow.`,
-        what_to_look_for: score >= 70 
-          ? ["Message queues", "Delivery guarantees", "User preference storage", "Rate limiting", "Failure handling"]
-          : ["REST conventions", "Auth with JWT/sessions", "SQL schema design", "Basic error handling"],
-        time_allocation: "20 minutes"
-      },
+      system_design_challenge: (() => {
+        // Choose system design based on candidate's projects/skills
+        const allRepoNames = (github?.top_repos || topRepos || []).map((r: any) =>
+          ((r.name || r) + " " + (r.description || "")).toLowerCase()
+        ).join(" ");
+        const allSkillsLower = skills.map((s: string) => s.toLowerCase()).join(" ");
 
-      culture_fit_questions: [
-        {
+        if (/bot|automat|webhook|cron|scraper|crawl|discord|slack|telegram/.test(allRepoNames + allSkillsLower)) {
+          return {
+            problem: score >= 70
+              ? `Design a webhook delivery system that guarantees at-least-once delivery to 50,000 endpoints. Handle retries with exponential backoff, dead-letter queues, and endpoint health tracking.`
+              : `Design a webhook delivery system for a SaaS app. An event occurs → your system delivers a POST to a customer's URL. Handle failures and retries.`,
+            what_to_look_for: score >= 70
+              ? ["Message queues", "Retry strategies", "Dead-letter queues", "Endpoint health scoring", "Idempotency keys"]
+              : ["Queue basics", "Retry logic", "Failure logging", "HTTP POST semantics"],
+            time_allocation: "20 minutes"
+          };
+        }
+        if (/ml|ai|model|tensorflow|pytorch|opencv|machine.?learn|deep.?learn|neural|llm|gpt|nlp/.test(allRepoNames + allSkillsLower)) {
+          return {
+            problem: score >= 70
+              ? `Design a model serving pipeline that handles 1,000 inference requests/sec. Include model versioning, A/B testing between model versions, auto-scaling, and graceful degradation when GPU resources are exhausted.`
+              : `Design a simple model serving API: a user uploads an image, your system runs an ML model on it and returns predictions. How would you handle model loading, request queuing, and error cases?`,
+            what_to_look_for: score >= 70
+              ? ["Model registry", "A/B traffic splitting", "GPU resource management", "Batching inference", "Canary deployments"]
+              : ["REST API design", "Model loading strategy", "Request timeout handling", "Basic error responses"],
+            time_allocation: "20 minutes"
+          };
+        }
+        if (/mobile|ios|android|swift|kotlin|flutter|react.?native|expo/.test(allRepoNames + allSkillsLower)) {
+          return {
+            problem: score >= 70
+              ? `Design an offline-first mobile sync system. Users create/edit data while offline, and changes sync when connectivity returns. Handle conflict resolution for concurrent edits and ensure data consistency.`
+              : `Design a mobile app that works offline. Users can create notes without internet and sync when they come back online. How do you store data locally and handle sync?`,
+            what_to_look_for: score >= 70
+              ? ["CRDT or OT for conflicts", "Local-first storage", "Sync queue design", "Conflict resolution UI", "Optimistic updates"]
+              : ["SQLite/local storage", "Sync queue basics", "Last-write-wins vs manual merge", "Network state detection"],
+            time_allocation: "20 minutes"
+          };
+        }
+        // Default: web projects (URL shortener)
+        return {
+          problem: score >= 70
+            ? `Design a URL shortener like bit.ly that handles 10 million short URLs and 1 billion redirects/month. Include analytics (click count, referrers, geo), custom aliases, and link expiration.`
+            : `Design a URL shortener: users submit a long URL, get a short one back. When someone visits the short URL, they get redirected. Focus on database schema, the shortening algorithm, and redirect flow.`,
+          what_to_look_for: score >= 70
+            ? ["Hash collision handling", "Read-heavy caching strategy", "Analytics pipeline", "Rate limiting", "Custom alias validation"]
+            : ["Database schema", "Base62 encoding", "301 vs 302 redirects", "Basic caching"],
+          time_allocation: "20 minutes"
+        };
+      })(),
+
+      culture_fit_questions: (() => {
+        // Q1 is always the same (disagreement question)
+        const q1 = {
           question: `Tell me about a time you disagreed with a technical decision your team made. What did you do?`,
           good_signal: `Raised concern with data, communicated clearly, committed to team decision even if overruled.`,
           red_flag: `Went silent and resented it, or overruled the team without consensus.`
-        },
-        {
-          question: `How do you handle a situation where you're stuck on a problem for more than 2 hours?`,
-          good_signal: `Has a clear process: tries X, then Googles, then asks — doesn't spin for days alone.`,
-          red_flag: `Says they "never get stuck" or "just keep trying" with no structured approach.`
-        }
-      ],
+        };
 
-      coding_challenge: {
-        problem: score >= 70 
-          ? `Given a list of GitHub commits with timestamps, detect "burst commits" — where someone made 10+ commits within any 30-minute window. Return the list of suspicious windows.`
-          : `Write a function that takes an array of integers and returns the two numbers that add up to a target sum. Solve it in O(n) time.`,
-        difficulty,
-        what_it_tests: score >= 70 
-          ? "Algorithm design, time complexity awareness, edge case handling"
-          : "Basic data structures, problem decomposition, code clarity"
-      },
+        // Q2: pick based on candidate's specific detected gaps
+        const allFlags = redFlags.join(" ").toLowerCase();
+        const allWeaknesses = weaknesses.join(" ").toLowerCase();
+
+        let q2;
+        if (/no test|test.*missing|test.*sparse|low.*coverage|no.*unit/.test(allFlags + allWeaknesses)) {
+          q2 = {
+            question: `Our analysis found limited test coverage in your projects. Walk me through your testing philosophy — when do you write tests, what kind, and how do you decide what's worth testing?`,
+            good_signal: `Distinguishes between unit/integration/e2e, explains trade-offs, has a real process — even if selective.`,
+            red_flag: `Says "I test manually" or "tests slow me down" with no nuance.`
+          };
+        } else if (/inconsisten|irregular|gap|burst|inactiv|sporadic/.test(allFlags + allWeaknesses)) {
+          q2 = {
+            question: `Your GitHub shows periods of high activity followed by quiet stretches. How do you manage long-term projects and maintain momentum when motivation dips?`,
+            good_signal: `Describes real habits: sprint planning, accountability partners, breaking work into milestones. Acknowledges the challenge.`,
+            red_flag: `Blames external factors without describing any system for consistency.`
+          };
+        } else if (/documentation|readme|no docs/.test(allFlags + allWeaknesses)) {
+          q2 = {
+            question: `Several of your repos lack documentation. When you join a new team, how do you approach documenting your work — and how do you balance speed vs. thoroughness?`,
+            good_signal: `Has opinions on README structure, API docs, or inline comments. Understands docs are for future-self and teammates.`,
+            red_flag: `Says "the code is self-documenting" without qualification.`
+          };
+        } else if (/fork|originality|template|boilerplate/.test(allFlags + allWeaknesses)) {
+          q2 = {
+            question: `Some of your repos appear to be forks or template-based. When you start a new project, how do you decide between building from scratch vs. using a starter? What do you customize first?`,
+            good_signal: `Explains trade-offs of DRY vs understanding, describes what they change and why.`,
+            red_flag: `Can't articulate what they changed from the template.`
+          };
+        } else {
+          // Clean profile — ask a growth-oriented question
+          q2 = {
+            question: `What's the biggest technical mistake you've made in the last year, and what did you change in your process because of it?`,
+            good_signal: `Names a specific mistake, describes the lesson and the process change — shows growth mindset.`,
+            red_flag: `Says they've never made a significant mistake, or gives a non-technical answer.`
+          };
+        }
+
+        return [q1, q2];
+      })(),
+
+      coding_challenge: (() => {
+        const primaryLang = (skills[0] || "").toLowerCase();
+
+        // Language-specific coding challenges
+        if (/python/.test(primaryLang)) {
+          return {
+            problem: score >= 70
+              ? `Write a function that finds all duplicate files in a directory tree by content (not name). Use hashing for efficiency. Handle large files by reading in chunks. Return groups of duplicate file paths.`
+              : `Write a function that takes a directory path and returns all duplicate files (same content, different names). You can use os.walk and hashlib. Focus on correctness first, then optimize.`,
+            difficulty,
+            what_it_tests: score >= 70
+              ? "File I/O, hashing strategy, memory management for large files, generator patterns"
+              : "Basic file operations, hashing, dictionary usage, problem decomposition"
+          };
+        }
+        if (/javascript|react|typescript|next|vue|angular|node/.test(primaryLang)) {
+          return {
+            problem: score >= 70
+              ? `Implement a production-grade debounce function from scratch. It should support: leading/trailing edge options, a cancel method, a flush method, and return a promise that resolves with the debounced function's return value.`
+              : `Implement a debounce function from scratch: debounce(fn, delay) returns a new function that only calls fn after delay ms of inactivity. Add a .cancel() method to clear pending calls.`,
+            difficulty,
+            what_it_tests: score >= 70
+              ? "Closure mastery, timer management, Promise integration, API design"
+              : "Closures, setTimeout/clearTimeout, basic API design"
+          };
+        }
+        if (/java/.test(primaryLang)) {
+          return {
+            problem: score >= 70
+              ? `Implement a thread-safe LRU cache with O(1) get/put. Use a doubly-linked list + ConcurrentHashMap. Support a configurable max size, TTL-based expiration, and an eviction callback.`
+              : `Implement an LRU (Least Recently Used) cache with O(1) get and put operations. Use a combination of a HashMap and a doubly-linked list. Support a configurable capacity.`,
+            difficulty,
+            what_it_tests: score >= 70
+              ? "Concurrency primitives, data structure design, cache invalidation, thread safety"
+              : "LinkedHashMap internals, data structure choice, basic OOP design"
+          };
+        }
+        if (/go|golang/.test(primaryLang)) {
+          return {
+            problem: score >= 70
+              ? `Implement a concurrent rate limiter using the token bucket algorithm. It should be safe for use by multiple goroutines, support configurable rate and burst size, and implement the http.Handler interface as middleware.`
+              : `Implement a simple rate limiter in Go: given a max number of requests per second, write a function that returns true if a request is allowed, false if it should be throttled. Make it goroutine-safe.`,
+            difficulty,
+            what_it_tests: score >= 70
+              ? "Goroutine safety, channel vs mutex trade-offs, middleware patterns, time.Ticker usage"
+              : "Basic concurrency with sync.Mutex, time-based logic, interface design"
+          };
+        }
+        if (/c\+\+|cpp|c#|csharp|rust/.test(primaryLang)) {
+          return {
+            problem: score >= 70
+              ? `Implement a memory pool allocator that pre-allocates a fixed block of memory and hands out fixed-size chunks. Support alloc() and free() in O(1). Handle fragmentation with a free-list.`
+              : `Implement a simple stack-based memory allocator: allocate(size) returns a pointer from a pre-allocated buffer, and reset() frees everything at once. No need for individual free().`,
+            difficulty,
+            what_it_tests: score >= 70
+              ? "Memory management, pointer arithmetic, free-list data structure, fragmentation awareness"
+              : "Basic memory concepts, pointer/reference handling, buffer management"
+          };
+        }
+
+        // Default: adapted two-sum based on skill level
+        return {
+          problem: score >= 70
+            ? `Given a stream of stock prices arriving in real-time, design a data structure that efficiently answers: "What was the maximum profit achievable from a single buy-sell pair in the last N prices?" Support O(1) queries and O(1) updates.`
+            : `Write a function that takes an array of integers and a target sum. Return the indices of the two numbers that add up to the target. Solve it in O(n) time using a hash map. Handle edge cases (no solution, duplicate values).`,
+          difficulty,
+          what_it_tests: score >= 70
+            ? "Sliding window, monotonic data structures, amortized complexity analysis"
+            : "Hash map usage, problem decomposition, edge case handling, code clarity"
+        };
+      })(),
 
       closing_questions: [
         "What does your code review process look like — what do you look for when reviewing others' code?",
