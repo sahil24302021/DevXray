@@ -6,16 +6,31 @@ import logging
 log = logging.getLogger("gemini_client")
 
 _client = None
+_client_key = None  # Track which key the cached client uses
 
 
-def _get_client():
-    global _client
-    if _client is None:
+def _get_gemini_keys():
+    """Return all available Gemini API keys in priority order."""
+    keys = []
+    for var in ("GEMINI_API_KEY", "GEMINI_API_KEY_2"):
+        k = os.getenv(var, "").strip()
+        if k:
+            keys.append(k)
+    return keys
+
+
+def _get_client(api_key: str = ""):
+    """Return a genai Client, optionally for a specific key.
+    If api_key is provided and differs from the cached one, create a fresh client."""
+    global _client, _client_key
+    if not api_key:
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("GEMINI_API_KEY not set in Render Environment.")
+    if _client is None or _client_key != api_key:
         from google import genai
-        key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not key:
-            raise RuntimeError("GEMINI_API_KEY not set in Render Environment.")
-        _client = genai.Client(api_key=key)
+        _client = genai.Client(api_key=api_key)
+        _client_key = api_key
     return _client
 
 
@@ -176,31 +191,40 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                 continue
         log.warning("[GeminiClient] All OpenRouter models failed — trying Gemini")
 
-    # ── STEP 4: Gemini flash as last resort ─────────────────────────
+    # ── STEP 4: Gemini flash as last resort (multi-key rotation) ──────
     from google.genai import types
+    gemini_keys = _get_gemini_keys()
     models_to_try = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
-    for model_name in models_to_try:
-        try:
-            client = _get_client()
-            response = client.models.generate_content(
-                model=model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=temperature,
-                ),
-            )
-            content = response.text
-            if not content:
+
+    for key_idx, api_key in enumerate(gemini_keys):
+        key_label = f"key-{key_idx + 1}"
+        for model_name in models_to_try:
+            try:
+                client = _get_client(api_key)
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json",
+                        temperature=temperature,
+                    ),
+                )
+                content = response.text
+                if not content:
+                    continue
+                content = _clean_json(content)
+                result = _j.loads(content)
+                log.info(f"[GeminiClient] Gemini {model_name} ({key_label}) succeeded (fallback)")
+                return result
+            except Exception as e:
+                last_error = e
+                err_str = str(e).lower()
+                is_quota = "429" in err_str or "quota" in err_str or "resource" in err_str or "rate" in err_str
+                if is_quota and key_idx < len(gemini_keys) - 1:
+                    log.warning(f"[GeminiClient] Gemini {model_name} ({key_label}) hit quota — rotating to next key")
+                    break  # Break inner model loop → try next key
+                log.warning(f"[GeminiClient] Gemini {model_name} ({key_label}) failed: {e}")
                 continue
-            content = _clean_json(content)
-            result = _j.loads(content)
-            log.info(f"[GeminiClient] Gemini {model_name} succeeded (fallback)")
-            return result
-        except Exception as e:
-            last_error = e
-            log.warning(f"[GeminiClient] Gemini {model_name} failed: {e}")
-            continue
 
     # All retries exhausted — raise generic message (never surface quota details)
     log.error(f"All AI providers failed. Last error: {last_error}")
