@@ -2,6 +2,7 @@ import time
 import os
 import json
 import asyncio
+from collections import OrderedDict
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 load_dotenv()
@@ -48,6 +49,14 @@ log = get_logger("main")
 
 app = FastAPI(title="DevXray AI — Developer Intelligence Platform")
 
+# ─── Gzip Compression (reduce payload size for large reports) ───
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# ─── Concurrency Limiter (prevent Render free tier overload) ───
+_ANALYSIS_SEMAPHORE = asyncio.Semaphore(10)
+_active_analyses = 0  # Track for /health endpoint
+
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -57,7 +66,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Simple in-memory cache fallback
-CACHE_TTL = 1800  # 30 minutes — longer cache prevents inconsistent re-runs
+CACHE_TTL = 21600  # 6 hours — same username returns cached result for any user
 
 # ─── Server-side plan limits (mirrors frontend/lib/plans.ts) ───
 PLAN_LIMITS = {
@@ -102,9 +111,10 @@ async def _increment_scan_after_success(user_id: str | None, scan_type: str) -> 
     except Exception as e:
         log.debug(f"Scan count increment skipped: {e}")
 
-# Try Redis first, fall back to in-memory dict
+# Try Redis first, fall back to in-memory LRU cache
 _redis_client = None
-_memory_cache: dict = {}
+_memory_cache: OrderedDict = OrderedDict()  # LRU cache
+_MEMORY_CACHE_MAX = 500  # Max entries before eviction
 
 def _init_redis():
     global _redis_client
@@ -129,7 +139,12 @@ def cache_get(key: str):
             pass
     entry = _memory_cache.get(key)
     if entry and time.time() - entry[0] < CACHE_TTL:
+        # Move to end (most recently used) for LRU
+        _memory_cache.move_to_end(key)
         return entry[1]
+    elif entry:
+        # Expired — remove
+        _memory_cache.pop(key, None)
     return None
 
 def cache_set(key: str, data: dict):
@@ -139,7 +154,11 @@ def cache_set(key: str, data: dict):
             return
         except Exception:
             pass
+    # LRU eviction: remove oldest entries if over max
     _memory_cache[key] = (time.time(), data)
+    _memory_cache.move_to_end(key)
+    while len(_memory_cache) > _MEMORY_CACHE_MAX:
+        _memory_cache.popitem(last=False)  # Remove oldest
 
 # Call on startup
 _init_redis()
@@ -520,6 +539,25 @@ async def analyze_user(
     # ── Server-side scan limit enforcement ──
     await _check_scan_limit(user_id, "github")
 
+    # ── Concurrency guard (prevent Render overload) ──
+    global _active_analyses
+    if _ANALYSIS_SEMAPHORE.locked() and _active_analyses >= 10:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "server_busy", "retry_after": 30,
+                     "message": "Server at capacity. Please retry in 30 seconds."},
+        )
+
+    async with _ANALYSIS_SEMAPHORE:
+        _active_analyses += 1
+        try:
+            return await _run_analysis(username, username_lower, job_id, private_repos, work_coder, user_id)
+        finally:
+            _active_analyses -= 1
+
+
+async def _run_analysis(username: str, username_lower: str, job_id, private_repos, work_coder, user_id):
+    """Core analysis logic — runs inside the semaphore."""
     log.info(f"Starting analysis for {username}")
     await emit_progress(job_id, "Fetching GitHub profile", progress=5, detail="Connecting to GitHub API")
 
@@ -771,6 +809,7 @@ async def analyze_user(
             strengths=_scoring.get("score_breakdown", {}).get("strengths", []),
             weaknesses=_scoring.get("score_breakdown", {}).get("weaknesses", []),
             tier=_benchmark.get("tier", "Unknown"),
+            resume_data=None,  # GitHub-only mode — no resume
         )
     except Exception as e:
         log.warning(f"AI summary failed: {e}")
@@ -1170,6 +1209,7 @@ async def analyze_resume_endpoint(
                 strengths=_scoring_r.get("score_breakdown", {}).get("strengths", []),
                 weaknesses=_scoring_r.get("score_breakdown", {}).get("weaknesses", []),
                 tier=_benchmark_r.get("tier", "Unknown"),
+                resume_data=resume_data,  # Pass resume for cross-validation
             )
         except Exception as e:
             log.warning(f"AI summary failed: {e}")
@@ -2268,9 +2308,14 @@ async def linkedin_cookie_status(secret: str = ""):
 async def health():
     return {
         "status": "ok",
-        "version": "4.0",
+        "version": "4.1",
         "platform": "Developer Intelligence Platform",
         "today": _get_today_str(),
+        "active_jobs": _active_analyses,
+        "capacity": 10,
+        "cache_ttl_hours": CACHE_TTL // 3600,
+        "memory_cache_entries": len(_memory_cache),
+        "redis_connected": _redis_client is not None,
         "linkedin_scraper": "10-strategy cascade",
     }
 
