@@ -319,7 +319,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
   if (!data) return null;
 
   // ─── Derive convenience fields the backend doesn't emit directly ───
-  const score = data.final_score ?? (data.score as number) ?? 0;
+  const score = Math.round((data.final_score ?? (data.score as number) ?? 0) * 10) / 10;
   const createdAt = data.created_at || (data.basic_info as any)?.created_at || "";
   const accountAgeDays = createdAt
     ? Math.max(0, (Date.now() - new Date(createdAt).getTime()) / 86400000)

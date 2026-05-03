@@ -525,7 +525,7 @@ def generate_report(
     Assemble the complete Developer Intelligence Report.
     """
     username = profile.get("username", "")
-    final_score = scoring.get("final_score", 0)
+    final_score = round(scoring.get("final_score", 0), 1)
     breakdown = scoring.get("score_breakdown", {})
     benchmark = scoring.get("benchmark", {})
 
@@ -537,7 +537,7 @@ def generate_report(
     )
     floor_bonus = private_analysis.get("experience_floor_bonus", 0)
     if floor_bonus > 0:
-        final_score = min(100, final_score + floor_bonus)
+        final_score = round(min(100, final_score + floor_bonus), 1)
         # Enforce minimum score floor of 40 for private-heavy profiles
         final_score = max(40, final_score)
         log.info(
@@ -622,7 +622,7 @@ def generate_report(
         "created_at": profile.get("created_at", ""),
 
         # ─── Core Intelligence Scores ───
-        "final_score": final_score,
+        "final_score": round(final_score, 1),
         "score_breakdown": breakdown,
         "feature_importance": scoring.get("feature_importance", []),
         "decision_trace": scoring.get("decision_trace", []),
@@ -803,13 +803,13 @@ def generate_report(
     # in several places. Mirrors the real score_breakdown data for backward compatibility.
     bd = breakdown.get("breakdown", {}) if isinstance(breakdown, dict) else {}
     report["scoring"] = {
-        "final_score": final_score,
-        "code_quality_score": bd.get("code_quality", 0),
-        "skill_depth_score": bd.get("skill_depth", 0),
-        "authenticity_score": auth_pct,
-        "consistency_score": consistency.get("consistency_score", 0),
-        "growth_score": growth.get("growth_score", 0),
-        "truth_score": truth.get("truth_score", 0),
+        "final_score": round(final_score, 1),
+        "code_quality_score": round(bd.get("code_quality", 0), 1),
+        "skill_depth_score": round(bd.get("skill_depth", 0), 1),
+        "authenticity_score": round(auth_pct, 1),
+        "consistency_score": round(consistency.get("consistency_score", 0), 1),
+        "growth_score": round(growth.get("growth_score", 0), 1),
+        "truth_score": round(truth.get("truth_score", 0), 1),
     }
 
     # ─── Private-Heavy Profile Section ───

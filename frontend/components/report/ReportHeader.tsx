@@ -9,7 +9,7 @@ interface Props {
 }
 
 export default function ReportHeader({ data }: Props) {
-  const score = (data.final_score ?? data.score ?? 0) as number;
+  const score = Math.round((data.final_score ?? data.score ?? 0) as number);
   const confRaw = (data.confidence_score ?? 0) as number;
   const confPct = Math.round(confRaw > 1 ? confRaw : confRaw * 100);
   const circumference = 2 * Math.PI * 46;

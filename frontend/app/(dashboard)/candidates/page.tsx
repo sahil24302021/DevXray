@@ -76,7 +76,7 @@ function ScoreBadge({ score, tier }: { score: number; tier: string }) {
             strokeDasharray={`${(score / 100) * 81.7} 81.7`} strokeLinecap="round" />
         </svg>
         <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold" style={{ color }}>
-          {score}
+          {Math.round(score)}
         </span>
       </div>
       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
