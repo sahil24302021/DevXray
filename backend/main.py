@@ -36,6 +36,7 @@ from services.web_scraper import (
 from services.code_reviewer import review_multiple_repos, match_resume_projects_to_repos
 from services.gemini_client import generate_json
 from orchestrator.orchestrator import run_github_analysis, run_resume_analysis
+from ingestion.portfolio_fetcher import auto_fetch_profile_intelligence
 
 # New multi-source fetchers
 from ingestion.stackoverflow_fetcher import fetch_stackoverflow_profile, score_stackoverflow
@@ -638,12 +639,33 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
     lc_task = asyncio.create_task(_safe_fetch(fetch_leetcode_profile(username), "LeetCode"))
     devto_task = asyncio.create_task(_safe_fetch(fetch_devto_articles(username), "Dev.to"))
 
+    # Portfolio + LinkedIn auto-fetch from GitHub profile
+    async def _fetch_profile_intel():
+        try:
+            # Get top languages for cross-validation
+            non_fork = [r for r in repos if not r.get("is_fork", False)]
+            lang_counts: dict = {}
+            for r in non_fork:
+                lang = r.get("language")
+                if lang:
+                    lang_counts[lang] = lang_counts.get(lang, 0) + 1
+            top_langs = sorted(lang_counts, key=lang_counts.get, reverse=True)[:5]
+            return await asyncio.wait_for(
+                auto_fetch_profile_intelligence(profile, repos, top_langs),
+                timeout=15.0,
+            )
+        except Exception as e:
+            log.warning(f"Profile intelligence fetch failed: {e}")
+            return {}, {}, {}
+    profile_intel_task = asyncio.create_task(_fetch_profile_intel())
+
     pinned_code_reviews = await code_review_task
     gists_data = await gists_task or []
     so_data = await so_task or {"found": False}
     npm_data = await npm_task or {"packages": [], "total_packages": 0, "credibility": "NONE"}
     lc_data = await lc_task or {"found": False}
     devto_data = await devto_task or {"found": False}
+    portfolio_data, linkedin_data, crossval_data = await profile_intel_task
 
     # Score multi-source data
     gists_scored = score_gists(gists_data)
@@ -776,6 +798,8 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
     if devto_data.get("found"): data_sources_available.append("devto")
     if len(gists_data) > 0: data_sources_available.append("gists")
     if npm_data.get("total_packages", 0) > 0: data_sources_available.append("npm")
+    if portfolio_data.get("is_live"): data_sources_available.append("portfolio")
+    if linkedin_data.get("accessible"): data_sources_available.append("linkedin")
     pipeline_meta["data_sources"] = data_sources_available
     if len(data_sources_available) >= 3:
         pipeline_meta["data_source_confidence"] = "HIGH"
@@ -858,11 +882,21 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
     # Inject multi-source intelligence
     report["multi_source"] = multi_source_data
     report["verification_sources"] = _build_verification_sources(
-        username, so_data, npm_data, lc_data, devto_data, gists_data, None, None
+        username, so_data, npm_data, lc_data, devto_data, gists_data,
+        linkedin_data if linkedin_data.get("accessible") else None,
+        portfolio_data if portfolio_data.get("is_live") else None,
     )
     # Build structured alternative signals summary for the report UI
     from orchestrator.report_generator import _build_alternative_signals_summary
     report["alternative_signals_summary"] = _build_alternative_signals_summary(multi_source_data)
+
+    # ─── Portfolio & LinkedIn Intelligence ───
+    if portfolio_data and portfolio_data.get("is_live"):
+        report["portfolio_data"] = portfolio_data
+    if linkedin_data and linkedin_data.get("accessible"):
+        report["linkedin_data"] = linkedin_data
+    if crossval_data and crossval_data.get("total_comparisons", 0) > 0:
+        report["crossval_comparison"] = crossval_data
 
     # Inject date context into report so frontend never shows wrong dates
     report["account_age_context"] = account_age_ctx
