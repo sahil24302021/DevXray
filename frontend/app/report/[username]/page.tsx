@@ -108,6 +108,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
   const [jobId, setJobId] = useState<string>("");
   const [isExporting, setIsExporting] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [viewMode, setViewMode] = useState<"simple" | "detailed">("simple");
   const reportRef = useRef<HTMLElement>(null);
 
   const handleCopyLink = async () => {
@@ -439,7 +440,30 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
 
       {/* Interview Kit — rendered OUTSIDE the nav to prevent backdrop-filter from breaking position:fixed modal */}
       <div className="sticky top-[68px] z-40 px-4 sm:px-6 md:px-10 mb-2 print:hidden">
-        <div className="mx-auto max-w-5xl flex justify-end">
+        <div className="mx-auto max-w-5xl flex items-center justify-between">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-white/[0.04] rounded-lg border border-white/[0.08] p-0.5">
+            <button
+              onClick={() => setViewMode("simple")}
+              className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition-all ${
+                viewMode === "simple"
+                  ? "bg-[#cdff00] text-[#050505] shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              👔 Simple
+            </button>
+            <button
+              onClick={() => setViewMode("detailed")}
+              className={`px-3 py-1.5 text-[11px] font-semibold rounded-md transition-all ${
+                viewMode === "detailed"
+                  ? "bg-[#cdff00] text-[#050505] shadow-sm"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              🔬 Detailed
+            </button>
+          </div>
           <InterviewKit reportData={dataWithAliases} candidateName={data.name || data.username || "Candidate"} />
         </div>
       </div>
@@ -546,8 +570,156 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             </div>
           </div>
 
-          {/* ═══ NARRATIVE FLOW ═══ */}
+          {/* ═══ SIMPLE MODE: HR-Friendly Summary ═══ */}
+          {viewMode === "simple" && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="mb-8"
+            >
+              {/* Big Hire Badge */}
+              {(() => {
+                const rec = data2.hiring_recommendation;
+                const signal = typeof rec === 'object' ? (rec as any)?.signal || (rec as any)?.recommendation : (typeof rec === 'string' ? rec : '');
+                const signalLower = (signal || '').toLowerCase();
+                const isHire = signalLower.includes('strong hire') || signalLower.includes('hire') && !signalLower.includes('no');
+                const isMaybe = signalLower.includes('maybe') || signalLower.includes('consider') || signalLower.includes('conditional');
+                const badgeColor = isHire ? 'from-emerald-500 to-emerald-700' : isMaybe ? 'from-amber-500 to-amber-700' : 'from-red-500 to-red-700';
+                const badgeText = isHire ? '✓ HIRE' : isMaybe ? '⚠ MAYBE' : '✗ NO HIRE';
+                const badgeBorder = isHire ? 'border-emerald-500/30' : isMaybe ? 'border-amber-500/30' : 'border-red-500/30';
 
+                return (
+                  <div className={`text-center p-8 rounded-2xl border ${badgeBorder} bg-gradient-to-br ${badgeColor.replace('from-', 'from-').replace('to-', 'to-')}/10 mb-6`}
+                    style={{ background: `linear-gradient(135deg, ${isHire ? 'rgba(16,185,129,0.08)' : isMaybe ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)'}, rgba(5,5,5,0.95))` }}
+                  >
+                    <div className={`inline-block px-8 py-3 rounded-xl text-3xl sm:text-4xl font-black tracking-tight bg-gradient-to-r ${badgeColor} text-white shadow-lg mb-4`}>
+                      {badgeText}
+                    </div>
+                    <p className="text-sm text-slate-400 mt-2">Score: {score}/100 · {(data2 as any).benchmark?.tier || data2.developer_tier || 'Unknown'} tier</p>
+                  </div>
+                );
+              })()}
+
+              {/* Plain English Summary */}
+              <div className="rounded-2xl border border-white/[0.06] p-6 mb-5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                  <span>📋</span> Plain English Summary
+                </h3>
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  {(() => {
+                    const ai = (data2 as any).ai_summary;
+                    const forRecruiter = ai?.for_recruiter;
+                    if (forRecruiter) return forRecruiter;
+
+                    // Fallback: build a plain English summary from data
+                    const langs = (data2.top_languages || []).slice(0, 3).join(', ') || 'various languages';
+                    const years = accountAgeYears > 0 ? `${accountAgeYears} years` : 'some time';
+                    const repoCount = data2.total_repos || data2.public_repos || 0;
+                    const tier = ((data2 as any).benchmark?.tier || data2.developer_tier || 'mid-level').toLowerCase();
+                    return `This developer has been on GitHub for ${years}, working mainly in ${langs}. They have ${repoCount} public repositories. Based on code analysis, they are assessed at a ${tier} level with a score of ${score}/100.`;
+                  })()}
+                </p>
+              </div>
+
+              {/* Salary Estimate */}
+              <div className="rounded-2xl border border-white/[0.06] p-5 mb-5" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                  <span>💰</span> Estimated Salary Range
+                </h3>
+                {(() => {
+                  const tier = ((data2 as any).benchmark?.tier || data2.developer_tier || '').toLowerCase();
+                  const location = (data2 as any).location || '';
+                  const isIndia = location.toLowerCase().includes('india') || location.toLowerCase().includes('mumbai') || location.toLowerCase().includes('delhi') || location.toLowerCase().includes('bangalore');
+                  
+                  let range = { low: '$40K', high: '$70K', label: 'Junior' };
+                  if (tier.includes('senior') || tier.includes('expert') || score >= 80) {
+                    range = isIndia ? { low: '₹25L', high: '₹45L', label: 'Senior' } : { low: '$120K', high: '$180K', label: 'Senior' };
+                  } else if (tier.includes('mid') || tier.includes('advanced') || score >= 60) {
+                    range = isIndia ? { low: '₹12L', high: '₹25L', label: 'Mid-Level' } : { low: '$70K', high: '$120K', label: 'Mid-Level' };
+                  } else if (tier.includes('junior') || tier.includes('emerging') || score >= 40) {
+                    range = isIndia ? { low: '₹5L', high: '₹12L', label: 'Junior' } : { low: '$40K', high: '$70K', label: 'Junior' };
+                  } else {
+                    range = isIndia ? { low: '₹3L', high: '₹6L', label: 'Intern/Entry' } : { low: '$30K', high: '$50K', label: 'Intern/Entry' };
+                  }
+
+                  return (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-2xl font-bold text-white">{range.low} – {range.high}</p>
+                        <p className="text-xs text-slate-500 mt-1">{range.label} · {isIndia ? 'India' : 'US'} market estimate · Based on skill assessment</p>
+                      </div>
+                      <span className="text-xs text-slate-600 bg-white/[0.04] px-3 py-1 rounded-full border border-white/[0.06]">
+                        Estimate only
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Top 3 Strengths + Top 3 Risks side by side */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                <div className="rounded-2xl border border-emerald-500/20 p-5" style={{ background: 'rgba(16,185,129,0.04)' }}>
+                  <h3 className="text-sm font-bold text-emerald-400 mb-3">✓ Top Strengths</h3>
+                  {(data2.strengths || []).slice(0, 3).map((s: string, i: number) => (
+                    <div key={i} className="flex items-start gap-2 mb-2 last:mb-0">
+                      <span className="text-emerald-400 text-xs mt-0.5">●</span>
+                      <p className="text-sm text-slate-300">{s}</p>
+                    </div>
+                  ))}
+                  {(!data2.strengths || data2.strengths.length === 0) && (
+                    <p className="text-xs text-slate-500">No specific strengths identified</p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-red-500/20 p-5" style={{ background: 'rgba(239,68,68,0.04)' }}>
+                  <h3 className="text-sm font-bold text-red-400 mb-3">⚠ Top Risks</h3>
+                  {((data2 as any).red_flags || data2.weaknesses || []).slice(0, 3).map((r: string, i: number) => (
+                    <div key={i} className="flex items-start gap-2 mb-2 last:mb-0">
+                      <span className="text-red-400 text-xs mt-0.5">●</span>
+                      <p className="text-sm text-slate-300">{typeof r === 'string' ? r : (r as any)?.flag || (r as any)?.text || JSON.stringify(r)}</p>
+                    </div>
+                  ))}
+                  {(!(data2 as any).red_flags && !data2.weaknesses) && (
+                    <p className="text-xs text-slate-500">No specific risks identified</p>
+                  )}
+                </div>
+              </div>
+
+              {/* JD Match (if available) */}
+              {(data2 as any).jd_match && (data2 as any).jd_match.jd_analyzed && (
+                <div className="rounded-2xl border border-indigo-500/20 p-5 mb-5" style={{ background: 'rgba(99,102,241,0.04)' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span>🎯</span> Job Fit
+                      {(data2 as any).job_requirements?.job_title && (
+                        <span className="text-indigo-300/60 font-normal">for {(data2 as any).job_requirements.job_title}</span>
+                      )}
+                    </h3>
+                    <span className={`text-lg font-black ${(data2 as any).jd_match.match_percentage >= 70 ? 'text-emerald-400' : (data2 as any).jd_match.match_percentage >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                      {(data2 as any).jd_match.match_percentage}%
+                    </span>
+                  </div>
+                  {(data2 as any).jd_match.one_line_verdict && (
+                    <p className="text-sm text-slate-300 italic">"{(data2 as any).jd_match.one_line_verdict}"</p>
+                  )}
+                </div>
+              )}
+
+              {/* Switch to Detailed */}
+              <button
+                onClick={() => setViewMode("detailed")}
+                className="w-full py-3 rounded-xl border border-white/[0.08] text-sm text-slate-400 hover:text-white hover:bg-white/[0.04] transition-all"
+              >
+                🔬 Switch to Detailed View for full technical analysis →
+              </button>
+            </motion.div>
+          )}
+
+          {/* ═══ NARRATIVE FLOW (shown in both modes, but some sections detailed-only) ═══ */}
+
+          {/* -- Recruiter Brief (TL;DR) -- shown in detailed only since Simple has its own summary */}
+          {viewMode === "detailed" && (
+            <>
           {/* -- Recruiter Brief (TL;DR) -- */}
           <ReportErrorBoundary section="Recruiter Brief">
             <RecruiterBrief data={data2} />
@@ -615,8 +787,12 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           <ReportErrorBoundary section="Red Flags">
             <RedFlags data={data2} />
           </ReportErrorBoundary>
+          </>
+          )}
 
-          {/* -- Section: Evidence -- */}
+          {/* -- Section: Evidence (DETAILED only) -- */}
+          {viewMode === "detailed" && (
+            <>
           <div className="flex items-center gap-3 mb-4 mt-8">
             <span className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em]">Evidence</span>
             <div className="flex-1 h-px bg-white/[0.04]" />
@@ -756,7 +932,11 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             </ReportErrorBoundary>
           )}
 
-          {/* -- Section: Deep Dive -- */}
+          {/* -- Section: Deep Dive (DETAILED only) -- */}
+          </>
+          )}
+          {viewMode === "detailed" && (
+            <>
           <div className="flex items-center gap-3 mb-4 mt-8">
             <span className="text-[9px] font-bold text-slate-600 uppercase tracking-[0.2em]">Deep Dive</span>
             <div className="flex-1 h-px bg-white/[0.04]" />
@@ -802,10 +982,13 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             {(data2.top_repos && data2.top_repos.length > 0) && <RepoEvidence data={data2} />}
           </ReportErrorBoundary>
 
+          </>
+          )}
+
           {/* Footer */}
           <div className="mt-12 pt-6 border-t border-white/[0.06] text-center">
             <p className="text-slate-500 text-[10px] tracking-[0.15em] uppercase font-medium">
-              DevXray AI · Deep Intelligence Report · @{data2.username} · {data2.repos_deep_analyzed} repos deep-analyzed
+              DevXray AI · {viewMode === 'simple' ? 'HR Summary' : 'Deep Intelligence'} Report · @{data2.username} · {data2.repos_deep_analyzed} repos deep-analyzed
             </p>
           </div>
       </main>
