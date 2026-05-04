@@ -570,6 +570,145 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             </div>
           </div>
 
+          {/* ═══ TRUST SCORE / FRAUD DETECTION ═══ */}
+          {(data2 as any).trust_score && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="mb-5"
+            >
+              {(() => {
+                const ts = (data2 as any).trust_score;
+                const trustScore = ts.trust_score ?? 75;
+                const trustLabel = ts.trust_label || 'MODERATE TRUST';
+                const riskLevel = ts.risk_level || 'MEDIUM';
+                const risks: any[] = ts.risks || [];
+                const highRiskCount = ts.high_risk_count || 0;
+
+                const getColor = () => {
+                  if (trustScore >= 80) return { bg: 'from-emerald-500/10 to-emerald-900/5', border: 'border-emerald-500/30', text: 'text-emerald-400', ring: '#34d399' };
+                  if (trustScore >= 60) return { bg: 'from-amber-500/10 to-amber-900/5', border: 'border-amber-500/30', text: 'text-amber-400', ring: '#fbbf24' };
+                  if (trustScore >= 40) return { bg: 'from-orange-500/10 to-orange-900/5', border: 'border-orange-500/30', text: 'text-orange-400', ring: '#f97316' };
+                  return { bg: 'from-red-500/10 to-red-900/5', border: 'border-red-500/30', text: 'text-red-400', ring: '#ef4444' };
+                };
+                const colors = getColor();
+
+                return (
+                  <div className={`rounded-2xl border ${colors.border} p-5 sm:p-6`} style={{ background: 'rgba(255,255,255,0.02)' }}>
+                    {/* Header: Trust Score Badge + Label */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+                      <div className="flex items-center gap-4">
+                        {/* Circular Trust Score */}
+                        <div className="relative w-16 h-16 shrink-0">
+                          <svg className="w-16 h-16 -rotate-90" viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="6" />
+                            <motion.circle
+                              cx="50" cy="50" r="42"
+                              fill="none"
+                              stroke={colors.ring}
+                              strokeWidth="6"
+                              strokeLinecap="round"
+                              strokeDasharray={2 * Math.PI * 42}
+                              initial={{ strokeDashoffset: 2 * Math.PI * 42 }}
+                              animate={{ strokeDashoffset: 2 * Math.PI * 42 - (trustScore / 100) * 2 * Math.PI * 42 }}
+                              transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
+                            />
+                          </svg>
+                          <span className={`absolute inset-0 flex items-center justify-center text-lg font-black ${colors.text}`}>
+                            {trustScore}
+                          </span>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                            🛡️ Trust Score
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                              riskLevel === 'LOW' ? 'bg-emerald-500/20 text-emerald-400' :
+                              riskLevel === 'MEDIUM' ? 'bg-amber-500/20 text-amber-400' :
+                              riskLevel === 'ELEVATED' ? 'bg-orange-500/20 text-orange-400' :
+                              'bg-red-500/20 text-red-400'
+                            }`}>
+                              {trustLabel}
+                            </span>
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {risks.length === 0 ? 'No fraud signals detected' :
+                             `${risks.length} risk${risks.length > 1 ? 's' : ''} detected${highRiskCount > 0 ? ` (${highRiskCount} critical)` : ''}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Quick dimension scores */}
+                      {ts.dimensions && (
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { key: 'commit_patterns', icon: '📊', label: 'Commits' },
+                            { key: 'code_similarity', icon: '🔍', label: 'Originality' },
+                            { key: 'skill_verification', icon: '✓', label: 'Claims' },
+                            { key: 'repo_quality', icon: '📁', label: 'Quality' },
+                          ].map(d => {
+                            const dim = ts.dimensions[d.key];
+                            if (!dim) return null;
+                            const s = dim.score;
+                            return (
+                              <span key={d.key} className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                                s >= 80 ? 'border-emerald-500/20 text-emerald-400' :
+                                s >= 60 ? 'border-amber-500/20 text-amber-400' :
+                                'border-red-500/20 text-red-400'
+                              }`}>
+                                {d.icon} {d.label}: {s}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Fraud Risk Details (expandable) */}
+                    {risks.length > 0 && (
+                      <div className="border-t border-white/[0.06] pt-4">
+                        <p className="text-[9px] text-red-400 uppercase tracking-wider font-bold mb-3">Fraud Risk Analysis</p>
+                        <div className="space-y-3">
+                          {risks.map((risk: any, i: number) => (
+                            <div key={i} className={`rounded-xl p-3 border ${
+                              risk.severity === 'CRITICAL' ? 'border-red-500/30 bg-red-500/5' :
+                              risk.severity === 'HIGH' ? 'border-orange-500/20 bg-orange-500/5' :
+                              risk.severity === 'MEDIUM' ? 'border-amber-500/15 bg-amber-500/5' :
+                              'border-white/[0.06] bg-white/[0.02]'
+                            }`}>
+                              <div className="flex items-start gap-2">
+                                <span className={`text-xs mt-0.5 shrink-0 ${
+                                  risk.severity === 'CRITICAL' ? 'text-red-400' :
+                                  risk.severity === 'HIGH' ? 'text-orange-400' :
+                                  risk.severity === 'MEDIUM' ? 'text-amber-400' :
+                                  'text-slate-500'
+                                }`}>
+                                  {risk.severity === 'CRITICAL' ? '🚨' : risk.severity === 'HIGH' ? '⚠️' : risk.severity === 'MEDIUM' ? '⚡' : 'ℹ️'}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-[10px] font-bold text-white uppercase tracking-wide">{risk.category}</span>
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                                      risk.severity === 'CRITICAL' ? 'bg-red-500/20 text-red-400' :
+                                      risk.severity === 'HIGH' ? 'bg-orange-500/20 text-orange-400' :
+                                      risk.severity === 'MEDIUM' ? 'bg-amber-500/20 text-amber-400' :
+                                      'bg-slate-700 text-slate-400'
+                                    }`}>-{risk.penalty} pts</span>
+                                  </div>
+                                  <p className="text-xs text-slate-400 leading-relaxed">{risk.explanation}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </motion.div>
+          )}
+
           {/* ═══ SIMPLE MODE: HR-Friendly Summary ═══ */}
           {viewMode === "simple" && (
             <motion.div

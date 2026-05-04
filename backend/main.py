@@ -915,6 +915,21 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
     if job_requirements:
         report["job_requirements"] = job_requirements
 
+    # ─── Trust Score / Fraud Detection ───
+    try:
+        from intelligence.trust_score import compute_trust_score
+        trust_data = compute_trust_score(
+            authenticity=engine_results.get("authenticity", {}),
+            repos=repos,
+            profile=profile,
+            scoring=engine_results.get("scoring", {}),
+            documentation_quality=engine_results.get("documentation_quality"),
+        )
+        report["trust_score"] = trust_data
+    except Exception as e:
+        log.warning(f"Trust score computation failed: {e}")
+        report["trust_score"] = {"trust_score": 75, "trust_label": "MODERATE TRUST", "risk_level": "MEDIUM", "risks": [], "dimensions": {}}
+
     # Inject pipeline metadata
     report["confidence_score"] = pipeline_meta.get("confidence_score", 0)
     report["is_low_confidence"] = pipeline_meta.get("is_low_confidence", False)
