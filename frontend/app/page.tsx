@@ -544,7 +544,7 @@ export default function Home() {
     const hasReqs = Object.values(jobReqs).some((v) => typeof v === "string" && v.trim());
     const reportUrl = hasReqs
       ? `/report/${username}?${new URLSearchParams(
-          Object.fromEntries(Object.entries(jobReqs).filter(([, v]) => typeof v === "string" && v.trim()))
+          Object.fromEntries(Object.entries(jobReqs).filter(([, v]) => typeof v === "string" && (v as string).trim())) as Record<string, string>
         ).toString()}`
       : `/report/${username}`;
     router.push(reportUrl);
