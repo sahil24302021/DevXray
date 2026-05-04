@@ -165,6 +165,7 @@ async def fetch_user_repos(username: str, expected_count: int = 0) -> List[Dict[
             "watchers": repo.get("watchers_count", 0),
             "has_wiki": repo.get("has_wiki", False),
             "has_pages": repo.get("has_pages", False),
+            "has_readme": repo.get("size", 0) > 0,  # repos with size > 0 almost always have a README
         }
         for repo in all_repos
     ]
@@ -333,8 +334,8 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
     SKIP_DIRS = {"node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".git"}
     MAX_FILE_SIZE = 50_000  # 50KB
     MAX_FILES_PER_REPO = 15  # Reduced from 20 — 15 files per repo is plenty
-    TOP_REPOS_FOR_FILES = 10  # Reduced from 25 — 10 repos × 15 files = 150 files, plenty for scoring
-    TOP_REPOS_FOR_LANG = 50  # Get ALL repos for language analysis
+    TOP_REPOS_FOR_FILES = 10  # 10 repos × 15 files = 150 files, plenty for scoring
+    TOP_REPOS_FOR_LANG = 100  # Use ALL repos for comprehensive language detection
 
     # Pick top non-fork repos by composite score (Rule 3)
     originals = [r for r in repos if not r.get("is_fork", False)]
@@ -452,11 +453,45 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
             print(f"[GitHub] Deep fetch failed for {repo_name}: {e}")
             repo_data[repo_name] = {"files": [], "tree": [], "readme": ""}
 
+    # ─── Fetch contributor commit frequency graph for top repos ───
+    commit_frequency = {}
+    async def _fetch_participation(repo_name: str):
+        """Fetch weekly commit frequency via stats/participation API."""
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"https://api.github.com/repos/{username}/{repo_name}/stats/participation",
+                    headers=GITHUB_HEADERS,
+                    timeout=10.0,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    owner_commits = data.get("owner", [])
+                    return {
+                        "repo": repo_name,
+                        "weekly_owner_commits": owner_commits,
+                        "total_owner_commits": sum(owner_commits) if owner_commits else 0,
+                        "active_weeks": sum(1 for w in owner_commits if w > 0) if owner_commits else 0,
+                    }
+        except Exception:
+            pass
+        return None
+
+    # Fetch participation for top 5 repos (rate-limit friendly)
+    participation_tasks = [
+        _fetch_participation(r["name"]) for r in top_repos_for_files[:5]
+    ]
+    participation_results = await asyncio.gather(*participation_tasks, return_exceptions=True)
+    for pr in participation_results:
+        if isinstance(pr, dict) and pr:
+            commit_frequency[pr["repo"]] = pr
+
     return {
         "language_bytes": total_languages,
         "all_commits": all_commits,
         "repos_analyzed": len(top_repos),
         "repo_data": repo_data,
+        "commit_frequency": commit_frequency,
     }
 
 
