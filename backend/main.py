@@ -492,6 +492,10 @@ async def analyze_user(
     job_id: Optional[str] = None,
     private_repos: Optional[bool] = None,
     work_coder: Optional[bool] = None,
+    job_title: Optional[str] = None,
+    required_skills: Optional[str] = None,
+    job_description: Optional[str] = None,
+    experience_required: Optional[str] = None,
     user_id: Optional[str] = Header(None, alias="X-User-Id"),
 ):
     """
@@ -549,15 +553,26 @@ async def analyze_user(
                      "message": "Server at capacity. Please retry in 30 seconds."},
         )
 
+    # Build job requirements if provided
+    job_requirements = None
+    if job_title or required_skills or job_description:
+        job_requirements = {
+            "job_title": job_title or "",
+            "required_skills": required_skills or "",
+            "job_description": job_description or "",
+            "experience_required": experience_required or "",
+        }
+        log.info(f"Job requirements provided for {username}: {job_title}")
+
     async with _ANALYSIS_SEMAPHORE:
         _active_analyses += 1
         try:
-            return await _run_analysis(username, username_lower, job_id, private_repos, work_coder, user_id)
+            return await _run_analysis(username, username_lower, job_id, private_repos, work_coder, user_id, job_requirements)
         finally:
             _active_analyses -= 1
 
 
-async def _run_analysis(username: str, username_lower: str, job_id, private_repos, work_coder, user_id):
+async def _run_analysis(username: str, username_lower: str, job_id, private_repos, work_coder, user_id, job_requirements=None):
     """Core analysis logic — runs inside the semaphore."""
     log.info(f"Starting analysis for {username}")
     await emit_progress(job_id, "Fetching GitHub profile", progress=5, detail="Connecting to GitHub API")
@@ -857,6 +872,48 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
         pinned_code_reviews=pinned_code_reviews,
         ai_summary=ai_summary,
     )
+
+    # ─── JD Matching (if job requirements were provided) ───
+    jd_match = None
+    if job_requirements and (job_requirements.get("job_description") or job_requirements.get("required_skills")):
+        try:
+            from intelligence.jd_matcher import match_jd
+            verified_skills_list = [
+                s.get("skill_name") for s in engine_results.get("skills", {}).get("skills", [])
+                if isinstance(s, dict)
+            ]
+            # Build a JD text from available fields
+            jd_text = job_requirements.get("job_description", "")
+            if not jd_text and job_requirements.get("required_skills"):
+                jd_text = (
+                    f"Job Title: {job_requirements.get('job_title', 'Software Engineer')}\n"
+                    f"Required Skills: {job_requirements['required_skills']}\n"
+                    f"Experience: {job_requirements.get('experience_required', 'Not specified')}\n"
+                )
+
+            # Build repo summary for context
+            non_fork_repos = [r for r in repos if not r.get("is_fork", False)]
+            repo_summary = ", ".join(
+                f"{r['name']} ({r.get('language', '?')})" for r in non_fork_repos[:8]
+            )
+
+            jd_match = await match_jd(
+                job_description=jd_text,
+                candidate_skills=verified_skills_list,
+                candidate_tier=_benchmark.get("tier", "Unknown"),
+                years_experience=0,
+                github_repos_summary=repo_summary,
+                commit_forensics=engine_results.get("authenticity", {}).get("commit_timeline_forensics", {}),
+            )
+            log.info(f"JD match for {username}: {jd_match.get('match_percentage', 0)}% — {jd_match.get('overall_fit', 'N/A')}")
+        except Exception as e:
+            log.warning(f"JD matching failed for {username}: {e}")
+
+    # Inject JD match + job requirements into report
+    if jd_match:
+        report["jd_match"] = jd_match
+    if job_requirements:
+        report["job_requirements"] = job_requirements
 
     # Inject pipeline metadata
     report["confidence_score"] = pipeline_meta.get("confidence_score", 0)

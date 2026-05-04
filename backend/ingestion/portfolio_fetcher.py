@@ -212,6 +212,8 @@ async def fetch_linkedin_data(
         return result
 
     try:
+        # Uses the FREE 10-strategy cascade scraper (Google, Bing, DuckDuckGo, etc.)
+        # NOT the paid Voyager API — works without any paid keys or li_at cookie
         from services.web_scraper import scrape_linkedin
         linkedin_url = f"https://www.linkedin.com/in/{linkedin_username}"
         li_data = await scrape_linkedin(linkedin_url)

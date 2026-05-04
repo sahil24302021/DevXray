@@ -3,7 +3,8 @@
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence, useSpring, useMotionValue, useTransform } from "framer-motion";
 import Link from "next/link";
-import { analyzeProfile, AnalysisResult } from "@/lib/api";
+import { analyzeProfile, analyzeGitHub, AnalysisResult } from "@/lib/api";
+import { useSearchParams } from "next/navigation";
 import { use } from "react";
 import VerdictSection from "@/components/report/VerdictSection";
 import HiringRecommendation from "@/components/report/HiringRecommendation";
@@ -92,6 +93,15 @@ function ErrorState({ error, username }: { error: string; username: string }) {
 
 export default function ReportPage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = use(params);
+  const searchParams = useSearchParams();
+
+  // Read job context from URL params (passed by landing page)
+  const jobContext = {
+    title: searchParams.get("job_title") || undefined,
+    skills: searchParams.get("required_skills") || undefined,
+    description: searchParams.get("job_description") || undefined,
+  };
+  const hasJobContext = !!(jobContext.title || jobContext.skills || jobContext.description);
   const [data, setData] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -295,7 +305,9 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
       setJobId(newJobId);
 
       try {
-        const result = await analyzeProfile(username, newJobId);
+        const result = hasJobContext
+          ? await analyzeGitHub(username, newJobId, jobContext)
+          : await analyzeProfile(username, newJobId);
         setData(result);
 
         // Save to cache for next time
@@ -648,6 +660,101 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           <ReportErrorBoundary section="Verification Sources">
             {data2.verification_sources && <VerificationSources data={data2.verification_sources} multiSource={(data2 as any).multi_source_verification} />}
           </ReportErrorBoundary>
+
+          {/* -- Job Requirements Match (if JD was provided) -- */}
+          {(data2 as any).jd_match && (data2 as any).jd_match.jd_analyzed && (
+            <ReportErrorBoundary section="Job Match">
+              <div className="rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-950/30 to-[#0a0a0a] p-5 mb-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-indigo-400 text-lg">🎯</span>
+                    <h3 className="text-sm font-bold text-white">Job Fit Analysis</h3>
+                    {(data2 as any).job_requirements?.job_title && (
+                      <span className="text-xs text-indigo-300/60 ml-2">
+                        for {(data2 as any).job_requirements.job_title}
+                      </span>
+                    )}
+                  </div>
+                  <div className={`px-3 py-1 rounded-full text-xs font-bold ${
+                    (data2 as any).jd_match.match_percentage >= 70 ? 'bg-emerald-500/20 text-emerald-400' :
+                    (data2 as any).jd_match.match_percentage >= 40 ? 'bg-amber-500/20 text-amber-400' :
+                    'bg-red-500/20 text-red-400'
+                  }`}>
+                    {(data2 as any).jd_match.match_percentage}% Match
+                  </div>
+                </div>
+
+                {/* Overall Fit + Hire Recommendation */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Fit</p>
+                    <p className="text-sm font-bold text-white">{(data2 as any).jd_match.overall_fit || 'N/A'}</p>
+                  </div>
+                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Hire</p>
+                    <p className={`text-sm font-bold ${
+                      (data2 as any).jd_match.hire_recommendation === 'YES' ? 'text-emerald-400' :
+                      (data2 as any).jd_match.hire_recommendation === 'MAYBE' ? 'text-amber-400' : 'text-red-400'
+                    }`}>{(data2 as any).jd_match.hire_recommendation || 'N/A'}</p>
+                  </div>
+                  <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-3 text-center col-span-2 sm:col-span-1">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider mb-1">Experience</p>
+                    <p className="text-sm font-bold text-white">{(data2 as any).jd_match.experience_match || 'N/A'}</p>
+                  </div>
+                </div>
+
+                {/* Skills Match */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                  {(data2 as any).jd_match.required_skills_found?.length > 0 && (
+                    <div>
+                      <p className="text-[9px] text-emerald-500 uppercase tracking-wider mb-2">✓ Skills Found</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(data2 as any).jd_match.required_skills_found.map((s: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 text-[10px] border border-emerald-500/20">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {(data2 as any).jd_match.required_skills_missing?.length > 0 && (
+                    <div>
+                      <p className="text-[9px] text-red-500 uppercase tracking-wider mb-2">✗ Skills Missing</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(data2 as any).jd_match.required_skills_missing.map((s: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 text-[10px] border border-red-500/20">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Verdict */}
+                {(data2 as any).jd_match.one_line_verdict && (
+                  <p className="text-xs text-slate-300 italic border-t border-white/[0.06] pt-3">
+                    "{(data2 as any).jd_match.one_line_verdict}"
+                  </p>
+                )}
+
+                {/* Interview Questions */}
+                {(data2 as any).jd_match.suggested_interview_questions?.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-white/[0.06]">
+                    <p className="text-[9px] text-indigo-400 uppercase tracking-wider mb-2">Interview Questions for this Role</p>
+                    {(data2 as any).jd_match.suggested_interview_questions.slice(0, 3).map((q: any, i: number) => (
+                      <div key={i} className="mb-2 last:mb-0">
+                        <p className="text-xs text-white">{i + 1}. {typeof q === 'string' ? q : q.question}</p>
+                        {typeof q !== 'string' && q.tests_for && (
+                          <p className="text-[10px] text-slate-500 ml-4">Tests: {q.tests_for}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </ReportErrorBoundary>
+          )}
 
           {/* -- Section: Deep Dive -- */}
           <div className="flex items-center gap-3 mb-4 mt-8">

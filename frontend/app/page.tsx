@@ -540,7 +540,14 @@ export default function Home() {
     if (!user) incrementGuestScan();
 
     setLoading(true);
-    router.push(`/report/${username}`);
+    // Pass job requirements as URL params so the report page can forward them to the API
+    const hasReqs = Object.values(jobReqs).some((v) => typeof v === "string" && v.trim());
+    const reportUrl = hasReqs
+      ? `/report/${username}?${new URLSearchParams(
+          Object.fromEntries(Object.entries(jobReqs).filter(([, v]) => typeof v === "string" && v.trim()))
+        ).toString()}`
+      : `/report/${username}`;
+    router.push(reportUrl);
   };
 
   const updateJobReq = (field: keyof JobRequirements, value: string) => {
