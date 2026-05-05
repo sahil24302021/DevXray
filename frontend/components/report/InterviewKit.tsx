@@ -45,10 +45,12 @@ const CATEGORY_ICONS: Record<string, string> = {
 function getDifficulty(reportData: any): string {
   const github = reportData?.github_intelligence || reportData?.github_report;
   const score: number =
-    github?.final_score ??
-    github?.score ??
-    reportData?.deep_report?.overall_score ??
-    reportData?.claims_validation?.authenticity_score ??
+    Number(reportData?.final_score) ||
+    Number(reportData?.score) ||
+    Number(github?.final_score) ||
+    Number(github?.score) ||
+    Number(reportData?.deep_report?.overall_score) ||
+    Number(reportData?.claims_validation?.authenticity_score) ||
     0;
   if (score < 60) return "junior";
   if (score <= 80) return "mid";
@@ -111,7 +113,7 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
 
     const github = reportData?.github_intelligence || reportData?.github_report || reportData;
     const resume = reportData?.resume_data || {};
-    const score = github?.final_score ?? github?.score ?? reportData?.deep_report?.overall_score ?? 0;
+    const score = Number(reportData?.final_score) || Number(reportData?.score) || Number(github?.final_score) || Number(github?.score) || Number(reportData?.deep_report?.overall_score) || 0;
 
     // ── Role-based skill priority override ──
     const ROLE_SKILL_PRIORITIES: Record<string, string[]> = {
@@ -122,8 +124,8 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
       "frontend": ["React", "TypeScript", "Next.js", "Tailwind CSS"],
     };
 
-    const roleLower = (github?.developer_tier?.tier || "").toLowerCase();
-    const candidateRole = (resume?.current_role || "").toLowerCase();
+    const roleLower = String(github?.developer_tier?.tier || github?.developer_tier || "").toLowerCase();
+    const candidateRole = String(resume?.current_role || "").toLowerCase();
 
     // Find matching priority list
     let prioritySkills: string[] = [];
@@ -147,15 +149,15 @@ export default function InterviewKit({ reportData, candidateName }: InterviewKit
 
     const deepDiveSkills = prioritySkills.length > 0
       ? prioritySkills.filter(ps =>
-          verifiedSkillNames.some((vs: string) => vs.toLowerCase().includes(ps.toLowerCase()))
+          verifiedSkillNames.some((vs: string) => String(vs).toLowerCase().includes(String(ps).toLowerCase()))
         ).slice(0, 4)
       : [];
 
     // Merge: priority skills first, then fill remaining from top_skills
-    const usedSkills = new Set(deepDiveSkills.map((s: string) => s.toLowerCase()));
+    const usedSkills = new Set(deepDiveSkills.map((s: string) => String(s).toLowerCase()));
     const remainingSlots = 5 - deepDiveSkills.length;
     const fillerSkills = allTopSkills
-      .filter((s: string) => !usedSkills.has(s.toLowerCase()))
+      .filter((s: string) => !usedSkills.has(String(s).toLowerCase()))
       .slice(0, remainingSlots);
     const skills = [...deepDiveSkills, ...fillerSkills];
     const weaknesses = (github?.weaknesses || github?.score_breakdown?.weaknesses || []).slice(0, 4);
@@ -258,9 +260,9 @@ ${topRepos.length > 0 ? `Reference their actual projects: ${topRepos.join(", ")}
       system_design_challenge: (() => {
         // Choose system design based on candidate's projects/skills
         const allRepoNames = (github?.top_repos || topRepos || []).map((r: any) =>
-          ((r.name || r) + " " + (r.description || "")).toLowerCase()
+          (String(r?.name || r || "") + " " + String(r?.description || "")).toLowerCase()
         ).join(" ");
-        const allSkillsLower = skills.map((s: string) => s.toLowerCase()).join(" ");
+        const allSkillsLower = skills.map((s: string) => String(s).toLowerCase()).join(" ");
 
         if (/bot|automat|webhook|cron|scraper|crawl|discord|slack|telegram/.test(allRepoNames + allSkillsLower)) {
           return {
@@ -317,7 +319,7 @@ ${topRepos.length > 0 ? `Reference their actual projects: ${topRepos.join(", ")}
 
         // Q2: pick based on candidate's specific detected gaps
         const allFlags = redFlags.join(" ").toLowerCase();
-        const allWeaknesses = weaknesses.join(" ").toLowerCase();
+        const allWeaknesses = weaknesses.map((w: any) => String(w)).join(" ").toLowerCase();
 
         let q2;
         if (/no test|test.*missing|test.*sparse|low.*coverage|no.*unit/.test(allFlags + allWeaknesses)) {
@@ -357,7 +359,10 @@ ${topRepos.length > 0 ? `Reference their actual projects: ${topRepos.join(", ")}
       })(),
 
       coding_challenge: (() => {
-        const primaryLang = (skills[0] || "").toLowerCase();
+        // Get primary language from top_languages (actual language names like "Python", "JavaScript")
+        // instead of top_skills (framework names like "React", "FastAPI")
+        const topLangs = (github?.top_languages || reportData?.top_languages || []);
+        const primaryLang = String(topLangs[0] || skills[0] || "").toLowerCase();
 
         // Language-specific coding challenges
         if (/python/.test(primaryLang)) {

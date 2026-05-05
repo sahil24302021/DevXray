@@ -332,7 +332,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
   if (!data) return null;
 
   // ─── Derive convenience fields the backend doesn't emit directly ───
-  const score = Math.round((data.final_score ?? (data.score as number) ?? 0) * 10) / 10;
+  const score = Math.round(data.final_score ?? (data.score as number) ?? 0);
   const createdAt = data.created_at || (data.basic_info as any)?.created_at || "";
   const accountAgeDays = createdAt
     ? Math.max(0, (Date.now() - new Date(createdAt).getTime()) / 86400000)
@@ -721,7 +721,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
               {(() => {
                 const rec = data2.hiring_recommendation;
                 const signal = typeof rec === 'object' ? (rec as any)?.signal || (rec as any)?.recommendation : (typeof rec === 'string' ? rec : '');
-                const signalLower = (signal || '').toLowerCase();
+                const signalLower = String(signal || '').toLowerCase();
                 const isHire = signalLower.includes('strong hire') || signalLower.includes('hire') && !signalLower.includes('no');
                 const isMaybe = signalLower.includes('maybe') || signalLower.includes('consider') || signalLower.includes('conditional');
                 const badgeColor = isHire ? 'from-emerald-500 to-emerald-700' : isMaybe ? 'from-amber-500 to-amber-700' : 'from-red-500 to-red-700';
@@ -755,7 +755,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                     const langs = (data2.top_languages || []).slice(0, 3).join(', ') || 'various languages';
                     const years = accountAgeYears > 0 ? `${accountAgeYears} years` : 'some time';
                     const repoCount = data2.total_repos || data2.public_repos || 0;
-                    const tier = ((data2 as any).benchmark?.tier || data2.developer_tier || 'mid-level').toLowerCase();
+                    const tier = String((data2 as any).benchmark?.tier || data2.developer_tier || 'mid-level').toLowerCase();
                     return `This developer has been on GitHub for ${years}, working mainly in ${langs}. They have ${repoCount} public repositories. Based on code analysis, they are assessed at a ${tier} level with a score of ${score}/100.`;
                   })()}
                 </p>
@@ -767,9 +767,18 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                   <span>💰</span> Estimated Salary Range
                 </h3>
                 {(() => {
-                  const tier = ((data2 as any).benchmark?.tier || data2.developer_tier || '').toLowerCase();
-                  const location = (data2 as any).location || '';
-                  const isIndia = location.toLowerCase().includes('india') || location.toLowerCase().includes('mumbai') || location.toLowerCase().includes('delhi') || location.toLowerCase().includes('bangalore');
+                  const tier = String((data2 as any).benchmark?.tier || data2.developer_tier || '').toLowerCase();
+                  const location = String((data2 as any).location || '').toLowerCase();
+                  // Comprehensive India detection — covers country name + 25 major Indian cities
+                  const INDIA_KEYWORDS = [
+                    'india', 'mumbai', 'delhi', 'bangalore', 'bengaluru', 'hyderabad',
+                    'chennai', 'kolkata', 'pune', 'ahmedabad', 'jaipur', 'lucknow',
+                    'chandigarh', 'noida', 'gurgaon', 'gurugram', 'kochi', 'indore',
+                    'bhopal', 'nagpur', 'coimbatore', 'thiruvananthapuram', 'patna',
+                    'surat', 'vadodara', 'visakhapatnam', 'mangalore', 'mysore',
+                    'trivandrum', 'madras', 'calcutta', 'bombay',
+                  ];
+                  const isIndia = INDIA_KEYWORDS.some(kw => location.includes(kw));
                   
                   let range = { low: '$40K', high: '$70K', label: 'Junior' };
                   if (tier.includes('senior') || tier.includes('expert') || score >= 80) {

@@ -10,6 +10,14 @@
  * This means the candidates dashboard works out-of-the-box even without a
  * Supabase project, and silently upgrades to real persistence once env vars
  * are set.
+ *
+ * IMPORTANT: The Supabase `candidates` table has a FIXED schema:
+ *   id, username, name, avatar_url, source, score, tier, risk_level,
+ *   recommendation_summary, languages (TEXT[]), full_report (JSONB),
+ *   scanned_at, created_at, user_id
+ * All other fields (final_score, developer_tier, hiring_recommendation,
+ * verified_skills, top_languages, confidence_score, report_payload)
+ * are stored INSIDE `full_report` JSONB to avoid schema mismatch errors.
  */
 
 "use client";
@@ -18,6 +26,14 @@ import { supabase, isSupabaseAvailable, CandidateRecord } from "./db";
 import { AnalysisResult } from "./api";
 
 const LS_KEY = "devxray_candidates";
+
+// ─── Columns that actually exist in the Supabase `candidates` table ──────────
+// Anything NOT in this list goes into `full_report` JSONB.
+const SUPABASE_COLUMNS = new Set([
+  "id", "username", "name", "avatar_url", "source", "score", "tier",
+  "risk_level", "recommendation_summary", "languages", "full_report",
+  "scanned_at", "created_at", "user_id",
+]);
 
 // ─── localStorage helpers ────────────────────────────────────────────────────
 
@@ -135,6 +151,71 @@ export function buildCandidateRecord(
 }
 
 /**
+ * Build a Supabase-safe row from a CandidateRecord.
+ * Only includes columns that exist in the actual `candidates` table schema.
+ * Everything else goes into `full_report` JSONB.
+ */
+function buildSupabaseRow(record: CandidateRecord): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  const extras: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(record)) {
+    if (SUPABASE_COLUMNS.has(key)) {
+      row[key] = value;
+    } else {
+      extras[key] = value;
+    }
+  }
+
+  // Merge extras into full_report JSONB (include report_payload data too)
+  const existingReport = (record as any).report_payload || (record as any).full_report || {};
+  row["full_report"] = {
+    ...existingReport,
+    // Store extra fields that don't have their own DB column
+    _extra: {
+      final_score: record.final_score,
+      developer_tier: record.developer_tier,
+      hiring_recommendation: record.hiring_recommendation,
+      verified_skills: record.verified_skills,
+      top_languages: record.top_languages,
+      confidence_score: record.confidence_score,
+    },
+  };
+
+  return row;
+}
+
+/**
+ * Reconstruct a full CandidateRecord from a Supabase row.
+ * Pulls extra fields back out of `full_report._extra`.
+ */
+function fromSupabaseRow(row: Record<string, unknown>): CandidateRecord {
+  const fullReport = (row.full_report || {}) as Record<string, unknown>;
+  const extra = (fullReport._extra || {}) as Record<string, unknown>;
+
+  return {
+    id: String(row.id || ""),
+    username: String(row.username || ""),
+    name: String(row.name || ""),
+    avatar_url: String(row.avatar_url || ""),
+    score: Number(row.score || 0),
+    final_score: Number(extra.final_score || row.score || 0),
+    tier: String(row.tier || ""),
+    developer_tier: String(extra.developer_tier || row.tier || ""),
+    risk_level: String(row.risk_level || ""),
+    hiring_recommendation: String(extra.hiring_recommendation || row.recommendation_summary || ""),
+    recommendation_summary: String(row.recommendation_summary || ""),
+    languages: (row.languages || []) as string[],
+    top_languages: (extra.top_languages || row.languages || []) as string[],
+    verified_skills: (extra.verified_skills || []) as string[],
+    confidence_score: Number(extra.confidence_score || 0),
+    scanned_at: String(row.scanned_at || ""),
+    report_payload: fullReport as Record<string, unknown>,
+    user_id: String(row.user_id || ""),
+  };
+}
+
+/**
  * Persist one candidate scan result.
  * Returns the saved record, or null on failure.
  */
@@ -156,6 +237,8 @@ export async function saveCandidate(
 
   if (isSupabaseAvailable && supabase) {
     try {
+      const supabaseRow = buildSupabaseRow(record);
+
       // First try to find an existing record
       const { data: existing } = await supabase
         .from("candidates")
@@ -165,37 +248,37 @@ export async function saveCandidate(
         .maybeSingle();
 
       if (existing) {
-        // Update existing record
+        // Update existing record — only send valid columns
+        const { id: _existingId, ...updateData } = supabaseRow;
         const { data, error } = await supabase
           .from("candidates")
-          .update({
-            ...record,
-            id: existing.id,  // Keep original ID
-          })
+          .update(updateData)
           .eq("id", existing.id)
           .select()
           .single();
 
         if (error) {
           console.warn("[candidates-store] Supabase update failed:", error.message);
+          // Fall through to localStorage
         } else {
           // Also update localStorage as a cache
           lsSaveOne(record, username);
-          return data as CandidateRecord;
+          return fromSupabaseRow(data as Record<string, unknown>);
         }
       } else {
-        // Insert new record
+        // Insert new record — only send valid columns
         const { data, error } = await supabase
           .from("candidates")
-          .insert(record)
+          .insert(supabaseRow)
           .select()
           .single();
 
         if (error) {
           console.warn("[candidates-store] Supabase insert failed:", error.message);
+          // Fall through to localStorage
         } else {
           lsSaveOne(record, username);
-          return data as CandidateRecord;
+          return fromSupabaseRow(data as Record<string, unknown>);
         }
       }
     } catch (err) {
@@ -250,7 +333,7 @@ export async function listCandidates(): Promise<CandidateRecord[]> {
       const { data, error } = await query;
 
       if (!error && data && data.length > 0) {
-        return data as CandidateRecord[];
+        return data.map((row) => fromSupabaseRow(row as Record<string, unknown>));
       }
       if (error) {
         console.warn("[candidates-store] Supabase fetch failed:", error.message);
