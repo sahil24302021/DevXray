@@ -420,6 +420,29 @@ ${topRepos.length > 0 ? `Reference their actual projects: ${topRepos.join(", ")}
               : "Basic memory concepts, pointer/reference handling, buffer management"
           };
         }
+        if (/dart|flutter/.test(primaryLang)) {
+          return {
+            problem: score >= 70
+              ? `Build a Flutter widget that implements a search-as-you-type feature: a TextField that debounces input (300ms), calls a mock API, and displays results in a ListView with loading/error/empty states. Use a Cubit or ValueNotifier for state management — no setState.`
+              : `Build a Flutter widget with a TextField and a ListView. When the user types, filter a hardcoded list of items and display matching results below. Handle empty state with a "No results" message.`,
+            difficulty,
+            what_it_tests: score >= 70
+              ? "State management patterns, debouncing in Dart, widget composition, error handling"
+              : "Basic Flutter widgets, setState vs stateless, list filtering, UI composition"
+          };
+        }
+        if (/tensorflow|pytorch|keras|machine.?learn|deep.?learn|ml|ai/.test(primaryLang) || 
+            /tensorflow|pytorch|keras|scikit/.test(skills.map((s: string) => String(s).toLowerCase()).join(" "))) {
+          return {
+            problem: score >= 70
+              ? `Write a custom training loop in PyTorch/TensorFlow that supports: gradient accumulation (effective batch size = N * accumulation_steps), mixed-precision training, and early stopping with patience. Include proper gradient clipping and learning rate warmup.`
+              : `Write a function that loads a CSV dataset, handles missing values (fill numeric with median, categorical with mode), normalizes numeric columns to 0-1 range, and splits into train/test sets. Use pandas and scikit-learn.`,
+            difficulty,
+            what_it_tests: score >= 70
+              ? "Training loop internals, gradient management, mixed precision, optimization techniques"
+              : "Data preprocessing, pandas operations, scikit-learn pipeline basics, train/test splitting"
+          };
+        }
 
         // Default: adapted two-sum based on skill level
         return {

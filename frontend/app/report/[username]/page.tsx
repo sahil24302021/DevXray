@@ -277,21 +277,25 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           // We have a cached result — use it directly instead of re-scanning
           const payload = existing.report_payload as Record<string, unknown>;
           // Reconstruct enough of an AnalysisResult for the report to render
+          // CRITICAL: Spread the full report_payload FIRST so all deep fields
+          // (language_breakdown, contribution_streak, activity_heatmap, etc.)
+          // are available. Then overlay the top-level aliases.
           const cachedResult: AnalysisResult = {
             ...payload,
             username: existing.username,
             name: existing.name,
             avatar_url: existing.avatar_url,
-            final_score: existing.final_score,
-            developer_tier: existing.developer_tier,
-            risk_level: existing.risk_level,
-            hiring_recommendation: existing.hiring_recommendation as any,
-            verified_skills: existing.verified_skills,
-            top_languages: existing.top_languages,
-            confidence_score: existing.confidence_score,
+            final_score: existing.final_score || (payload.final_score as number) || 0,
+            score: existing.score || (payload.score as number) || 0,
+            developer_tier: existing.developer_tier || (payload.developer_tier as string) || '',
+            risk_level: existing.risk_level || (payload.risk_level as string) || '',
+            hiring_recommendation: (existing.hiring_recommendation || payload.hiring_recommendation) as any,
+            verified_skills: existing.verified_skills || (payload.verified_skills as string[]) || [],
+            top_languages: existing.top_languages || (payload.top_languages as string[]) || [],
+            confidence_score: existing.confidence_score || (payload.confidence_score as number) || 0,
           };
           // If cached payload has enough data, use it; otherwise fall through to API
-          if (cachedResult.final_score && cachedResult.final_score > 0) {
+          if ((cachedResult.final_score && cachedResult.final_score > 0) || (cachedResult.score && (cachedResult.score as number) > 0)) {
             setData(cachedResult);
             setIsLoading(false);
             return;
@@ -769,7 +773,9 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                 {(() => {
                   const tier = String((data2 as any).benchmark?.tier || data2.developer_tier || '').toLowerCase();
                   const location = String((data2 as any).location || '').toLowerCase();
+                  const bio = String((data2 as any).bio || '').toLowerCase();
                   // Comprehensive India detection — covers country name + 25 major Indian cities
+                  // Also checks bio text as fallback when location is empty
                   const INDIA_KEYWORDS = [
                     'india', 'mumbai', 'delhi', 'bangalore', 'bengaluru', 'hyderabad',
                     'chennai', 'kolkata', 'pune', 'ahmedabad', 'jaipur', 'lucknow',
@@ -778,7 +784,8 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                     'surat', 'vadodara', 'visakhapatnam', 'mangalore', 'mysore',
                     'trivandrum', 'madras', 'calcutta', 'bombay',
                   ];
-                  const isIndia = INDIA_KEYWORDS.some(kw => location.includes(kw));
+                  const textToCheck = location || bio; // Use bio as fallback if no location
+                  const isIndia = INDIA_KEYWORDS.some(kw => textToCheck.includes(kw));
                   
                   let range = { low: '$40K', high: '$70K', label: 'Junior' };
                   if (tier.includes('senior') || tier.includes('expert') || score >= 80) {
@@ -1136,7 +1143,7 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           {/* Footer */}
           <div className="mt-12 pt-6 border-t border-white/[0.06] text-center">
             <p className="text-slate-500 text-[10px] tracking-[0.15em] uppercase font-medium">
-              DevXray AI · {viewMode === 'simple' ? 'HR Summary' : 'Deep Intelligence'} Report · @{data2.username} · {data2.repos_deep_analyzed} repos deep-analyzed
+              DevXray AI · {viewMode === 'simple' ? 'HR Summary' : 'Deep Intelligence'} Report · @{data2.username} · {data2.total_repos || data2.public_repos || data2.repos_deep_analyzed || 0} repos analyzed
             </p>
           </div>
       </main>

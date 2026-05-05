@@ -489,7 +489,8 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
     return {
         "language_bytes": total_languages,
         "all_commits": all_commits,
-        "repos_analyzed": len(top_repos),
+        "repos_analyzed": len(repo_data),  # FIX: Count repos with actual file contents fetched
+        "total_repos_weighted": len(top_repos),  # Total repos used for language/commit analysis
         "repo_data": repo_data,
         "commit_frequency": commit_frequency,
     }
