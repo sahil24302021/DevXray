@@ -41,8 +41,14 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     last_error = None
 
     # ── STEP 1: Try Groq first (free, unlimited, fast) ──────────────
-    groq_key = _os.getenv("GROQ_API_KEY", "")
-    if groq_key:
+    # Support multiple Groq keys for rotation
+    groq_keys = [k.strip() for k in [
+        _os.getenv("GROQ_API_KEY", ""),
+        _os.getenv("GROQ_API_KEY_2", ""),
+    ] if k.strip()]
+
+    for groq_idx, groq_key in enumerate(groq_keys):
+        groq_label = f"key-{groq_idx + 1}"
         # Groq free tier: keep prompt under ~6000 chars (~1500 tokens) to avoid 413 Payload Too Large
         GROQ_MAX_CHARS = 6000
         groq_prompt = prompt if len(prompt) <= GROQ_MAX_CHARS else prompt[:GROQ_MAX_CHARS] + "\n\n[...truncated. Complete the JSON with ALL data above. Be thorough.]"
@@ -71,21 +77,26 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                     txt = response_json["choices"][0]["message"]["content"].strip()
                     txt = txt.replace("```json", "").replace("```", "").strip()
                     result = _j.loads(txt)
-                    log.info("[GeminiClient] Groq succeeded (primary)")
+                    log.info(f"[GeminiClient] Groq ({groq_label}) succeeded (primary)")
                     return result
             except Exception as groq_err:
                 last_error = groq_err
                 err_str = str(groq_err).lower()
                 # 413 = Payload Too Large — don't retry, fall through immediately
                 if "413" in err_str or "payload too large" in err_str or "too large" in err_str:
-                    log.warning(f"[GeminiClient] Groq 413 payload too large — skipping to next provider")
+                    log.warning(f"[GeminiClient] Groq ({groq_label}) 413 payload too large — skipping to next provider")
                     break
-                if ("429" in err_str or "too many" in err_str or "rate" in err_str) and attempt == 0:
-                    wait_time = 3
-                    log.warning(f"[GeminiClient] Groq rate limited — retrying in {wait_time}s")
-                    await _aio.sleep(wait_time)
-                    continue
-                log.warning(f"[GeminiClient] Groq failed: {groq_err} — trying next provider")
+                if ("429" in err_str or "too many" in err_str or "rate" in err_str):
+                    if attempt == 0:
+                        wait_time = 3
+                        log.warning(f"[GeminiClient] Groq ({groq_label}) rate limited — retrying in {wait_time}s")
+                        await _aio.sleep(wait_time)
+                        continue
+                    else:
+                        # Retry exhausted — try next Groq key
+                        log.warning(f"[GeminiClient] Groq ({groq_label}) rate limited after retry — rotating to next key")
+                        break
+                log.warning(f"[GeminiClient] Groq ({groq_label}) failed: {groq_err} — trying next provider")
                 break
 
     # ── STEP 2: Try Together AI (free $25 credit, never expires) ────

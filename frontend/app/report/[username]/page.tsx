@@ -295,7 +295,26 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             confidence_score: existing.confidence_score || (payload.confidence_score as number) || 0,
           };
           // If cached payload has enough data, use it; otherwise fall through to API
-          if ((cachedResult.final_score && cachedResult.final_score > 0) || (cachedResult.score && (cachedResult.score as number) > 0)) {
+          // Check for deep analysis fields that the detailed view needs
+          const hasDeepFields = !!(
+            (cachedResult as any).feature_importance ||
+            (cachedResult as any).commit_analysis ||
+            (cachedResult as any).evidence_trail ||
+            (cachedResult as any).verification_sources ||
+            (cachedResult as any).strengths ||
+            (cachedResult as any).weaknesses ||
+            (cachedResult as any).verdict ||
+            (cachedResult as any).hiring_recommendation
+          );
+          const hasScore = (cachedResult.final_score && cachedResult.final_score > 0) || (cachedResult.score && (cachedResult.score as number) > 0);
+          if (hasScore && hasDeepFields) {
+            setData(cachedResult);
+            setIsLoading(false);
+            return;
+          }
+          // If we have a score but no deep fields, still show it but log a warning
+          if (hasScore) {
+            console.warn("[report] Cached report lacks deep analysis fields — detailed view may be incomplete. Re-scan for full data.");
             setData(cachedResult);
             setIsLoading(false);
             return;

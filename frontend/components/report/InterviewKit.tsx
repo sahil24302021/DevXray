@@ -362,7 +362,17 @@ ${topRepos.length > 0 ? `Reference their actual projects: ${topRepos.join(", ")}
         // Get primary language from top_languages (actual language names like "Python", "JavaScript")
         // instead of top_skills (framework names like "React", "FastAPI")
         const topLangs = (github?.top_languages || reportData?.top_languages || []);
-        const primaryLang = String(topLangs[0] || skills[0] || "").toLowerCase();
+        // FIX: top_languages entries can be strings ("Python") or objects ({language: "Python", ...})
+        // Extract the actual language name regardless of format
+        function extractLangName(lang: any): string {
+          if (!lang) return '';
+          if (typeof lang === 'string') return lang.toLowerCase();
+          if (typeof lang === 'object') {
+            return String(lang.language || lang.name || lang.skill_name || '').toLowerCase();
+          }
+          return String(lang).toLowerCase();
+        }
+        const primaryLang = extractLangName(topLangs[0]) || extractLangName(skills[0]) || '';
 
         // Language-specific coding challenges
         if (/python/.test(primaryLang)) {
