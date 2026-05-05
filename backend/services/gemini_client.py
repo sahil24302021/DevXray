@@ -43,7 +43,9 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     # ── STEP 1: Try Groq first (free, unlimited, fast) ──────────────
     groq_key = _os.getenv("GROQ_API_KEY", "")
     if groq_key:
-        groq_prompt = prompt if len(prompt) <= 15000 else prompt[:15000] + "\n\n[...truncated for token limit. Complete the JSON with ALL the data provided above. Be thorough and specific.]"
+        # Groq free tier: keep prompt under ~6000 chars (~1500 tokens) to avoid 413 Payload Too Large
+        GROQ_MAX_CHARS = 6000
+        groq_prompt = prompt if len(prompt) <= GROQ_MAX_CHARS else prompt[:GROQ_MAX_CHARS] + "\n\n[...truncated. Complete the JSON with ALL data above. Be thorough.]"
         for attempt in range(2):  # Retry once on rate limit
             try:
                 async with _hx.AsyncClient(timeout=30.0) as c:
@@ -54,11 +56,11 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                         json={
                             "model": "llama-3.3-70b-versatile",
                             "messages": [
-                                {"role": "system", "content": "You are a JSON generator. Reply ONLY with valid JSON. No markdown, no explanation, no extra text. Be thorough, specific, and evidence-based in every field."},
+                                {"role": "system", "content": "Reply ONLY with valid JSON. No markdown. Be specific and evidence-based."},
                                 {"role": "user", "content": groq_prompt}
                             ],
                             "temperature": temperature,
-                            "max_tokens": 8000,
+                            "max_tokens": 4000,
                         }
                     )
                     r.raise_for_status()
@@ -74,6 +76,10 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
             except Exception as groq_err:
                 last_error = groq_err
                 err_str = str(groq_err).lower()
+                # 413 = Payload Too Large — don't retry, fall through immediately
+                if "413" in err_str or "payload too large" in err_str or "too large" in err_str:
+                    log.warning(f"[GeminiClient] Groq 413 payload too large — skipping to next provider")
+                    break
                 if ("429" in err_str or "too many" in err_str or "rate" in err_str) and attempt == 0:
                     wait_time = 3
                     log.warning(f"[GeminiClient] Groq rate limited — retrying in {wait_time}s")

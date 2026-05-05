@@ -274,67 +274,30 @@ async def generate_ai_summary(
     if data["most_recent_repo"]:
         most_recent_name = data["most_recent_repo"].get("name", "")
 
-    prompt = f"""You are a senior engineering hiring manager writing a forensic developer assessment.
-Write in plain, direct English. Be specific. Reference actual evidence.
+    prompt = f"""Assess @{data['username']} for hiring. Be specific, reference evidence.
 
-DEVELOPER: @{data['username']}
-ACCOUNT: {data.get('account_age_plain', 'unknown')} old
-FOLLOWERS: {data.get('followers', 0)} ({
-    'top developer — significant social proof' if data.get('followers', 0) >= 1000
-    else 'limited following' if data.get('followers', 0) < 50
-    else 'moderate following'
-})
-ORIGINAL REPOS: {len(non_fork_repos)}
-TOTAL STARS: {data.get('total_stars', 0)}
-
-TOP REPOSITORIES (sorted by most recently updated):
-{chr(10).join(top_repos_info) if top_repos_info else '  - No notable repos'}
-
-MOST RECENTLY ACTIVE PROJECT: {most_recent_name or 'Unknown'}
-
-TOP SKILLS (ranked by evidence — repo count, stars, recency): {', '.join(data['top_languages'][:4]) or 'Unknown'}
-DIP SCORE: {score or 'N/A'}/100
-TIER: {tier or 'Unknown'}
-RISK LEVEL: {risk_level or 'Unknown'}
-
-VERIFIED STRENGTHS (from code analysis):
-{strengths_text}
-
-DETECTED WEAKNESSES (from code analysis):
-{weaknesses_text}
+PROFILE: {data.get('account_age_plain', '?')} old, {data.get('followers', 0)} followers, {len(non_fork_repos)} repos, {data.get('total_stars', 0)} stars
+REPOS: {chr(10).join(top_repos_info[:3]) if top_repos_info else 'None'}
+ACTIVE PROJECT: {most_recent_name or 'Unknown'}
+SKILLS: {', '.join(data['top_languages'][:4]) or 'Unknown'}
+SCORE: {score or 'N/A'}/100 | TIER: {tier or '?'} | RISK: {risk_level or '?'}
+STRENGTHS: {'; '.join((strengths or [])[:3]) or 'None'}
+WEAKNESSES: {'; '.join((weaknesses or [])[:3]) or 'None'}
 {crossval_text}
 
-BANNED PHRASES — do NOT use any of these:
-- "significant improvement needed"
-- "authenticity concerns detected"
-- "irregular activity patterns"
-- "code quality needs significant improvement"
-- "notable gaps"
-- "this candidate may not yet meet the bar"
-
-REQUIREMENTS:
-1. The "ai_assessment" field MUST reference the most recently active project "{most_recent_name}" by name
-2. The top 2 skills you mention MUST match the TOP SKILLS list above — do NOT invent skills not in the list
-3. Every sentence must be specific to THIS developer — not copy-pasteable to any other report
-4. If followers >= 1000, acknowledge this as a real signal of credibility
-5. If total_stars >= 100, mention this as evidence of real-world impact
-6. The "for_recruiter" field must be readable by a non-technical HR manager
-7. "interview_must_ask" must reference something specific from their code or repos
-{('8. Include the resume cross-validation findings in your assessment' if crossval_text else '')}
-
-Return ONLY this JSON (no markdown, no explanation):
+Return ONLY JSON:
 {{
-    "tl_dr": "One sentence, max 20 words. Must name @{data['username']} and state the verdict.",
-    "ai_assessment": "2-3 sentences describing THIS developer specifically. Must reference {most_recent_name or 'their most active project'} and their top verified skills ({', '.join(data['top_languages'][:2]) or 'detected skills'}).",
-    "for_recruiter": "2-3 non-technical sentences. What kind of developer, what role they fit, and one key concern. Written for HR.",
-    "for_hiring_manager": "2-3 technical sentences. Specific code quality, patterns, growth signal. Not generic.",
-    "standout_quality": "Most impressive specific thing backed by evidence from their repos.",
-    "biggest_concern": "Most important concern with specific evidence.",
-    "recommended_role_level": "Intern | Junior | Mid | Senior | Lead",
-    "interview_must_ask": "One targeted question based on something specific in their code or repos.",
-    "confidence": "High | Medium | Low",
-    "hire_signal": "STRONG HIRE | HIRE | MAYBE | INTERN ONLY | NO HIRE",
-    "summary": "Same as ai_assessment (for backwards compatibility)"
+    "tl_dr": "One sentence, name @{data['username']}, state verdict.",
+    "ai_assessment": "2-3 sentences. Reference {most_recent_name or 'their project'} and {', '.join(data['top_languages'][:2]) or 'skills'}.",
+    "for_recruiter": "2-3 non-technical sentences for HR.",
+    "for_hiring_manager": "2-3 technical sentences.",
+    "standout_quality": "Best thing with evidence.",
+    "biggest_concern": "Key concern with evidence.",
+    "recommended_role_level": "Intern|Junior|Mid|Senior|Lead",
+    "interview_must_ask": "One specific question from their code.",
+    "confidence": "High|Medium|Low",
+    "hire_signal": "STRONG HIRE|HIRE|MAYBE|INTERN ONLY|NO HIRE",
+    "summary": "Same as ai_assessment"
 }}"""
 
     try:
