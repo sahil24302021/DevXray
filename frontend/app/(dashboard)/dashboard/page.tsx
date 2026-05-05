@@ -140,6 +140,7 @@ function MiniBarChart({ data }: { data: number[] }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const QUICK_ACTIONS = [
+  { href: "/job-match", label: "New Job", sub: "Match candidates to role", color: "#f472b6", icon: "◎" },
   { href: "/bulk-upload", label: "Bulk Upload", sub: "Up to 100 PDFs", color: "#cdff00", icon: "↑" },
   { href: "/compare", label: "Compare", sub: "Side-by-side analysis", color: "#a78bfa", icon: "⇄" },
   { href: "/candidates", label: "All Candidates", sub: "Browse & filter", color: "#34d399", icon: "⊞" },

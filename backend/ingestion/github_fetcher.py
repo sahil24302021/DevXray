@@ -330,12 +330,13 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
     This is the critical data enabler — without file contents, all code
     intelligence and skill detection falls back to shallow metadata analysis.
     """
-    SOURCE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java"}
-    SKIP_DIRS = {"node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".git"}
+    SOURCE_EXTENSIONS = {".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".kt", ".swift", ".dart", ".rb", ".php", ".cs", ".cpp", ".c", ".h"}
+    SKIP_DIRS = {"node_modules", "vendor", "venv", ".venv", "__pycache__", "dist", "build", ".git", ".next", "coverage"}
     MAX_FILE_SIZE = 50_000  # 50KB
-    MAX_FILES_PER_REPO = 15  # Reduced from 20 — 15 files per repo is plenty
-    TOP_REPOS_FOR_FILES = 10  # 10 repos × 15 files = 150 files, plenty for scoring
-    TOP_REPOS_FOR_LANG = 100  # Use ALL repos for comprehensive language detection
+    MAX_FILES_PER_REPO = 15  # 15 files per repo is plenty for code analysis
+    TOP_REPOS_FOR_FILES = 10  # Top 10 repos get deep file analysis (README + code)
+    # Use ALL non-fork repos for language detection — no cap
+    # This ensures a developer who built something serious 2 years ago isn't penalized
 
     # Pick top non-fork repos by composite score (Rule 3)
     originals = [r for r in repos if not r.get("is_fork", False)]
@@ -404,12 +405,13 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
 
         return weight
 
-    top_repos = sorted(originals, key=_repo_score, reverse=True)[:TOP_REPOS_FOR_LANG]
+    # Use ALL non-fork repos for language/commit analysis (no artificial cap)
+    top_repos = sorted(originals, key=_repo_score, reverse=True)
     top_repos_for_files = top_repos[:TOP_REPOS_FOR_FILES]
 
-    # Fetch languages and commits concurrently for top 10
+    # Fetch languages for ALL repos, commits for top 30 (rate-limit friendly)
     language_tasks = [fetch_repo_languages(username, r["name"]) for r in top_repos]
-    commit_tasks = [fetch_repo_commits(username, r["name"]) for r in top_repos]
+    commit_tasks = [fetch_repo_commits(username, r["name"]) for r in top_repos[:30]]
 
     lang_results = await asyncio.gather(*language_tasks, return_exceptions=True)
     commit_results = await asyncio.gather(*commit_tasks, return_exceptions=True)
@@ -423,7 +425,7 @@ async def fetch_deep_repo_data(username: str, repos: List[Dict[str, Any]]) -> Di
 
     # Collect all commits for analysis — include repo_name for organic detection
     all_commits = []
-    for repo, cr in zip(top_repos, commit_results):
+    for repo, cr in zip(top_repos[:30], commit_results):
         if isinstance(cr, list):
             for commit in cr:
                 if isinstance(commit, dict):

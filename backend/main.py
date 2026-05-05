@@ -2410,6 +2410,203 @@ async def linkedin_cookie_status(secret: str = ""):
     return status
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# JOB REQUIREMENTS MATCHING (Item #9)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/match-job")
+async def match_job_requirements(request: Request):
+    """
+    Match scanned candidates against job requirements.
+    
+    Input: {
+        "job_title": "Backend Engineer",
+        "required_skills": "Python, FastAPI, PostgreSQL, Docker",
+        "experience_level": "Senior",
+        "job_description": "...",
+        "candidates": [
+            { "username": "...", "verified_skills": [...], "top_languages": [...],
+              "score": 85, "tier": "A-Tier", ... }
+        ]
+    }
+    
+    Output: Ranked list of candidates with match %, skill breakdown, recommendation.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    job_title = body.get("job_title", "Software Engineer")
+    required_skills_raw = body.get("required_skills", "")
+    experience_level = body.get("experience_level", "Mid").lower()
+    job_description = body.get("job_description", "")
+    candidates = body.get("candidates", [])
+
+    if not candidates:
+        raise HTTPException(status_code=400, detail="No candidates provided")
+
+    # Parse required skills from comma-separated string
+    required_skills = [
+        s.strip().lower() for s in required_skills_raw.split(",")
+        if s.strip()
+    ]
+    if not required_skills:
+        # Try to extract skills from job description
+        common_skills = [
+            "python", "javascript", "typescript", "react", "node", "java", "go",
+            "rust", "c++", "docker", "kubernetes", "aws", "gcp", "sql", "postgresql",
+            "mongodb", "redis", "fastapi", "django", "flask", "express", "next.js",
+            "vue", "angular", "swift", "kotlin", "flutter", "dart", "tensorflow",
+            "pytorch", "machine learning", "devops", "ci/cd", "git", "linux",
+            "graphql", "rest", "microservices", "html", "css", "tailwind",
+        ]
+        desc_lower = job_description.lower()
+        required_skills = [s for s in common_skills if s in desc_lower]
+
+    if not required_skills:
+        required_skills = ["programming"]  # fallback
+
+    # Experience level score thresholds
+    exp_thresholds = {
+        "junior": {"min_score": 30, "ideal_score": 50},
+        "mid": {"min_score": 50, "ideal_score": 70},
+        "senior": {"min_score": 70, "ideal_score": 85},
+    }
+    threshold = exp_thresholds.get(experience_level, exp_thresholds["mid"])
+
+    results = []
+    for candidate in candidates:
+        username = candidate.get("username", "unknown")
+        candidate_score = candidate.get("score", 0) or candidate.get("final_score", 0) or 0
+
+        # Gather all candidate skills (lowercase for matching)
+        verified_skills = [
+            String_safe(s).lower() for s in (candidate.get("verified_skills") or [])
+        ]
+        top_languages = [
+            String_safe(s).lower() for s in (candidate.get("top_languages") or [])
+        ]
+        all_candidate_skills = set(verified_skills + top_languages)
+
+        # Also check languages array
+        languages = [
+            String_safe(s).lower() for s in (candidate.get("languages") or [])
+        ]
+        all_candidate_skills.update(languages)
+
+        # --- Skill matching ---
+        matched_skills = []
+        missing_skills = []
+
+        for req_skill in required_skills:
+            req_lower = req_skill.lower()
+            # Fuzzy match: "react" matches "react.js", "reactjs", "React"
+            # "node" matches "node.js", "nodejs"
+            found = False
+            for cs in all_candidate_skills:
+                if req_lower in cs or cs in req_lower:
+                    found = True
+                    break
+                # Handle common aliases
+                aliases = {
+                    "node": ["node.js", "nodejs", "express"],
+                    "react": ["react.js", "reactjs", "react native"],
+                    "python": ["python3", "py"],
+                    "javascript": ["js", "es6", "ecmascript"],
+                    "typescript": ["ts"],
+                    "postgresql": ["postgres", "psql"],
+                    "mongodb": ["mongo"],
+                    "machine learning": ["ml", "deep learning", "ai"],
+                    "docker": ["containerization", "containers"],
+                    "kubernetes": ["k8s"],
+                    "ci/cd": ["github actions", "jenkins", "circleci"],
+                    "next.js": ["nextjs"],
+                    "vue": ["vue.js", "vuejs"],
+                }
+                req_aliases = aliases.get(req_lower, [])
+                if cs in req_aliases or any(a in cs for a in req_aliases):
+                    found = True
+                    break
+
+            if found:
+                matched_skills.append(req_skill)
+            else:
+                missing_skills.append(req_skill)
+
+        # --- Calculate match percentage ---
+        skill_match_pct = round(
+            (len(matched_skills) / max(len(required_skills), 1)) * 100
+        )
+
+        # Factor in overall developer score
+        score_match = min(100, round(
+            (candidate_score / max(threshold["ideal_score"], 1)) * 100
+        ))
+
+        # Weighted: 60% skill match + 40% overall score
+        overall_match = round(skill_match_pct * 0.6 + score_match * 0.4)
+        overall_match = min(100, max(0, overall_match))
+
+        # --- Hire recommendation ---
+        if overall_match >= 80 and skill_match_pct >= 70:
+            recommendation = "Strong Match"
+        elif overall_match >= 60 and skill_match_pct >= 50:
+            recommendation = "Possible Match"
+        else:
+            recommendation = "Not Recommended"
+
+        # --- Gap-targeted interview questions ---
+        gap_questions = []
+        for gap in missing_skills[:3]:
+            gap_questions.append(
+                f"We need {gap} for this role. Can you describe any experience "
+                f"you have with {gap} or similar technologies? How quickly could "
+                f"you ramp up?"
+            )
+
+        results.append({
+            "username": username,
+            "name": candidate.get("name", username),
+            "avatar_url": candidate.get("avatar_url", ""),
+            "score": candidate_score,
+            "tier": candidate.get("tier", candidate.get("developer_tier", "")),
+            "match_percentage": overall_match,
+            "skill_match_percentage": skill_match_pct,
+            "matched_skills": matched_skills,
+            "missing_skills": missing_skills,
+            "recommendation": recommendation,
+            "gap_interview_questions": gap_questions,
+        })
+
+    # Sort by match percentage descending
+    results.sort(key=lambda x: x["match_percentage"], reverse=True)
+
+    # Add rank
+    for i, r in enumerate(results):
+        r["rank"] = i + 1
+
+    return {
+        "success": True,
+        "job_title": job_title,
+        "required_skills": required_skills,
+        "experience_level": experience_level,
+        "total_candidates": len(results),
+        "rankings": results,
+    }
+
+
+def String_safe(value) -> str:
+    """Safe string conversion for match-job endpoint."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return value.get("skill_name", value.get("name", str(value)))
+    return str(value)
+
+
 @app.get("/health")
 async def health():
     return {
