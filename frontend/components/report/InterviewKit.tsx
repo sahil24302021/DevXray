@@ -366,13 +366,67 @@ ${topRepos.length > 0 ? `Reference their actual projects: ${topRepos.join(", ")}
         // Extract the actual language name regardless of format
         function extractLangName(lang: any): string {
           if (!lang) return '';
-          if (typeof lang === 'string') return lang.toLowerCase();
+          if (typeof lang === 'string') return lang.trim().toLowerCase();
           if (typeof lang === 'object') {
-            return String(lang.language || lang.name || lang.skill_name || '').toLowerCase();
+            const name = lang.language || lang.name || lang.skill_name || '';
+            return String(name).trim().toLowerCase();
           }
-          return String(lang).toLowerCase();
+          return String(lang).trim().toLowerCase();
         }
-        const primaryLang = extractLangName(topLangs[0]) || extractLangName(skills[0]) || '';
+
+        // Try extracting from top_languages first
+        let primaryLang = '';
+        for (const tl of topLangs) {
+          const extracted = extractLangName(tl);
+          if (extracted && extracted !== '[object object]') {
+            primaryLang = extracted;
+            break;
+          }
+        }
+
+        // FALLBACK: If top_languages is empty or extraction failed,
+        // detect language from skills/frameworks
+        if (!primaryLang) {
+          const allSkillsLower = skills.map((s: any) => extractLangName(s)).join(' ');
+          // Map frameworks → languages
+          const SKILL_TO_LANG: Record<string, string> = {
+            'react': 'javascript', 'vue': 'javascript', 'angular': 'javascript',
+            'next': 'javascript', 'nextjs': 'javascript', 'next.js': 'javascript',
+            'express': 'javascript', 'node': 'javascript', 'nodejs': 'javascript',
+            'tailwind': 'javascript', 'webpack': 'javascript', 'vite': 'javascript',
+            'websocket': 'javascript', 'websockets': 'javascript',
+            'typescript': 'typescript', 'deno': 'typescript',
+            'django': 'python', 'flask': 'python', 'fastapi': 'python',
+            'pandas': 'python', 'tensorflow': 'python', 'pytorch': 'python',
+            'numpy': 'python', 'scikit': 'python', 'keras': 'python',
+            'spring': 'java', 'maven': 'java', 'gradle': 'java',
+            'flutter': 'dart', 'dart': 'dart',
+            'swiftui': 'swift', 'uikit': 'swift',
+            'gin': 'go', 'gorilla': 'go',
+            'rails': 'ruby', 'sinatra': 'ruby',
+            'laravel': 'php', 'symfony': 'php',
+          };
+          for (const [framework, lang] of Object.entries(SKILL_TO_LANG)) {
+            if (allSkillsLower.includes(framework)) {
+              primaryLang = lang;
+              break;
+            }
+          }
+        }
+
+        // Last resort: check if skills contain a direct language name
+        if (!primaryLang) {
+          const directLangs = ['python', 'javascript', 'typescript', 'java', 'go', 'rust', 'c++', 'c#', 'ruby', 'php', 'swift', 'kotlin', 'dart'];
+          const allSkillsStr = skills.map((s: any) => extractLangName(s)).join(' ');
+          for (const dl of directLangs) {
+            if (allSkillsStr.includes(dl)) {
+              primaryLang = dl;
+              break;
+            }
+          }
+        }
+
+        console.log('[InterviewKit] Detected primaryLang:', primaryLang, 'from topLangs:', topLangs?.slice?.(0, 3), 'skills:', skills?.slice?.(0, 5));
 
         // Language-specific coding challenges
         if (/python/.test(primaryLang)) {

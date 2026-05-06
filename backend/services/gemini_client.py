@@ -12,11 +12,20 @@ _client_key = None  # Track which key the cached client uses
 def _get_gemini_keys():
     """Return all available Gemini API keys in priority order."""
     keys = []
-    for var in ("GEMINI_API_KEY", "GEMINI_API_KEY_2"):
+    for var in ("GEMINI_API_KEY", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"):
         k = os.getenv(var, "").strip()
         if k:
             keys.append(k)
     return keys
+
+
+def sanitize_text(text: str) -> str:
+    """Remove invisible control characters that break JSON serialization.
+    Keeps tab (\t), newline (\n), carriage return (\r) but strips
+    null bytes, form feeds, vertical tabs, and all other C0/C1 control chars."""
+    if not isinstance(text, str):
+        return str(text) if text is not None else ""
+    return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
 
 
 def _get_client(api_key: str = ""):
@@ -39,6 +48,9 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     import httpx as _hx, json as _j, os as _os
 
     last_error = None
+
+    # ── Sanitize the prompt to remove control characters that break JSON ──
+    prompt = sanitize_text(prompt)
 
     # ── STEP 1: Try Groq first (free, unlimited, fast) ──────────────
     # Support multiple Groq keys for rotation

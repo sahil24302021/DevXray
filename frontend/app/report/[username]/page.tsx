@@ -745,10 +745,15 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                 const rec = data2.hiring_recommendation;
                 const signal = typeof rec === 'object' ? (rec as any)?.signal || (rec as any)?.recommendation : (typeof rec === 'string' ? rec : '');
                 const signalLower = String(signal || '').toLowerCase();
-                const isHire = signalLower.includes('strong hire') || signalLower.includes('hire') && !signalLower.includes('no');
-                const isMaybe = signalLower.includes('maybe') || signalLower.includes('consider') || signalLower.includes('conditional');
+                // FIX: Score-based HIRE threshold — 50-59 = MAYBE, <45 = NO HIRE
+                let isHire = signalLower.includes('strong hire') || (signalLower.includes('hire') && !signalLower.includes('no'));
+                let isMaybe = signalLower.includes('maybe') || signalLower.includes('consider') || signalLower.includes('conditional');
+                // Override with score-based logic for borderline cases
+                if (score >= 60) { isHire = true; isMaybe = false; }
+                else if (score >= 50) { isHire = false; isMaybe = true; }
+                else if (score < 45) { isHire = false; isMaybe = false; }
                 const badgeColor = isHire ? 'from-emerald-500 to-emerald-700' : isMaybe ? 'from-amber-500 to-amber-700' : 'from-red-500 to-red-700';
-                const badgeText = isHire ? '✓ HIRE' : isMaybe ? '⚠ MAYBE' : '✗ NO HIRE';
+                const badgeText = isHire ? '✓ HIRE' : isMaybe ? '⚠ MAYBE HIRE' : '✗ NO HIRE';
                 const badgeBorder = isHire ? 'border-emerald-500/30' : isMaybe ? 'border-amber-500/30' : 'border-red-500/30';
 
                 return (
@@ -801,10 +806,29 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                     'chandigarh', 'noida', 'gurgaon', 'gurugram', 'kochi', 'indore',
                     'bhopal', 'nagpur', 'coimbatore', 'thiruvananthapuram', 'patna',
                     'surat', 'vadodara', 'visakhapatnam', 'mangalore', 'mysore',
-                    'trivandrum', 'madras', 'calcutta', 'bombay',
+                    'trivandrum', 'madras', 'calcutta', 'bombay', 'kanpur', 'agra',
+                    'varanasi', 'ranchi', 'guwahati', 'bhubaneswar', 'dehradun',
+                    'jammu', 'srinagar', 'amritsar', 'ludhiana', 'jodhpur', 'udaipur',
+                    'rajasthan', 'maharashtra', 'karnataka', 'tamil nadu', 'kerala',
+                    'gujarat', 'telangana', 'andhra', 'west bengal', 'uttar pradesh',
+                  ];
+                  // FIX: Indian surname detection as final fallback
+                  const INDIAN_SURNAMES = [
+                    'kumar', 'sharma', 'singh', 'gupta', 'patel', 'das', 'joshi',
+                    'verma', 'yadav', 'mishra', 'pandey', 'mehta', 'shah', 'jain',
+                    'agarwal', 'aggarwal', 'reddy', 'nair', 'menon', 'pillai',
+                    'iyer', 'iyengar', 'rao', 'naidu', 'choudhary', 'chauhan',
+                    'saxena', 'tiwari', 'dubey', 'srivastava', 'rastogi', 'kapoor',
+                    'malhotra', 'khanna', 'arora', 'bhatia', 'sethi', 'bansal',
+                    'goyal', 'goel', 'mittal', 'thakur', 'rajput', 'desai',
+                    'patil', 'kulkarni', 'deshpande', 'biswas', 'chatterjee',
+                    'mukherjee', 'banerjee', 'bose', 'ghosh', 'sengupta',
+                    'zunjarrao', 'sahani', 'purohit', 'trivedi', 'bhatt',
                   ];
                   const textToCheck = location || bio; // Use bio as fallback if no location
-                  const isIndia = INDIA_KEYWORDS.some(kw => textToCheck.includes(kw));
+                  const candidateName = String(data2.name || data2.username || '').toLowerCase();
+                  const isIndia = INDIA_KEYWORDS.some(kw => textToCheck.includes(kw))
+                    || (!location && INDIAN_SURNAMES.some(s => candidateName.includes(s)));
                   
                   let range = { low: '$40K', high: '$70K', label: 'Junior' };
                   if (tier.includes('senior') || tier.includes('expert') || score >= 80) {
@@ -894,6 +918,29 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
           {/* -- Recruiter Brief (TL;DR) -- shown in detailed only since Simple has its own summary */}
           {viewMode === "detailed" && (
             <>
+          {/* Rescan banner when AI deep fields are missing */}
+          {!(data2 as any).feature_importance && !(data2 as any).commit_analysis && !(data2 as any).evidence_trail && (
+            <div className="rounded-2xl border border-amber-500/30 p-5 mb-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+              style={{ background: 'rgba(245,158,11,0.06)' }}>
+              <div className="flex items-center gap-3">
+                <span className="text-amber-400 text-lg">⚠️</span>
+                <div>
+                  <p className="text-sm font-bold text-amber-300">AI analysis unavailable for this scan</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Deep analysis data was not generated during the original scan. Click Rescan to get the full detailed report.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  import("@/lib/candidates-store").then(({ deleteCandidate }) => {
+                    deleteCandidate(username).then(() => window.location.reload());
+                  });
+                }}
+                className="shrink-0 px-4 py-2 rounded-lg bg-amber-500 text-black text-xs font-bold hover:bg-amber-400 transition-all"
+              >
+                🔄 Rescan for Full Analysis
+              </button>
+            </div>
+          )}
           {/* -- Recruiter Brief (TL;DR) -- */}
           <ReportErrorBoundary section="Recruiter Brief">
             <RecruiterBrief data={data2} />
