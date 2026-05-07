@@ -13,7 +13,7 @@ from ingestion.github_fetcher import (
     fetch_file_raw,
     fetch_repo_commits,
 )
-from services.gemini_client import generate_json
+from services.gemini_client import generate_json, sanitize_text
 
 
 # Files to prioritize for code review (order matters)
@@ -171,7 +171,7 @@ async def review_repo_code(
     # Step 4: Build code context for AI
     code_context = ""
     for fc in files_content:
-        code_context += f"\n\n=== FILE: {fc['path']} ===\n{fc['content'][:15000]}\n"
+        code_context += f"\n\n=== FILE: {fc['path']} ===\n{sanitize_text(fc['content'][:15000])}\n"
 
     # Also get file tree summary
     tree_summary = "\n".join(file_paths[:100])
@@ -180,7 +180,7 @@ async def review_repo_code(
     prompt = f"""You are a FORENSIC SOFTWARE ENGINEER at a top FAANG company performing expert-level code review for hiring intelligence. Your goal is 99% accurate assessments. You are reviewing REAL SOURCE CODE — not making assumptions.
 
 Repository: {username}/{repo_name}
-Description: {repo_description or 'No description provided'}
+Description: {sanitize_text(repo_description) or 'No description provided'}
 Primary Language: {repo_language or 'Unknown'}
 
 === STRUCTURED FILE TREE ===

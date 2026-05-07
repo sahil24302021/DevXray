@@ -19,13 +19,17 @@ def _get_gemini_keys():
     return keys
 
 
-def sanitize_text(text: str) -> str:
-    """Remove invisible control characters that break JSON serialization.
-    Keeps tab (\t), newline (\n), carriage return (\r) but strips
-    null bytes, form feeds, vertical tabs, and all other C0/C1 control chars."""
+def sanitize_text(text) -> str:
+    """Remove ALL invisible control characters that break JSON serialization.
+    Covers C0 (\x00-\x08, \x0b, \x0c, \x0e-\x1f) and C1 (\x7f-\x9f) ranges.
+    Keeps tab (\t), newline (\n), carriage return (\r).
+    Replaces with space to preserve word boundaries."""
+    if text is None:
+        return ""
     if not isinstance(text, str):
-        return str(text) if text is not None else ""
-    return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
+        text = str(text)
+    # Strip C0 control chars (except \t \n \r) and C1 control chars
+    return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', ' ', text)
 
 
 def _get_client(api_key: str = ""):

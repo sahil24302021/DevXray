@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from typing import Dict, Any, List
 
-from services.gemini_client import generate_json
+from services.gemini_client import generate_json, sanitize_text
 
 
 def _get_today_str() -> str:
@@ -254,7 +254,7 @@ A developer can have a 7-month-old account AND have real projects on it.
 {json.dumps(github_context, indent=2)}
 
 === PORTFOLIO WEBSITE TEXT ===
-\"\"\"{str(portfolio_text)[:3000] if portfolio_text else "Not available"}\"\"\"
+\"\"\"{sanitize_text(str(portfolio_text)[:3000]) if portfolio_text else "Not available"}\"\"\"
 
 === CRITICAL VALIDATION RULES ===
 

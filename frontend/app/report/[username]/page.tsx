@@ -920,25 +920,63 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
             <>
           {/* Rescan banner when AI deep fields are missing */}
           {!(data2 as any).feature_importance && !(data2 as any).commit_analysis && !(data2 as any).evidence_trail && (
-            <div className="rounded-2xl border border-amber-500/30 p-5 mb-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+            <div className="rounded-2xl border border-amber-500/30 p-5 mb-5"
               style={{ background: 'rgba(245,158,11,0.06)' }}>
-              <div className="flex items-center gap-3">
-                <span className="text-amber-400 text-lg">⚠️</span>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-amber-400 text-lg">⚠️</span>
+                  <div>
+                    <p className="text-sm font-bold text-amber-300">AI analysis unavailable for this scan</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Deep analysis data was not generated during the original scan. Click Rescan to get the full detailed report.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    import("@/lib/candidates-store").then(({ deleteCandidate }) => {
+                      deleteCandidate(username).then(() => window.location.reload());
+                    });
+                  }}
+                  className="shrink-0 px-4 py-2 rounded-lg bg-amber-500 text-black text-xs font-bold hover:bg-amber-400 transition-all"
+                >
+                  🔄 Rescan for Full Analysis
+                </button>
+              </div>
+              {/* Show partial data that IS available */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 pt-3 border-t border-amber-500/20">
                 <div>
-                  <p className="text-sm font-bold text-amber-300">AI analysis unavailable for this scan</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Deep analysis data was not generated during the original scan. Click Rescan to get the full detailed report.</p>
+                  <p className="text-[10px] text-slate-500 uppercase">Score</p>
+                  <p className="text-lg font-bold text-white">{score}/100</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase">Tier</p>
+                  <p className="text-lg font-bold text-white">{(data2 as any).benchmark?.tier || data2.developer_tier || 'Unknown'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase">Languages</p>
+                  <p className="text-sm text-slate-300">{(data2.top_languages || []).slice(0, 3).map((l: any) => typeof l === 'string' ? l : l?.language || l?.name || '').filter(Boolean).join(', ') || 'Unknown'}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-500 uppercase">Skills</p>
+                  <p className="text-sm text-slate-300">{(data2.verified_skills || []).slice(0, 3).map((s: any) => typeof s === 'string' ? s : s?.skill_name || s?.name || '').filter(Boolean).join(', ') || 'Unknown'}</p>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  import("@/lib/candidates-store").then(({ deleteCandidate }) => {
-                    deleteCandidate(username).then(() => window.location.reload());
-                  });
-                }}
-                className="shrink-0 px-4 py-2 rounded-lg bg-amber-500 text-black text-xs font-bold hover:bg-amber-400 transition-all"
-              >
-                🔄 Rescan for Full Analysis
-              </button>
+              {/* Trust Score sub-scores if available */}
+              {(data2 as any).authenticity && (
+                <div className="mt-3 pt-3 border-t border-amber-500/20">
+                  <p className="text-[10px] text-slate-500 uppercase mb-2">Trust Score Breakdown</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(data2 as any).authenticity?.authenticity_score != null && (
+                      <div className="text-xs text-slate-300">Authenticity: <span className="text-white font-bold">{(data2 as any).authenticity.authenticity_score}%</span></div>
+                    )}
+                    {(data2 as any).authenticity?.organic_commits_percentage != null && (
+                      <div className="text-xs text-slate-300">Organic commits: <span className="text-white font-bold">{(data2 as any).authenticity.organic_commits_percentage}%</span></div>
+                    )}
+                    {data2.confidence_score != null && (
+                      <div className="text-xs text-slate-300">Confidence: <span className="text-white font-bold">{data2.confidence_score}%</span></div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {/* -- Recruiter Brief (TL;DR) -- */}

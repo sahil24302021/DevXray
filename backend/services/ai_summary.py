@@ -14,7 +14,7 @@ from utils.logging_config import get_logger
 log = get_logger("ai_summary")
 
 try:
-    from services.gemini_client import generate_json
+    from services.gemini_client import generate_json, sanitize_text
     HAS_GEMINI = True
 except Exception:
     HAS_GEMINI = False
@@ -253,7 +253,7 @@ async def generate_ai_summary(
 
     top_repos_info = []
     for r in recent_repos[:5]:
-        desc = r.get("description", "") or ""
+        desc = sanitize_text(r.get("description", "") or "")
         stars = r.get("stars", r.get("stargazers_count", 0))
         updated = r.get("pushed_at", r.get("updated_at", ""))[:10]
         top_repos_info.append(
