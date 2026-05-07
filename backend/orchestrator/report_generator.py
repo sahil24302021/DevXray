@@ -1377,18 +1377,40 @@ def _generate_strengths(
             if top_lang and lang_pct >= 35:
                 strengths.append(f"{top_lang}-dominant profile — {lang_pct}% of repositories")
 
-    # FIX Bug 2: If AI/ML skills exist in top_skills, surface them prominently
-    # even if a frontend skill scores higher on DIP
+    # FIX Bug 1: Properly categorize AI/ML vs UI/Frontend skills
+    # Only these are genuine AI/ML libraries:
+    REAL_AIML_SKILLS = {
+        'tensorflow', 'pytorch', 'keras', 'scikit-learn', 'sklearn', 'huggingface',
+        'langchain', 'openai', 'gemini', 'spacy', 'nltk', 'opencv', 'mediapipe',
+        'yolo', 'fastai', 'transformers', 'stable-diffusion', 'llm', 'gpt',
+        'bert', 'neural', 'deep-learning', 'machine-learning', 'computer-vision',
+        'tensorflow / keras', 'python ai/ml', 'face recognition', 'data science',
+        'pandas', 'numpy',
+    }
+    # These are UI/CSS frameworks, NOT AI/ML:
+    UI_FRONTEND_SKILLS = {
+        'tailwind', 'tailwind css', 'bootstrap', 'material ui', 'material-ui',
+        'ant design', 'antd', 'chakra ui', 'chakra', 'shadcn', 'framer motion',
+        'framer', 'styled-components', 'sass', 'scss', 'less', 'css modules',
+        'bulma', 'foundation', 'semantic ui', 'radix',
+    }
     top = skills.get("top_skills", [])
     ai_skills_in_top = [s for s in top if s.get("category", "") in ("ml", "ai_ml")
-                        or "ai" in s.get("skill_name", "").lower()
-                        or "opencv" in s.get("skill_name", "").lower()]
+                        or s.get("skill_name", "").lower() in REAL_AIML_SKILLS]
+    ui_skills_in_top = [s for s in top if s.get("skill_name", "").lower() in UI_FRONTEND_SKILLS]
     if ai_skills_in_top:
         ai_skill = ai_skills_in_top[0]
         ai_score = ai_skill.get('skill_score', 0)
         score_display = ai_skill.get("formatted_score", f"{ai_score}/10")
         strengths.append(
             f"AI/ML capability confirmed: {ai_skill['skill_name']} — score: {score_display}"
+        )
+    elif ui_skills_in_top:
+        ui_skill = ui_skills_in_top[0]
+        ui_score = ui_skill.get('skill_score', 0)
+        score_display = ui_skill.get("formatted_score", f"{ui_score}/10")
+        strengths.append(
+            f"UI/Frontend capability confirmed: {ui_skill['skill_name']} — score: {score_display}"
         )
 
     cq = code.get("code_quality_score", 0)
@@ -1668,15 +1690,26 @@ def _generate_verdict_explanation(score: float, breakdown: Dict, flags: List[Dic
     base = f"This developer {', '.join(parts)}." if parts else "Mixed development profile."
 
     if flags:
+        import re as _re
         flag_texts: List[str] = []
         for f in flags[:2]:
             if isinstance(f, dict):
-                # use detail if available, else flag, else str(f)
-                text = f.get("detail", f.get("flag", str(f)))
-                flag_texts.append(str(text))
+                text = str(f.get("detail", f.get("flag", str(f))))
             else:
-                flag_texts.append(str(f))
-        base = base + f" Notable flags: {'; '.join(flag_texts)}."
+                text = str(f)
+            # ACCURACY 1: Remove raw internal metrics from flag text
+            text = _re.sub(r'\s*\(CV=[\d.]+\)', '', text)
+            text = _re.sub(r'\s*\(\d+/\d+\)', '', text)
+            text = text.replace('highly_irregular', 'irregular')
+            text = text.replace('_', ' ')
+            # Remove percentage-based raw metrics
+            text = _re.sub(r'\d+%\s*of\s*repos\s*appear\s*complete', 'some repos appear incomplete', text)
+            text = _re.sub(r'Commit pattern is\s*\w+', 'Commit patterns vary', text)
+            text = _re.sub(r'\s{2,}', ' ', text).strip()
+            if text:
+                flag_texts.append(text)
+        if flag_texts:
+            base = base + f" Notable flags: {'; '.join(flag_texts)}."
 
     return base
 

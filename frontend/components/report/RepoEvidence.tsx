@@ -68,7 +68,7 @@ export default function RepoEvidence({ data }: Props) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed line-clamp-1">{String(repo.description || "No description")}</p>
+                <p className="text-[11px] text-slate-400 leading-relaxed line-clamp-1">{String(repo.description || (repo.language ? `${repo.language} project` : "Repository"))}</p>
               </div>
               <div className="flex items-center gap-1 text-xs text-slate-400 shrink-0">
                 <svg className="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20">

@@ -866,7 +866,16 @@ def extract_top_repos(repos: List[Dict[str, Any]], limit: int = 5) -> List[Dict[
             complexity_insight = "Simple project"
 
         lang = repo.get("language") or "Unknown"
-        desc = repo.get("description") or "No description"
+        # FIX BUG 5: When description is empty, show language and topics instead
+        raw_desc = repo.get("description") or ""
+        if raw_desc:
+            desc = raw_desc
+        elif repo.get("topics"):
+            desc = f"{lang} project · Topics: {', '.join(repo['topics'][:4])}"
+        elif lang != "Unknown":
+            desc = f"{lang} project"
+        else:
+            desc = "Repository"
         explanation = f"{lang} project with {stars} stars. {desc[:80]}{'...' if len(desc) > 80 else ''}"
 
         result.append({

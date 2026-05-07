@@ -55,7 +55,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ─── Concurrency Limiter (prevent Render free tier overload) ───
-_ANALYSIS_SEMAPHORE = asyncio.Semaphore(10)
+_ANALYSIS_SEMAPHORE = asyncio.Semaphore(5)
 _active_analyses = 0  # Track for /health endpoint
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -546,7 +546,7 @@ async def analyze_user(
 
     # ── Concurrency guard (prevent Render overload) ──
     global _active_analyses
-    if _ANALYSIS_SEMAPHORE.locked() and _active_analyses >= 10:
+    if _ANALYSIS_SEMAPHORE.locked() and _active_analyses >= 5:
         raise HTTPException(
             status_code=503,
             detail={"error": "server_busy", "retry_after": 30,

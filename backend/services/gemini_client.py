@@ -11,12 +11,13 @@ _client_key = None  # Track which key the cached client uses
 
 def _get_gemini_keys():
     """Return all available Gemini API keys in priority order."""
-    keys = []
-    for var in ("GEMINI_API_KEY", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"):
-        k = os.getenv(var, "").strip()
-        if k:
-            keys.append(k)
-    return keys
+    keys = [k for k in [
+        os.environ.get("GEMINI_API_KEY"),
+        os.environ.get("GEMINI_API_KEY_2"),
+        os.environ.get("GEMINI_API_KEY_3"),
+        os.environ.get("GEMINI_API_KEY_4"),
+    ] if k and k.strip()]
+    return [k.strip() for k in keys]
 
 
 def sanitize_text(text) -> str:

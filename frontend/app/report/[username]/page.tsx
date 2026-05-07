@@ -809,8 +809,13 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
                     'trivandrum', 'madras', 'calcutta', 'bombay', 'kanpur', 'agra',
                     'varanasi', 'ranchi', 'guwahati', 'bhubaneswar', 'dehradun',
                     'jammu', 'srinagar', 'amritsar', 'ludhiana', 'jodhpur', 'udaipur',
+                    // Indian states
                     'rajasthan', 'maharashtra', 'karnataka', 'tamil nadu', 'kerala',
                     'gujarat', 'telangana', 'andhra', 'west bengal', 'uttar pradesh',
+                    'bihar', 'haryana', 'punjab', 'madhya pradesh', 'odisha', 'assam',
+                    'jharkhand', 'uttarakhand', 'chhattisgarh', 'himachal',
+                    // Common abbreviations
+                    ' up ', ' mp ', ' hp ',
                   ];
                   // FIX: Indian surname detection as final fallback
                   const INDIAN_SURNAMES = [
@@ -996,9 +1001,20 @@ export default function ReportPage({ params }: { params: Promise<{ username: str
               tier={{
                 tier: (data2 as any).benchmark?.tier || ((typeof data2.developer_tier === 'string') ? data2.developer_tier : 'Unknown'),
                 tier_level: Math.ceil(((data2 as any).benchmark?.percentile || 50) / 20),
-                tier_description: (data2 as any).benchmark?.tier_description || data2.verdict_explanation || "No description provided.",
+                tier_description: (() => {
+                  // ACCURACY 1: Clean up raw debug strings from verdict_explanation
+                  const raw = String((data2 as any).benchmark?.tier_description || data2.verdict_explanation || 'No description provided.');
+                  // Remove internal metric patterns like 'CV=3.60', 'highly_irregular', percentages in parentheses
+                  return raw
+                    .replace(/\(CV=[\d.]+\)/g, '')
+                    .replace(/highly_irregular/g, 'irregular')
+                    .replace(/\b\d+%\s*of\s*repos\s*appear\s*complete\s*\([^)]+\);?/gi, '')
+                    .replace(/Commit pattern is [^;.]+[;.]?/gi, '')
+                    .replace(/\s{2,}/g, ' ')
+                    .trim() || 'Assessment based on code analysis.';
+                })(),
                 evidence: data2.strengths || [],
-                signal_strength: data2.confidence_score || 50
+                signal_strength: (data2 as any).benchmark?.signal_strength || Math.min(Math.ceil(score / 6.25), 16) || 8
               }} 
               docQuality={data2.documentation_quality || {
                 grade: (data2 as any).system_design?.folder_maturity === "Production" ? "A" : (data2 as any).system_design?.folder_maturity === "Structured" ? "B" : "C",
