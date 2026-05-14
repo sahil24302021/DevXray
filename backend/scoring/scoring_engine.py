@@ -921,6 +921,25 @@ def compute_final_score(
         final, code_quality, skill_depth, authenticity_normalized, consistency, growth
     )
 
+    # FIX 2: Experience-based tier floor
+    # A 9-year senior dev should NEVER be labeled "Junior" or "Beginner" even if score is low.
+    # The tier label must floor at their experience level.
+    career_stage = detect_career_stage(
+        account_age_months=account_age_months,
+        repos_count=len(repos),
+        years_experience=years_experience,
+    )
+    EXPERIENCE_TIER_FLOOR = {
+        "senior": ["Elite (FAANG-level)", "Senior", "Mid-Tier"],
+        "mid":    ["Elite (FAANG-level)", "Senior", "Mid-Tier", "Junior"],
+    }
+    floor_tiers = EXPERIENCE_TIER_FLOOR.get(career_stage)
+    if floor_tiers and benchmark["tier"] not in floor_tiers:
+        old_tier = benchmark["tier"]
+        benchmark["tier"] = floor_tiers[-1]  # Floor at the minimum allowed tier
+        benchmark["tier_description"] = BENCHMARK_PROFILES.get(benchmark["tier"], {}).get("description", "")
+        log.info(f"[Tier Floor] {old_tier} → {benchmark['tier']} (career_stage={career_stage}, experience={years_experience}yr)")
+
     # Role fit
     role_fit = detect_role_fit(skill_summary, verified_skills)
 
@@ -950,8 +969,10 @@ def compute_final_score(
     # Interview difficulty
     interview_difficulty = predict_interview_difficulty(final, skill_depth, code_quality)
 
-    # Salary estimate
-    salary = estimate_salary_range(benchmark["tier"], role_fit["primary_role"], years_experience)
+    # Salary estimate — use career-stage-adjusted tier, not raw score tier
+    # FIX 2: A 9-year dev should NEVER get Junior salary (₹5L-₹12L)
+    salary_tier = benchmark["tier"]  # Already floored by experience
+    salary = estimate_salary_range(salary_tier, role_fit["primary_role"], years_experience)
 
     # Record proof
     proof.add_metric("final_score", final)

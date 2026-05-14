@@ -1,24 +1,4 @@
-/**
- * lib/candidates-store.ts
- *
- * Unified CRUD layer for DevXray candidate records.
- *
- * Strategy:
- *   1. If Supabase is configured → write to `candidates` table and read from it.
- *   2. If Supabase is NOT configured → fall back to localStorage for local dev.
- *
- * This means the candidates dashboard works out-of-the-box even without a
- * Supabase project, and silently upgrades to real persistence once env vars
- * are set.
- *
- * IMPORTANT: The Supabase `candidates` table has a FIXED schema:
- *   id, username, name, avatar_url, source, score, tier, risk_level,
- *   recommendation_summary, languages (TEXT[]), full_report (JSONB),
- *   scanned_at, created_at, user_id
- * All other fields (final_score, developer_tier, hiring_recommendation,
- * verified_skills, top_languages, confidence_score, report_payload)
- * are stored INSIDE `full_report` JSONB to avoid schema mismatch errors.
- */
+
 
 "use client";
 

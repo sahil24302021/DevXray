@@ -1393,10 +1393,18 @@ def _generate_strengths(
         'ant design', 'antd', 'chakra ui', 'chakra', 'shadcn', 'framer motion',
         'framer', 'styled-components', 'sass', 'scss', 'less', 'css modules',
         'bulma', 'foundation', 'semantic ui', 'radix',
+        'react', 'vue', 'angular', 'next.js', 'nuxt', 'svelte',
+        'redis', 'mongodb', 'graphql', 'websockets', 'grpc',
+        'sass/scss', 'webpack', 'vite', 'html', 'css',
     }
     top = skills.get("top_skills", [])
-    ai_skills_in_top = [s for s in top if s.get("category", "") in ("ml", "ai_ml")
-                        or s.get("skill_name", "").lower() in REAL_AIML_SKILLS]
+    # FIX 4: EXPLICITLY exclude UI/frontend skills from AI/ML list
+    ai_skills_in_top = [
+        s for s in top
+        if (s.get("category", "") in ("ml", "ai_ml")
+            or s.get("skill_name", "").lower() in REAL_AIML_SKILLS)
+        and s.get("skill_name", "").lower() not in UI_FRONTEND_SKILLS  # NEVER ai_ml
+    ]
     ui_skills_in_top = [s for s in top if s.get("skill_name", "").lower() in UI_FRONTEND_SKILLS]
     if ai_skills_in_top:
         ai_skill = ai_skills_in_top[0]

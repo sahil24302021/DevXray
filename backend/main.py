@@ -805,6 +805,19 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
         engine_results["scoring"]["_multi_source_bonus"] = multi_source_bonus
         log.info(f"Applied multi-source bonus: {old_score:.1f} → {new_score:.1f} (+{multi_source_bonus:.1f})")
 
+        # FIX 3: Recompute hiring recommendation with boosted score
+        # Without this, the rec was computed at old pre-bonus score (e.g. 43.5 → NO HIRE)
+        # even though the final score rose to 48+ → should be MAYBE/YES for intern/junior.
+        from scoring.scoring_engine import generate_hiring_recommendation
+        engine_results["scoring"]["hiring_recommendation"] = generate_hiring_recommendation(
+            final_score=new_score,
+            authenticity_score=engine_results.get("authenticity", {}).get("authenticity_score", 75),
+            risk_flags=engine_results.get("scoring", {}).get("risk_flags", []),
+            truth_score=engine_results.get("truth", {}).get("overall_truth_score", 70),
+            repos_count=len(repos),
+            commits_count=len(deep_data.get("all_commits", [])) if deep_data else 0,
+        )
+
     # ─── Data source confidence cap ───
     # Adjust confidence based on available data sources
     data_sources_available = ["github"]
@@ -871,6 +884,7 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
         deep_data=deep_data,
         pinned_code_reviews=pinned_code_reviews,
         ai_summary=ai_summary,
+        repos_param=repos,  # FIX 1: Pass repos so Language DNA uses actual repo languages
     )
 
     # ─── JD Matching (if job requirements were provided) ───
