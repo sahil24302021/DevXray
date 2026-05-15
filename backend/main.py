@@ -603,7 +603,7 @@ async def analyze_user(
     async with _ANALYSIS_SEMAPHORE:
         _active_analyses += 1
         try:
-            return await _run_analysis(username, username_lower, job_id, private_repos, work_coder, user_id, job_requirements)
+            return await _run_analysis(username, username_lower, job_id, private_repos, work_coder, verified_user_id, job_requirements)
         finally:
             _active_analyses -= 1
 
@@ -1033,7 +1033,7 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
     # Persist scan result to Supabase so it survives Render restarts
     try:
         from lib.supabase_client import save_scan_result
-        await save_scan_result(username_lower, report, user_id=verified_user_id)
+        await save_scan_result(username_lower, report, user_id=user_id)
         log.info(f"Scan result persisted to Supabase for {username}")
     except Exception as e:
         log.debug(f"Supabase persist skipped: {e}")  # non-fatal
@@ -1045,7 +1045,7 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
     )
 
     # Increment scan count after successful analysis
-    await _increment_scan_after_success(verified_user_id, "github")
+    await _increment_scan_after_success(user_id, "github")
 
     await emit_progress(job_id, "Building report", progress=100, detail="Complete", done=True)
     return report
