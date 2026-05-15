@@ -312,12 +312,13 @@ export async function analyzeGitHub(
   if (selfReported?.privateRepos != null) params.set("private_repos", String(selfReported.privateRepos));
   if (selfReported?.workCoder != null) params.set("work_coder", String(selfReported.workCoder));
 
-  // Send user ID header for server-side scan limit enforcement
+  // SECURITY: Send JWT token for server-side auth verification + user ID as fallback
   const headers: Record<string, string> = {};
   try {
-    const { getCurrentUser } = await import("./auth");
-    const user = await getCurrentUser();
+    const { getCurrentUser, getSessionToken } = await import("./auth");
+    const [user, token] = await Promise.all([getCurrentUser(), getSessionToken()]);
     if (user?.id) headers["X-User-Id"] = user.id;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
   } catch {}
 
   const res = await fetch(`${API_BASE}/analyze?${params}`, { headers });
@@ -362,12 +363,13 @@ export async function analyzeResume(
   if (opts?.jobDescription) form.append("job_description", opts.jobDescription);
   if (opts?.linkedinText) form.append("linkedin_text", opts.linkedinText);
 
-  // Send user ID header for server-side scan limit enforcement
+  // SECURITY: Send JWT token for server-side auth verification + user ID as fallback
   const headers: Record<string, string> = {};
   try {
-    const { getCurrentUser } = await import("./auth");
-    const user = await getCurrentUser();
+    const { getCurrentUser, getSessionToken } = await import("./auth");
+    const [user, token] = await Promise.all([getCurrentUser(), getSessionToken()]);
     if (user?.id) headers["X-User-Id"] = user.id;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
   } catch {}
 
   const res = await fetch(`${API_BASE}/analyze-resume`, { method: "POST", body: form, headers });

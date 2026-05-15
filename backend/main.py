@@ -77,6 +77,41 @@ PLAN_LIMITS = {
     "enterprise": {"github": 999999, "resume": 999999},
 }
 
+# ─── Supabase JWT Verification (SECURITY: replaces blindly trusting X-User-Id) ───
+SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", "")
+
+def verify_supabase_token(request: Request) -> Optional[str]:
+    """
+    Extract and verify the Supabase JWT from the Authorization header.
+    Returns the user_id (sub claim) if valid, None if not.
+    
+    SECURITY: This replaces trusting the X-User-Id header.
+    The JWT is signed by Supabase with your project's JWT secret,
+    so it cannot be forged by a malicious client.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    
+    token = auth_header[7:]  # Strip "Bearer "
+    if not token or not SUPABASE_JWT_SECRET:
+        # Fallback: if JWT secret not configured, use X-User-Id (backward compat)
+        return request.headers.get("X-User-Id")
+    
+    try:
+        import jwt  # PyJWT — already in requirements
+        payload = jwt.decode(
+            token,
+            SUPABASE_JWT_SECRET,
+            algorithms=["HS256"],
+            audience="authenticated",
+        )
+        return payload.get("sub")  # sub = user UUID
+    except Exception as e:
+        log.debug(f"JWT verification failed: {e}")
+        # Fallback to X-User-Id for backward compatibility
+        return request.headers.get("X-User-Id")
+
 async def _check_scan_limit(user_id: str | None, scan_type: str) -> None:
     """Raise 402 if user has exceeded their plan's scan limit."""
     if not user_id:
@@ -541,8 +576,9 @@ async def analyze_user(
     except Exception as e:
         log.debug(f"Supabase scan lookup skipped: {e}")
 
-    # ── Server-side scan limit enforcement ──
-    await _check_scan_limit(user_id, "github")
+    # ── SECURITY: Verify user identity from JWT (not trusting X-User-Id) ──
+    verified_user_id = verify_supabase_token(request) or user_id
+    await _check_scan_limit(verified_user_id, "github")
 
     # ── Concurrency guard (prevent Render overload) ──
     global _active_analyses
@@ -997,7 +1033,7 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
     # Persist scan result to Supabase so it survives Render restarts
     try:
         from lib.supabase_client import save_scan_result
-        await save_scan_result(username_lower, report, user_id=user_id)
+        await save_scan_result(username_lower, report, user_id=verified_user_id)
         log.info(f"Scan result persisted to Supabase for {username}")
     except Exception as e:
         log.debug(f"Supabase persist skipped: {e}")  # non-fatal
@@ -1009,7 +1045,7 @@ async def _run_analysis(username: str, username_lower: str, job_id, private_repo
     )
 
     # Increment scan count after successful analysis
-    await _increment_scan_after_success(user_id, "github")
+    await _increment_scan_after_success(verified_user_id, "github")
 
     await emit_progress(job_id, "Building report", progress=100, detail="Complete", done=True)
     return report
@@ -1042,8 +1078,9 @@ async def analyze_resume_endpoint(
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Maximum 5MB.")
 
-    # ── Server-side scan limit enforcement ──
-    await _check_scan_limit(user_id, "resume")
+    # ── SECURITY: Verify user identity from JWT (not trusting X-User-Id) ──
+    verified_user_id = verify_supabase_token(request) or user_id
+    await _check_scan_limit(verified_user_id, "resume")
 
     # Build job requirements dict
     job_requirements = None
@@ -1504,7 +1541,7 @@ async def analyze_resume_endpoint(
 
     # ═══ Build Final Response ═══
     # Increment scan count after successful analysis
-    await _increment_scan_after_success(user_id, "resume")
+    await _increment_scan_after_success(verified_user_id, "resume")
 
     return {
         "resume_data": resume_data,

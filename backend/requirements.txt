@@ -42,3 +42,6 @@ google-api-python-client==2.193.0
 pytest==9.0.2
 slowapi==0.1.9
 redis==5.0.1
+
+# ── Security ──
+PyJWT>=2.8.0

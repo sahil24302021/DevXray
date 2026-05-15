@@ -334,11 +334,23 @@ export async function listCandidates(): Promise<CandidateRecord[]> {
 
 /**
  * Delete a candidate record by username.
+ * SECURITY: Scoped to current user's auth.uid() — users can only delete their own.
  */
 export async function deleteCandidate(username: string): Promise<void> {
   if (isSupabaseAvailable && supabase) {
     try {
-      await supabase.from("candidates").delete().eq("username", username);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        // Only delete records owned by this user
+        await supabase
+          .from("candidates")
+          .delete()
+          .eq("username", username)
+          .eq("user_id", user.id);
+      } else {
+        // Not logged in — only delete from localStorage
+        console.warn("[candidates-store] Cannot delete from DB without auth");
+      }
     } catch (err) {
       console.warn("[candidates-store] Supabase delete failed:", err);
     }

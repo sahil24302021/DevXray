@@ -130,3 +130,16 @@ export function onAuthStateChange(
 
   return () => subscription.unsubscribe();
 }
+
+// ─── Get session access token (JWT) for backend auth ─────────
+// SECURITY: Backend verifies this JWT cryptographically instead of
+// trusting the forgeable X-User-Id header.
+export async function getSessionToken(): Promise<string | null> {
+  if (!isSupabaseAvailable || !supabase) return null;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  } catch {
+    return null;
+  }
+}
