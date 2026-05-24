@@ -139,19 +139,49 @@ function buildSupabaseRow(record: CandidateRecord): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   const extras: Record<string, unknown> = {};
 
-  for (const [key, value] of Object.entries(record)) {
-    if (SUPABASE_COLUMNS.has(key)) {
-      row[key] = value;
-    } else {
-      extras[key] = value;
+  // Construct with robust safe defaults to prevent column mismatch crashes
+  const safeRecord = {
+    username: record.username || "",
+    name: record.name || "",
+    avatar_url: record.avatar_url || "",
+    source: record.source || "github",
+    score: record.score || 0,
+    tier: record.tier || "D-Tier",
+    risk_level: record.risk_level || "High",
+    recommendation_summary: record.recommendation_summary || record.hiring_recommendation || "",
+    languages: record.languages || [],
+    full_report: record.full_report || null,
+    user_id: record.user_id || null,
+  };
+
+  // Populate from record if available, otherwise from safe defaults
+  for (const key of SUPABASE_COLUMNS) {
+    if (key in record) {
+      row[key] = (record as any)[key];
+    } else if (key in safeRecord) {
+      row[key] = (safeRecord as any)[key];
     }
   }
 
-  // Merge extras into full_report JSONB (include report_payload data too)
+  // Double check crucial fields are not null/undefined
+  row["username"] = row["username"] || "";
+  row["name"] = row["name"] || "";
+  row["avatar_url"] = row["avatar_url"] || "";
+  row["source"] = row["source"] || "github";
+  row["score"] = typeof row["score"] === "number" ? row["score"] : 0;
+  row["tier"] = row["tier"] || "D-Tier";
+  row["risk_level"] = row["risk_level"] || "High";
+  row["recommendation_summary"] = row["recommendation_summary"] || "";
+  row["languages"] = row["languages"] || [];
+
+  if (record.id) {
+    row["id"] = record.id;
+  }
+
+  // Merge extras into full_report JSONB
   const existingReport = (record as any).report_payload || (record as any).full_report || {};
   row["full_report"] = {
     ...existingReport,
-    // Store extra fields that don't have their own DB column
     _extra: {
       final_score: record.final_score,
       developer_tier: record.developer_tier,

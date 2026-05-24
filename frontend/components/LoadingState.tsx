@@ -59,6 +59,14 @@ export default function LoadingState({ username, jobId }: { username?: string; j
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [activeStep, setActiveStep] = useState(0);
   const [currentDetail, setCurrentDetail] = useState("");
+  const [showSlowWarning, setShowSlowWarning] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSlowWarning(true);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Map SSE step text to our pipeline step index
   const matchStep = useCallback((stepText: string): number => {
@@ -252,6 +260,30 @@ export default function LoadingState({ username, jobId }: { username?: string; j
             style={{ filter: "drop-shadow(0 0 6px rgba(205,255,0,0.4))" }}
           />
         </div>
+
+        {/* Slow warning for cold starts */}
+        <AnimatePresence>
+          {showSlowWarning && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="mt-6 p-4 rounded-xl border border-yellow-500/10 bg-yellow-500/[0.03] text-left"
+            >
+              <div className="flex gap-3">
+                <span className="text-yellow-400 text-sm">⚡</span>
+                <div>
+                  <h4 className="text-[11px] font-semibold text-yellow-400 mb-0.5">
+                    Server is waking up
+                  </h4>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    Render free instances sleep after inactivity. Waking up this server can take 30–60s on this first scan. Thank you for your patience!
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   );

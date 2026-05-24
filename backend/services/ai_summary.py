@@ -303,6 +303,17 @@ Return ONLY JSON:
     try:
         if HAS_GEMINI:
             result = await generate_json(prompt, temperature=0)
+            
+            # Type guard: handle string return safely
+            if isinstance(result, str):
+                try:
+                    result = json.loads(result)
+                except:
+                    pass
+
+            if not isinstance(result, dict):
+                raise ValueError(f"AI summary returned non-dict response type: {type(result)}")
+
             # Ensure required fields with safe defaults
             result.setdefault("tl_dr", f"@{data['username']} — analysis complete")
             result.setdefault("hire_signal", "INTERN ONLY")

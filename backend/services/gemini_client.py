@@ -2,11 +2,57 @@ import os
 import json
 import re
 import logging
+import time
 
 log = logging.getLogger("gemini_client")
 
 _client = None
 _client_key = None  # Track which key the cached client uses
+
+# Track rate limit state (cooldown timestamp) per key
+_key_cooldowns = {}
+
+
+def safe_parse_json_response(response_text: str, fallback: dict = None) -> dict:
+    """Safely parse AI JSON responses — handles both string and dict returns, strips markdown."""
+    if fallback is None:
+        fallback = {}
+    
+    if isinstance(response_text, dict):
+        return response_text  # Already parsed
+    
+    if not isinstance(response_text, str):
+        return fallback
+    
+    # Strip markdown code fences if present
+    clean = response_text.strip()
+    if clean.startswith("```json"):
+        clean = clean[7:]
+    elif clean.startswith("```"):
+        clean = clean[3:]
+    if clean.endswith("```"):
+        clean = clean[:-3]
+    clean = clean.strip()
+    
+    try:
+        parsed = json.loads(clean)
+        if isinstance(parsed, dict):
+            return parsed
+        if isinstance(parsed, list):
+            return {"items": parsed}
+        return fallback
+    except json.JSONDecodeError:
+        # Try to extract JSON object from mixed text
+        json_match = re.search(r'\{.*\}', clean, re.DOTALL)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group())
+                if isinstance(parsed, dict):
+                    return parsed
+            except:
+                pass
+        return fallback
+
 
 
 def _get_gemini_keys():
@@ -51,21 +97,36 @@ def _get_client(api_key: str = ""):
 async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     import asyncio as _aio
     import httpx as _hx, json as _j, os as _os
+    import time as _time
 
+    global _key_cooldowns
     last_error = None
 
     # ── Sanitize the prompt to remove control characters that break JSON ──
     prompt = sanitize_text(prompt)
 
     # ── STEP 1: Try Groq first (free, unlimited, fast) ──────────────
-    # Support multiple Groq keys for rotation
-    groq_keys = [k.strip() for k in [
-        _os.getenv("GROQ_API_KEY", ""),
-        _os.getenv("GROQ_API_KEY_2", ""),
-    ] if k.strip()]
+    # Support multiple Groq keys for rotation, both as separate env variables and comma-separated
+    groq_keys = []
+    # 1. Comma-separated list
+    for k in _os.getenv("GROQ_API_KEYS", "").split(","):
+        if k.strip() and k.strip() not in groq_keys:
+            groq_keys.append(k.strip())
+    # 2. Individual key variables
+    for key_var in ["GROQ_API_KEY", "GROQ_API_KEY_2", "GROQ_API_KEY_3", "GROQ_API_KEY_4"]:
+        k = _os.getenv(key_var, "").strip()
+        if k and k not in groq_keys:
+            groq_keys.append(k)
 
     for groq_idx, groq_key in enumerate(groq_keys):
         groq_label = f"key-{groq_idx + 1}"
+        
+        # Skip keys in cooldown
+        cooldown_until = _key_cooldowns.get(groq_key, 0)
+        if _time.time() < cooldown_until:
+            log.info(f"[GeminiClient] Groq key-{groq_idx + 1} is in active cooldown, skipping")
+            continue
+
         # Groq free tier: keep prompt under ~6000 chars (~1500 tokens) to avoid 413 Payload Too Large
         GROQ_MAX_CHARS = 6000
         groq_prompt = prompt if len(prompt) <= GROQ_MAX_CHARS else prompt[:GROQ_MAX_CHARS] + "\n\n[...truncated. Complete the JSON with ALL data above. Be thorough.]"
@@ -86,14 +147,22 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                             "max_tokens": 4000,
                         }
                     )
+                    
+                    if r.status_code == 429:
+                        _key_cooldowns[groq_key] = _time.time() + 60
+                        log.warning(f"[GeminiClient] Groq {groq_label} rate limited (429) — cooling down for 60s")
+                        break
+
                     r.raise_for_status()
                     raw_body = r.text.strip()
                     if not raw_body:
                         raise ValueError("Empty response body from Groq")
                     response_json = _j.loads(raw_body)
                     txt = response_json["choices"][0]["message"]["content"].strip()
-                    txt = txt.replace("```json", "").replace("```", "").strip()
-                    result = _j.loads(txt)
+                    
+                    result = safe_parse_json_response(txt)
+                    if not result:
+                        raise ValueError("Safe JSON parsing returned empty result")
                     log.info(f"[GeminiClient] Groq ({groq_label}) succeeded (primary)")
                     return result
             except Exception as groq_err:
@@ -104,6 +173,7 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                     log.warning(f"[GeminiClient] Groq ({groq_label}) 413 payload too large — skipping to next provider")
                     break
                 if ("429" in err_str or "too many" in err_str or "rate" in err_str):
+                    _key_cooldowns[groq_key] = _time.time() + 60
                     if attempt == 0:
                         wait_time = 3
                         log.warning(f"[GeminiClient] Groq ({groq_label}) rate limited — retrying in {wait_time}s")
@@ -142,8 +212,10 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                         raise ValueError("Empty response body from Together AI")
                     response_json = _j.loads(raw_body)
                     txt = response_json["choices"][0]["message"]["content"].strip()
-                    txt = txt.replace("```json", "").replace("```", "").strip()
-                    result = _j.loads(txt)
+                    
+                    result = safe_parse_json_response(txt)
+                    if not result:
+                        raise ValueError("Safe JSON parsing returned empty result")
                     log.info("[GeminiClient] Together AI succeeded (secondary)")
                     return result
             except Exception as together_err:
@@ -205,16 +277,13 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
 
                     response_data = _j.loads(raw_body)
                     txt = response_data["choices"][0]["message"]["content"].strip()
-                    txt = txt.replace("```json", "").replace("```", "").strip()
-                    if not txt:
+                    
+                    result = safe_parse_json_response(txt)
+                    if not result:
                         continue
-                    result = _j.loads(txt)
                     log.info(f"[GeminiClient] OpenRouter succeeded with {or_model}")
                     return result
 
-            except _j.JSONDecodeError as je:
-                log.warning(f"[GeminiClient] OpenRouter {or_model} returned invalid JSON: {je}")
-                continue
             except Exception as or_err:
                 last_error = or_err
                 err_str = str(or_err).lower()
@@ -246,8 +315,10 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                 content = response.text
                 if not content:
                     continue
-                content = _clean_json(content)
-                result = _j.loads(content)
+                
+                result = safe_parse_json_response(content)
+                if not result:
+                    raise ValueError("Gemini safe JSON parsing returned empty result")
                 log.info(f"[GeminiClient] Gemini {model_name} ({key_label}) succeeded (fallback)")
                 return result
             except Exception as e:

@@ -321,20 +321,39 @@ export async function analyzeGitHub(
     if (token) headers["Authorization"] = `Bearer ${token}`;
   } catch {}
 
-  const res = await fetch(`${API_BASE}/analyze?${params}`, { headers });
+  const fetchWithRetry = async (retryCount = 0): Promise<AnalysisResult> => {
+    try {
+      const res = await fetch(`${API_BASE}/analyze?${params}`, { headers });
 
-  // Handle 402 (scan limit reached) — throw ScanLimitError so UI can show paywall
-  if (res.status === 402) {
-    const body = await res.json().catch(() => ({ detail: {} }));
-    const detail = typeof body.detail === "object" ? body.detail : {};
-    throw new ScanLimitError(detail.plan || "free", detail.limit || 2);
-  }
+      // Handle 402 (scan limit reached) — throw ScanLimitError so UI can show paywall
+      if (res.status === 402) {
+        const body = await res.json().catch(() => ({ detail: {} }));
+        const detail = typeof body.detail === "object" ? body.detail : {};
+        throw new ScanLimitError(detail.plan || "free", detail.limit || 2);
+      }
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(humanizeError(res.status, err.detail || ""));
-  }
-  return res.json();
+      if (!res.ok) {
+        // If it's a 500 error or Render starting up, wait 2s and retry once
+        if ((res.status === 500 || res.status === 503) && retryCount < 1) {
+          console.warn("[API] 500/503 error on analyzeGitHub, waiting 2s and retrying...");
+          await new Promise(r => setTimeout(r, 2000));
+          return fetchWithRetry(retryCount + 1);
+        }
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(humanizeError(res.status, err.detail || ""));
+      }
+      return res.json();
+    } catch (error: any) {
+      if ((error.message?.includes("fetch") || error.message?.includes("network")) && retryCount < 1) {
+        console.warn("[API] Network error on analyzeGitHub, waiting 2s and retrying...");
+        await new Promise(r => setTimeout(r, 2000));
+        return fetchWithRetry(retryCount + 1);
+      }
+      throw error;
+    }
+  };
+
+  return fetchWithRetry();
 }
 
 /**
@@ -372,20 +391,38 @@ export async function analyzeResume(
     if (token) headers["Authorization"] = `Bearer ${token}`;
   } catch {}
 
-  const res = await fetch(`${API_BASE}/analyze-resume`, { method: "POST", body: form, headers });
+  const fetchWithRetry = async (retryCount = 0): Promise<AnalysisResult> => {
+    try {
+      const res = await fetch(`${API_BASE}/analyze-resume`, { method: "POST", body: form, headers });
 
-  // Handle 402 (scan limit reached)
-  if (res.status === 402) {
-    const body = await res.json().catch(() => ({ detail: {} }));
-    const detail = typeof body.detail === "object" ? body.detail : {};
-    throw new ScanLimitError(detail.plan || "free", detail.limit || 2);
-  }
+      // Handle 402 (scan limit reached)
+      if (res.status === 402) {
+        const body = await res.json().catch(() => ({ detail: {} }));
+        const detail = typeof body.detail === "object" ? body.detail : {};
+        throw new ScanLimitError(detail.plan || "free", detail.limit || 2);
+      }
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(humanizeError(res.status, err.detail || ""));
-  }
-  return res.json();
+      if (!res.ok) {
+        if ((res.status === 500 || res.status === 503) && retryCount < 1) {
+          console.warn("[API] 500/503 error on analyzeResume, waiting 2s and retrying...");
+          await new Promise(r => setTimeout(r, 2000));
+          return fetchWithRetry(retryCount + 1);
+        }
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(humanizeError(res.status, err.detail || ""));
+      }
+      return res.json();
+    } catch (error: any) {
+      if ((error.message?.includes("fetch") || error.message?.includes("network")) && retryCount < 1) {
+        console.warn("[API] Network error on analyzeResume, waiting 2s and retrying...");
+        await new Promise(r => setTimeout(r, 2000));
+        return fetchWithRetry(retryCount + 1);
+      }
+      throw error;
+    }
+  };
+
+  return fetchWithRetry();
 }
 
 /**
@@ -461,6 +498,21 @@ export async function healthCheck(): Promise<boolean> {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Warm up backend to prevent cold start delays on Render's free tier.
+ */
+export async function warmupBackend(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/health`, {
+      method: "GET",
+      signal: AbortSignal.timeout(5000)
+    });
+    console.log("[API] Warmup request sent successfully");
+  } catch {
+    // Silent — warmup is best-effort
   }
 }
 

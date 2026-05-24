@@ -66,6 +66,53 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import HTTPException
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catches ALL unhandled exceptions and returns CORS-safe error responses."""
+    import traceback
+    log.error(f"Unhandled exception: {traceback.format_exc()}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {str(exc)}. Please retry."},
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+@app.exception_handler(500)
+async def server_error_handler(request: Request, exc: Exception):
+    log.error(f"500 Internal Server Error: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Analysis failed. Please retry — your result may be cached."},
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
 # Simple in-memory cache fallback
 CACHE_TTL = 21600  # 6 hours — same username returns cached result for any user
 
@@ -576,36 +623,54 @@ async def analyze_user(
     except Exception as e:
         log.debug(f"Supabase scan lookup skipped: {e}")
 
-    # ── SECURITY: Verify user identity from JWT (not trusting X-User-Id) ──
-    verified_user_id = verify_supabase_token(request) or user_id
-    await _check_scan_limit(verified_user_id, "github")
+    try:
+        # ── SECURITY: Verify user identity from JWT (not trusting X-User-Id) ──
+        verified_user_id = verify_supabase_token(request) or user_id
+        await _check_scan_limit(verified_user_id, "github")
 
-    # ── Concurrency guard (prevent Render overload) ──
-    global _active_analyses
-    if _ANALYSIS_SEMAPHORE.locked() and _active_analyses >= 5:
-        raise HTTPException(
-            status_code=503,
-            detail={"error": "server_busy", "retry_after": 30,
-                     "message": "Server at capacity. Please retry in 30 seconds."},
-        )
+        # ── Concurrency guard (prevent Render overload) ──
+        global _active_analyses
+        if _ANALYSIS_SEMAPHORE.locked() and _active_analyses >= 5:
+            raise HTTPException(
+                status_code=503,
+                detail={"error": "server_busy", "retry_after": 30,
+                         "message": "Server at capacity. Please retry in 30 seconds."},
+            )
 
-    # Build job requirements if provided
-    job_requirements = None
-    if job_title or required_skills or job_description:
-        job_requirements = {
-            "job_title": job_title or "",
-            "required_skills": required_skills or "",
-            "job_description": job_description or "",
-            "experience_required": experience_required or "",
-        }
-        log.info(f"Job requirements provided for {username}: {job_title}")
+        # Build job requirements if provided
+        job_requirements = None
+        if job_title or required_skills or job_description:
+            job_requirements = {
+                "job_title": job_title or "",
+                "required_skills": required_skills or "",
+                "job_description": job_description or "",
+                "experience_required": experience_required or "",
+            }
+            log.info(f"Job requirements provided for {username}: {job_title}")
 
-    async with _ANALYSIS_SEMAPHORE:
-        _active_analyses += 1
+        async with _ANALYSIS_SEMAPHORE:
+            _active_analyses += 1
+            try:
+                return await _run_analysis(username, username_lower, job_id, private_repos, work_coder, verified_user_id, job_requirements)
+            finally:
+                _active_analyses -= 1
+    except Exception as e:
+        log.error(f"Analysis failed for {username}: {e}", exc_info=True)
+        # Try to return memory cache
+        cached = cache_get(username_lower)
+        if cached:
+            log.info(f"Analysis failed for {username} — returned memory cached report")
+            return cached
+        # Try to return recent scan from Supabase
         try:
-            return await _run_analysis(username, username_lower, job_id, private_repos, work_coder, verified_user_id, job_requirements)
-        finally:
-            _active_analyses -= 1
+            from lib.supabase_client import get_recent_scan
+            recent = await get_recent_scan(username_lower, max_age_seconds=86400 * 30) # up to 30 days old fallback
+            if recent:
+                log.info(f"Analysis failed for {username} — returned persisted recent scan from Supabase")
+                return recent
+        except Exception as db_err:
+            log.debug(f"DB fallback lookup failed: {db_err}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 async def _run_analysis(username: str, username_lower: str, job_id, private_repos, work_coder, user_id, job_requirements=None):
@@ -2267,6 +2332,16 @@ Generate this EXACT JSON structure (fill every field):
 
     try:
         result = await asyncio.wait_for(generate_json(prompt, temperature=0), timeout=40.0)
+
+        # Enforce dict response
+        if isinstance(result, str):
+            try:
+                result = json.loads(result)
+            except:
+                pass
+
+        if not isinstance(result, dict):
+            raise ValueError(f"AI returned non-dict response type: {type(result)}")
 
         # Post-process: enforce overall_score matches DIP engine (±3 tolerance)
         if github_report:
