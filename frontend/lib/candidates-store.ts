@@ -131,13 +131,43 @@ export function buildCandidateRecord(
 }
 
 /**
+ * Sanitize a string for safe Supabase insertion.
+ * Strips control characters and malformed Unicode escape sequences
+ * that cause "unsupported Unicode escape sequence" errors.
+ */
+function sanitizeString(str: unknown): string {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/[\u0000-\u001F\u007F]/g, '')           // remove control characters
+    .replace(/\\u[0-9a-fA-F]{0,3}(?![0-9a-fA-F])/g, '') // remove malformed \uXXX sequences
+    .trim();
+}
+
+/**
+ * Deep-sanitize an object for JSONB storage.
+ * Runs sanitizeString on every string value recursively via JSON.stringify replacer.
+ * Returns null if sanitization itself fails (defensive).
+ */
+function sanitizeJsonb(obj: unknown): unknown {
+  if (obj == null) return null;
+  try {
+    return JSON.parse(
+      JSON.stringify(obj, (_key, val) =>
+        typeof val === 'string' ? sanitizeString(val) : val
+      )
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Build a Supabase-safe row from a CandidateRecord.
  * Only includes columns that exist in the actual `candidates` table schema.
  * Everything else goes into `full_report` JSONB.
  */
 function buildSupabaseRow(record: CandidateRecord): Record<string, unknown> {
   const row: Record<string, unknown> = {};
-  const extras: Record<string, unknown> = {};
 
   // Construct with robust safe defaults to prevent column mismatch crashes
   const safeRecord = {
@@ -163,24 +193,24 @@ function buildSupabaseRow(record: CandidateRecord): Record<string, unknown> {
     }
   }
 
-  // Double check crucial fields are not null/undefined
-  row["username"] = row["username"] || "";
-  row["name"] = row["name"] || "";
-  row["avatar_url"] = row["avatar_url"] || "";
-  row["source"] = row["source"] || "github";
+  // Sanitize all TEXT fields to prevent Unicode escape crashes
+  row["username"] = sanitizeString(row["username"] || "");
+  row["name"] = sanitizeString(row["name"] || "");
+  row["avatar_url"] = sanitizeString(row["avatar_url"] || "");
+  row["source"] = sanitizeString(row["source"] || "github");
   row["score"] = typeof row["score"] === "number" ? row["score"] : 0;
-  row["tier"] = row["tier"] || "D-Tier";
-  row["risk_level"] = row["risk_level"] || "High";
-  row["recommendation_summary"] = row["recommendation_summary"] || "";
+  row["tier"] = sanitizeString(row["tier"] || "D-Tier");
+  row["risk_level"] = sanitizeString(row["risk_level"] || "High");
+  row["recommendation_summary"] = sanitizeString(row["recommendation_summary"] || "");
   row["languages"] = row["languages"] || [];
 
   if (record.id) {
     row["id"] = record.id;
   }
 
-  // Merge extras into full_report JSONB
+  // Merge extras into full_report JSONB — deep-sanitize all strings inside
   const existingReport = (record as any).report_payload || (record as any).full_report || {};
-  row["full_report"] = {
+  const rawReport = {
     ...existingReport,
     _extra: {
       final_score: record.final_score,
@@ -191,6 +221,7 @@ function buildSupabaseRow(record: CandidateRecord): Record<string, unknown> {
       confidence_score: record.confidence_score,
     },
   };
+  row["full_report"] = sanitizeJsonb(rawReport);
 
   return row;
 }
@@ -246,6 +277,8 @@ export async function saveCandidate(
   }
 
   if (isSupabaseAvailable && supabase) {
+    // Entire Supabase block is resilient — a failed DB save should NEVER
+    // break the report display for the user.
     try {
       const supabaseRow = buildSupabaseRow(record);
 
@@ -291,8 +324,12 @@ export async function saveCandidate(
           return fromSupabaseRow(data as Record<string, unknown>);
         }
       }
-    } catch (err) {
-      console.warn("[candidates-store] Supabase operation failed:", err);
+    } catch (err: unknown) {
+      // CRITICAL: Never throw from here — report must always display
+      console.warn(
+        "[candidates-store] Supabase operation failed (non-fatal):",
+        err instanceof Error ? err.message : err
+      );
     }
   }
 
