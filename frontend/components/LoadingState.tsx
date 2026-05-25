@@ -1,74 +1,205 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+/* ── Pipeline steps ─────────────────────────────────────────── */
 const PIPELINE_STEPS = [
-  { key: "profile", label: "Fetching GitHub profile" },
-  { key: "repos", label: "Analyzing repositories" },
-  { key: "code", label: "Reading code files" },
-  { key: "verify", label: "Verifying resume claims" },
-  { key: "crossref", label: "Cross-referencing sources" },
-  { key: "engine", label: "Running intelligence engine" },
-  { key: "summary", label: "Generating AI summary" },
-  { key: "report", label: "Building report" },
+  { key: "profile", label: "Fetching GitHub profile", sub: "Pulling metadata & bio" },
+  { key: "repos", label: "Analyzing repositories", sub: "Scanning commit history" },
+  { key: "code", label: "Reading code files", sub: "Parsing source patterns" },
+  { key: "verify", label: "Verifying resume claims", sub: "Cross-checking facts" },
+  { key: "crossref", label: "Cross-referencing sources", sub: "Validating externals" },
+  { key: "engine", label: "Running intelligence engine", sub: "Scoring & ranking" },
+  { key: "summary", label: "Generating AI summary", sub: "Synthesizing insights" },
+  { key: "report", label: "Building report", sub: "Compiling final output" },
 ];
 
+/* ── Floating particles (pure CSS, decorative) ──────────────── */
+function Particles() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+      {Array.from({ length: 18 }).map((_, i) => (
+        <div
+          key={i}
+          className="loading-particle"
+          style={{
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+            width: `${2 + Math.random() * 3}px`,
+            height: `${2 + Math.random() * 3}px`,
+            animationDelay: `${Math.random() * 8}s`,
+            animationDuration: `${6 + Math.random() * 8}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ── SVG circular progress ring ─────────────────────────────── */
+function ProgressRing({ progress }: { progress: number }) {
+  const radius = 54;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (progress / 100) * circumference;
+
+  return (
+    <div className="relative w-32 h-32 mx-auto mb-8">
+      {/* Outer glow */}
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{
+          background: `radial-gradient(circle, rgba(205,255,0,${0.06 + progress * 0.002}) 0%, transparent 70%)`,
+          filter: "blur(20px)",
+          transform: "scale(1.5)",
+        }}
+      />
+
+      <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+        {/* Track */}
+        <circle
+          cx="60" cy="60" r={radius}
+          fill="none"
+          stroke="rgba(255,255,255,0.04)"
+          strokeWidth="3"
+        />
+        {/* Progress arc */}
+        <motion.circle
+          cx="60" cy="60" r={radius}
+          fill="none"
+          stroke="url(#progressGrad)"
+          strokeWidth="4"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          style={{ filter: "drop-shadow(0 0 8px rgba(205,255,0,0.5))" }}
+        />
+        {/* Gradient def */}
+        <defs>
+          <linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#cdff00" />
+            <stop offset="50%" stopColor="#a8e600" />
+            <stop offset="100%" stopColor="#7acc00" />
+          </linearGradient>
+        </defs>
+      </svg>
+
+      {/* Center percentage */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <motion.span
+          key={Math.round(progress)}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-2xl font-bold text-white tabular-nums"
+          style={{ fontFamily: "var(--font-syne)" }}
+        >
+          {Math.round(progress)}%
+        </motion.span>
+      </div>
+    </div>
+  );
+}
+
+/* ── Typewriter-animated detail text ─────────────────────────── */
+function TypewriterDetail({ text }: { text: string }) {
+  const [displayed, setDisplayed] = useState("");
+  const prevText = useRef("");
+
+  useEffect(() => {
+    if (text === prevText.current) return;
+    prevText.current = text;
+    setDisplayed("");
+    let i = 0;
+    const id = setInterval(() => {
+      i++;
+      setDisplayed(text.slice(0, i));
+      if (i >= text.length) clearInterval(id);
+    }, 25);
+    return () => clearInterval(id);
+  }, [text]);
+
+  return (
+    <span className="text-[11px] text-[#cdff00]/60 font-mono">
+      {displayed}
+      <span className="animate-pulse">▍</span>
+    </span>
+  );
+}
+
+/* ── Icons ───────────────────────────────────────────────────── */
 function CheckIcon() {
   return (
-    <motion.svg
+    <motion.div
       initial={{ scale: 0 }}
       animate={{ scale: 1 }}
       transition={{ type: "spring", stiffness: 400, damping: 15 }}
-      className="w-4 h-4 text-[#cdff00]"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={3}
+      className="w-5 h-5 rounded-full bg-[#cdff00]/15 flex items-center justify-center"
     >
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </motion.svg>
+      <svg className="w-3 h-3 text-[#cdff00]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    </motion.div>
   );
 }
 
-function SpinnerIcon() {
+function ActiveDot() {
   return (
-    <svg
-      className="w-4 h-4 text-[#cdff00] animate-spin"
-      viewBox="0 0 24 24"
-      fill="none"
-    >
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2" />
-      <path
-        d="M12 2a10 10 0 0 1 10 10"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-    </svg>
+    <div className="w-5 h-5 flex items-center justify-center">
+      <div className="relative w-2.5 h-2.5">
+        <div className="absolute inset-0 rounded-full bg-[#cdff00] animate-ping opacity-40" />
+        <div className="absolute inset-0 rounded-full bg-[#cdff00]" style={{ boxShadow: "0 0 10px rgba(205,255,0,0.6)" }} />
+      </div>
+    </div>
   );
 }
 
-function PendingIcon() {
+function PendingDot() {
   return (
-    <div className="w-4 h-4 rounded-full border-2 border-white/10" />
+    <div className="w-5 h-5 flex items-center justify-center">
+      <div className="w-1.5 h-1.5 rounded-full bg-white/10" />
+    </div>
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ██  MAIN COMPONENT
+   ═══════════════════════════════════════════════════════════════ */
 export default function LoadingState({ username, jobId }: { username?: string; jobId?: string }) {
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [activeStep, setActiveStep] = useState(0);
   const [currentDetail, setCurrentDetail] = useState("");
-  const [showSlowWarning, setShowSlowWarning] = useState(false);
 
+  /* ── Smart server-slow detection (20s with no progress) ──── */
+  const [serverSlow, setServerSlow] = useState(false);
+  const gotProgressRef = useRef(false);
+  const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Start 20s timer on mount; clear if we get any progress update
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowSlowWarning(true);
-    }, 8000);
-    return () => clearTimeout(timer);
+    slowTimerRef.current = setTimeout(() => {
+      if (!gotProgressRef.current) {
+        setServerSlow(true);
+      }
+    }, 20_000);
+
+    return () => {
+      if (slowTimerRef.current) clearTimeout(slowTimerRef.current);
+    };
   }, []);
 
-  // Map SSE step text to our pipeline step index
+  // Called whenever we receive a real progress update
+  const markProgressReceived = useCallback(() => {
+    gotProgressRef.current = true;
+    setServerSlow(false);
+    if (slowTimerRef.current) {
+      clearTimeout(slowTimerRef.current);
+      slowTimerRef.current = null;
+    }
+  }, []);
+
+  /* ── Map SSE step text → pipeline index ────────────────── */
   const matchStep = useCallback((stepText: string): number => {
     const lower = stepText.toLowerCase();
     if (lower.includes("profile") || lower.includes("initializ")) return 0;
@@ -82,13 +213,15 @@ export default function LoadingState({ username, jobId }: { username?: string; j
     return -1;
   }, []);
 
+  /* ── SSE / polling + fallback progression ──────────────── */
   useEffect(() => {
     if (!jobId) {
-      // Fallback: auto-advance steps for demo / no-SSE mode
+      // Fallback: auto-advance for demo / no-SSE mode
       const timer = setInterval(() => {
         setActiveStep((prev) => {
           if (prev < PIPELINE_STEPS.length - 1) {
             setCompletedSteps((s) => new Set([...s, prev]));
+            markProgressReceived();
             return prev + 1;
           }
           return prev;
@@ -105,10 +238,12 @@ export default function LoadingState({ username, jobId }: { username?: string; j
         const data = JSON.parse(e.data);
         if (data.heartbeat) return;
 
+        // Any real data → mark progress received
+        markProgressReceived();
+
         if (data.step) {
           const stepIdx = matchStep(data.step);
           if (stepIdx >= 0) {
-            // Mark all previous steps as completed
             setCompletedSteps((prev) => {
               const next = new Set(prev);
               for (let i = 0; i < stepIdx; i++) next.add(i);
@@ -121,167 +256,167 @@ export default function LoadingState({ username, jobId }: { username?: string; j
           }
         }
         if (data.done) {
-          // Mark all steps as complete
           setCompletedSteps(new Set(PIPELINE_STEPS.map((_, i) => i)));
           setActiveStep(PIPELINE_STEPS.length);
           sse.close();
         }
       } catch {
-        // ignore
+        // ignore parse errors
       }
     };
 
-    // Fallback progression if SSE is sparse
+    // Keep-alive fallback (no real advancement, just keeps connection context)
     const timer = setInterval(() => {
-      setActiveStep((prev) => {
-        if (prev < PIPELINE_STEPS.length - 1) {
-          return prev;
-        }
-        return prev;
-      });
+      setActiveStep((prev) => prev);
     }, 5000);
 
     return () => {
       sse.close();
       clearInterval(timer);
     };
-  }, [jobId, matchStep]);
+  }, [jobId, matchStep, markProgressReceived]);
 
-  const totalProgress = ((completedSteps.size + (activeStep < PIPELINE_STEPS.length ? 0.5 : 0)) / PIPELINE_STEPS.length) * 100;
+  /* ── Derived values ────────────────────────────────────── */
+  const totalProgress =
+    ((completedSteps.size + (activeStep < PIPELINE_STEPS.length ? 0.5 : 0)) / PIPELINE_STEPS.length) * 100;
 
+  const activeSubLabel = activeStep < PIPELINE_STEPS.length ? PIPELINE_STEPS[activeStep].sub : "Finalizing…";
+
+  /* ── Render ────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center p-4 sm:p-6 relative overflow-hidden z-[100] fixed inset-0">
-      <div className="grain-overlay" />
-      {/* Background effects */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-[#cdff00]/[0.04] blur-[120px] rounded-full mix-blend-screen" />
-        <div className="absolute top-1/3 left-1/4 w-[300px] h-[300px] bg-[#cdff00]/[0.02] blur-[100px] rounded-full mix-blend-screen" />
-      </div>
+    <div className="loading-screen fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+      {/* Animated gradient background */}
+      <div className="loading-bg" />
 
+      {/* Floating particles */}
+      <Particles />
+
+      {/* Grain overlay (shared with rest of app) */}
+      <div className="grain-overlay" />
+
+      {/* ── Main glassmorphism card ─────────────────────────── */}
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-w-md rounded-3xl border border-white/[0.06] p-8 sm:p-10 text-center relative overflow-hidden"
-        style={{
-          background: "rgba(255,255,255,0.03)",
-          backdropFilter: "blur(24px)",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)",
-        }}
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        className="loading-card"
       >
         {/* Inner glow */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-[#cdff00]/10 blur-[60px] rounded-full pointer-events-none" />
+        <div
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-32 pointer-events-none"
+          style={{
+            background: "radial-gradient(ellipse at center, rgba(205,255,0,0.08) 0%, transparent 70%)",
+            filter: "blur(30px)",
+          }}
+        />
 
-        {/* Spinning ring + star */}
-        <div className="relative w-20 h-20 mx-auto mb-6">
-          <svg className="w-full h-full animate-[spin_4s_linear_infinite]" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="2" />
-            <circle
-              cx="50" cy="50" r="46"
-              fill="none"
-              stroke="#cdff00"
-              strokeWidth="4"
-              strokeLinecap="round"
-              strokeDasharray="100 200"
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="#cdff00" />
-            </svg>
-          </div>
-        </div>
+        {/* Progress ring */}
+        <ProgressRing progress={totalProgress} />
 
-        <h2 className="font-[family-name:var(--font-syne)] font-bold text-lg text-white mb-1">
-          Analyzing {username ? `@${username}` : "Candidate Profile"}
+        {/* Username */}
+        <h2
+          className="font-bold text-xl text-white mb-0.5 tracking-tight"
+          style={{ fontFamily: "var(--font-syne)" }}
+        >
+          Analyzing{" "}
+          <span className="loading-glow-text">
+            {username ? `@${username}` : "profile"}
+          </span>
         </h2>
-        <p className="text-xs text-slate-500 mb-6">Deep intelligence scan in progress</p>
+        <p className="text-xs text-white/30 mb-8 tracking-wide uppercase">
+          Deep intelligence scan in progress
+        </p>
 
-        {/* Step Checklist */}
-        <div className="text-left space-y-1 relative mb-6">
+        {/* ── Vertical step timeline ──────────────────────────── */}
+        <div className="w-full max-w-xs mx-auto text-left mb-6">
           {PIPELINE_STEPS.map((step, i) => {
             const isCompleted = completedSteps.has(i);
             const isActive = activeStep === i && !isCompleted;
             const isPending = !isCompleted && !isActive;
 
             return (
-              <motion.div
-                key={step.key}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.06, duration: 0.3 }}
-                className={`flex items-center gap-3 py-1.5 px-3 rounded-lg transition-all duration-300 ${
-                  isActive
-                    ? "bg-[#cdff00]/[0.06] border border-[#cdff00]/10"
-                    : isCompleted
-                    ? "bg-white/[0.02]"
-                    : ""
-                }`}
-              >
+              <div key={step.key} className="flex items-start gap-3 relative">
+                {/* Vertical connector line */}
+                {i < PIPELINE_STEPS.length - 1 && (
+                  <div
+                    className="absolute left-[9px] top-[22px] w-px h-[calc(100%-4px)]"
+                    style={{
+                      background: isCompleted
+                        ? "rgba(205,255,0,0.15)"
+                        : "rgba(255,255,255,0.04)",
+                    }}
+                  />
+                )}
+
                 {/* Icon */}
-                <div className="w-5 h-5 flex items-center justify-center shrink-0">
-                  {isCompleted ? <CheckIcon /> : isActive ? <SpinnerIcon /> : <PendingIcon />}
+                <div className="shrink-0 pt-0.5">
+                  {isCompleted ? <CheckIcon /> : isActive ? <ActiveDot /> : <PendingDot />}
                 </div>
 
-                {/* Label */}
-                <span
-                  className={`text-sm transition-colors duration-300 ${
-                    isCompleted
-                      ? "text-slate-400"
-                      : isActive
-                      ? "text-white font-medium"
-                      : "text-slate-600"
-                  }`}
+                {/* Label + sub */}
+                <motion.div
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.04, duration: 0.3 }}
+                  className={`pb-3 min-w-0 ${isActive ? "pt-0" : ""}`}
                 >
-                  {step.label}
-                </span>
-
-                {/* Detail (only for active step) */}
-                {isActive && currentDetail && (
-                  <motion.span
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="ml-auto text-[10px] text-[#cdff00]/70 font-medium tabular-nums shrink-0"
+                  <span
+                    className={`text-[13px] block transition-colors duration-300 ${
+                      isCompleted
+                        ? "text-white/35"
+                        : isActive
+                        ? "text-white font-medium"
+                        : "text-white/15"
+                    }`}
                   >
-                    {currentDetail}
-                  </motion.span>
-                )}
-              </motion.div>
+                    {step.label}
+                  </span>
+
+                  {/* Active step detail line */}
+                  {isActive && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      className="mt-0.5 overflow-hidden"
+                    >
+                      {currentDetail ? (
+                        <TypewriterDetail text={currentDetail} />
+                      ) : (
+                        <span className="text-[11px] text-white/20 italic">{step.sub}</span>
+                      )}
+                    </motion.div>
+                  )}
+                </motion.div>
+              </div>
             );
           })}
         </div>
 
-        {/* Progress bar */}
-        <div className="w-full bg-white/[0.06] rounded-full h-1.5 overflow-hidden">
+        {/* ── Thin progress bar at the bottom ─────────────────── */}
+        <div className="w-full bg-white/[0.04] rounded-full h-1 overflow-hidden">
           <motion.div
-            className="h-full bg-[#cdff00] rounded-full"
+            className="h-full rounded-full"
             initial={{ width: "0%" }}
-            animate={{ width: `${Math.min(totalProgress, 95)}%` }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            style={{ filter: "drop-shadow(0 0 6px rgba(205,255,0,0.4))" }}
+            animate={{ width: `${Math.min(totalProgress, 96)}%` }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            style={{
+              background: "linear-gradient(90deg, #cdff00, #a8e600)",
+              boxShadow: "0 0 12px rgba(205,255,0,0.35)",
+            }}
           />
         </div>
 
-        {/* Slow warning for cold starts */}
+        {/* ── Server slow notice (subtle muted inline text) ──── */}
         <AnimatePresence>
-          {showSlowWarning && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mt-6 p-4 rounded-xl border border-yellow-500/10 bg-yellow-500/[0.03] text-left"
+          {serverSlow && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="mt-4 text-[11px] text-white/25 text-center leading-relaxed"
             >
-              <div className="flex gap-3">
-                <span className="text-yellow-400 text-sm">⚡</span>
-                <div>
-                  <h4 className="text-[11px] font-semibold text-yellow-400 mb-0.5">
-                    Server is waking up
-                  </h4>
-                  <p className="text-[10px] text-slate-400 leading-relaxed">
-                    Render free instances sleep after inactivity. Waking up this server can take 30–60s on this first scan. Thank you for your patience!
-                  </p>
-                </div>
-              </div>
-            </motion.div>
+              Taking longer than usual — server may be waking up…
+            </motion.p>
           )}
         </AnimatePresence>
       </motion.div>

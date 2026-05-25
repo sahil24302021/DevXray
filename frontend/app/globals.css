@@ -1331,3 +1331,107 @@ body {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   LOADING SCREEN — Premium Analysis UI
+   ═══════════════════════════════════════════════════════════ */
+
+.loading-screen {
+  background: #030305;
+  overflow: hidden;
+}
+
+/* Slow-moving gradient background */
+.loading-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 120%, rgba(205,255,0,0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 20% 0%, rgba(124,58,237,0.04) 0%, transparent 50%),
+    radial-gradient(ellipse 50% 50% at 80% 20%, rgba(205,255,0,0.03) 0%, transparent 50%);
+  animation: loading-bg-shift 12s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes loading-bg-shift {
+  0% {
+    opacity: 0.8;
+    transform: scale(1) translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05) translateY(-10px);
+  }
+  100% {
+    opacity: 0.85;
+    transform: scale(1) translateY(5px);
+  }
+}
+
+/* Glassmorphism card */
+.loading-card {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  border-radius: 28px;
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 40px 36px 32px;
+  text-align: center;
+  background: rgba(255,255,255,0.025);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  box-shadow:
+    0 24px 80px rgba(0,0,0,0.5),
+    0 0 1px rgba(255,255,255,0.06),
+    inset 0 1px 0 rgba(255,255,255,0.04);
+  overflow: hidden;
+  z-index: 2;
+}
+
+/* Glowing username text */
+.loading-glow-text {
+  color: var(--accent);
+  text-shadow:
+    0 0 8px rgba(205,255,0,0.3),
+    0 0 24px rgba(205,255,0,0.1);
+}
+
+/* Floating particles */
+.loading-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(205,255,0,0.25);
+  opacity: 0;
+  animation: particle-float linear infinite;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+@keyframes particle-float {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.5);
+  }
+  15% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.35;
+    transform: translateY(-80px) scale(1);
+  }
+  85% {
+    opacity: 0.15;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-160px) scale(0.3);
+  }
+}
+
+/* ── Mobile adjustments ── */
+@media (max-width: 480px) {
+  .loading-card {
+    padding: 32px 24px 24px;
+    border-radius: 22px;
+  }
+}
+
