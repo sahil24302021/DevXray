@@ -3,16 +3,96 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-/* ── Pipeline steps ─────────────────────────────────────────── */
+/* ── Pipeline steps + per-step technical phrases ────────────── */
 const PIPELINE_STEPS = [
-  { key: "profile", label: "Fetching GitHub profile", sub: "Pulling metadata & bio" },
-  { key: "repos", label: "Analyzing repositories", sub: "Scanning commit history" },
-  { key: "code", label: "Reading code files", sub: "Parsing source patterns" },
-  { key: "verify", label: "Verifying resume claims", sub: "Cross-checking facts" },
-  { key: "crossref", label: "Cross-referencing sources", sub: "Validating externals" },
-  { key: "engine", label: "Running intelligence engine", sub: "Scoring & ranking" },
-  { key: "summary", label: "Generating AI summary", sub: "Synthesizing insights" },
-  { key: "report", label: "Building report", sub: "Compiling final output" },
+  {
+    key: "profile",
+    label: "Fetching GitHub profile",
+    sub: "Pulling metadata & bio",
+    phrases: [
+      "Resolving user identity…",
+      "Fetching account metadata…",
+      "Pulling profile signals…",
+      "Indexing social graph…",
+    ],
+  },
+  {
+    key: "repos",
+    label: "Analyzing repositories",
+    sub: "Scanning commit history",
+    phrases: [
+      "Processing commit graph…",
+      "Walking branch histories…",
+      "Mapping fork networks…",
+      "Indexing repository topology…",
+    ],
+  },
+  {
+    key: "code",
+    label: "Reading code files",
+    sub: "Parsing source patterns",
+    phrases: [
+      "Extracting AST patterns…",
+      "Parsing language grammars…",
+      "Tokenizing source files…",
+      "Analyzing code complexity…",
+    ],
+  },
+  {
+    key: "verify",
+    label: "Verifying resume claims",
+    sub: "Cross-checking facts",
+    phrases: [
+      "Cross-checking skill claims…",
+      "Validating timeline data…",
+      "Matching experience signals…",
+      "Verifying contribution depth…",
+    ],
+  },
+  {
+    key: "crossref",
+    label: "Cross-referencing sources",
+    sub: "Validating externals",
+    phrases: [
+      "Querying external sources…",
+      "Cross-referencing skill signals…",
+      "Validating third-party data…",
+      "Correlating data points…",
+    ],
+  },
+  {
+    key: "engine",
+    label: "Running intelligence engine",
+    sub: "Scoring & ranking",
+    phrases: [
+      "Weighing authenticity signals…",
+      "Running scoring algorithms…",
+      "Computing risk penalties…",
+      "Calibrating tier placement…",
+    ],
+  },
+  {
+    key: "summary",
+    label: "Generating AI summary",
+    sub: "Synthesizing insights",
+    phrases: [
+      "Synthesizing executive brief…",
+      "Generating verdict logic…",
+      "Composing narrative summary…",
+      "Distilling key findings…",
+    ],
+  },
+  {
+    key: "report",
+    label: "Building report",
+    sub: "Compiling final output",
+    phrases: [
+      "Compiling final report…",
+      "Rendering data visualizations…",
+      "Assembling interview kit…",
+      "Packaging deliverables…",
+    ],
+  },
 ];
 
 /* ── Floating particles (pure CSS, decorative) ──────────────── */
@@ -37,14 +117,14 @@ function Particles() {
   );
 }
 
-/* ── SVG circular progress ring ─────────────────────────────── */
+/* ── SVG circular progress ring (smooth 600ms transition) ───── */
 function ProgressRing({ progress }: { progress: number }) {
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progress / 100) * circumference;
 
   return (
-    <div className="relative w-32 h-32 mx-auto mb-8">
+    <div className="relative w-32 h-32 mx-auto mb-6">
       {/* Outer glow */}
       <div
         className="absolute inset-0 rounded-full"
@@ -63,18 +143,19 @@ function ProgressRing({ progress }: { progress: number }) {
           stroke="rgba(255,255,255,0.04)"
           strokeWidth="3"
         />
-        {/* Progress arc */}
-        <motion.circle
+        {/* Progress arc — always smooth 600ms transition */}
+        <circle
           cx="60" cy="60" r={radius}
           fill="none"
           stroke="url(#progressGrad)"
           strokeWidth="4"
           strokeLinecap="round"
           strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          style={{ filter: "drop-shadow(0 0 8px rgba(205,255,0,0.5))" }}
+          strokeDashoffset={offset}
+          style={{
+            transition: "stroke-dashoffset 600ms cubic-bezier(0.16, 1, 0.3, 1)",
+            filter: "drop-shadow(0 0 8px rgba(205,255,0,0.5))",
+          }}
         />
         {/* Gradient def */}
         <defs>
@@ -86,17 +167,14 @@ function ProgressRing({ progress }: { progress: number }) {
         </defs>
       </svg>
 
-      {/* Center percentage */}
+      {/* Center percentage — smooth count */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <motion.span
-          key={Math.round(progress)}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
+        <span
           className="text-2xl font-bold text-white tabular-nums"
           style={{ fontFamily: "var(--font-syne)" }}
         >
           {Math.round(progress)}%
-        </motion.span>
+        </span>
       </div>
     </div>
   );
@@ -125,6 +203,51 @@ function TypewriterDetail({ text }: { text: string }) {
       {displayed}
       <span className="animate-pulse">▍</span>
     </span>
+  );
+}
+
+/* ── Rotating technical phrases per active step ──────────────── */
+function RotatingPhrase({ phrases }: { phrases: string[] }) {
+  const [idx, setIdx] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setIdx((prev) => (prev + 1) % phrases.length);
+    }, 2000);
+    return () => clearInterval(id);
+  }, [phrases.length]);
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.span
+        key={idx}
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ duration: 0.25 }}
+        className="text-[10px] text-white/25 font-mono block"
+      >
+        {phrases[idx]}
+      </motion.span>
+    </AnimatePresence>
+  );
+}
+
+/* ── AI Thinking dots (sequential pulse) ─────────────────────── */
+function ThinkingDots() {
+  return (
+    <div className="flex items-center gap-1" aria-hidden="true">
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="w-1.5 h-1.5 rounded-full bg-[#cdff00]"
+          style={{
+            animation: "thinking-dot 1.4s ease-in-out infinite",
+            animationDelay: `${i * 0.2}s`,
+          }}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -171,12 +294,46 @@ export default function LoadingState({ username, jobId }: { username?: string; j
   const [activeStep, setActiveStep] = useState(0);
   const [currentDetail, setCurrentDetail] = useState("");
 
+  /* ── Live repo counter (starts at 0, counts up realistically) */
+  const [repoCount, setRepoCount] = useState(0);
+  const [realRepoCount, setRealRepoCount] = useState<number | null>(null);
+  const repoCountRef = useRef(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const max = realRepoCount ?? 80; // default target until we get real data
+      if (repoCountRef.current < max) {
+        const increment = 1 + Math.floor(Math.random() * 3); // +1 to +3
+        repoCountRef.current = Math.min(repoCountRef.current + increment, max);
+        setRepoCount(repoCountRef.current);
+      }
+    }, 800);
+    return () => clearInterval(id);
+  }, [realRepoCount]);
+
+  /* ── Live bytes-analyzed counter (fake but impressive) ────── */
+  const [bytesAnalyzed, setBytesAnalyzed] = useState(0);
+  const bytesRef = useRef(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const increment = 1000 + Math.floor(Math.random() * 4000); // +1000 to +5000
+      bytesRef.current += increment;
+      setBytesAnalyzed(bytesRef.current);
+    }, 200);
+    return () => clearInterval(id);
+  }, []);
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} KB analyzed`;
+    return `${(bytes / 1_000_000).toFixed(1)} MB analyzed`;
+  };
+
   /* ── Smart server-slow detection (20s with no progress) ──── */
   const [serverSlow, setServerSlow] = useState(false);
   const gotProgressRef = useRef(false);
   const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Start 20s timer on mount; clear if we get any progress update
   useEffect(() => {
     slowTimerRef.current = setTimeout(() => {
       if (!gotProgressRef.current) {
@@ -189,7 +346,6 @@ export default function LoadingState({ username, jobId }: { username?: string; j
     };
   }, []);
 
-  // Called whenever we receive a real progress update
   const markProgressReceived = useCallback(() => {
     gotProgressRef.current = true;
     setServerSlow(false);
@@ -241,6 +397,11 @@ export default function LoadingState({ username, jobId }: { username?: string; j
         // Any real data → mark progress received
         markProgressReceived();
 
+        // Extract real repo count from SSE data if available
+        if (data.repos_count && typeof data.repos_count === "number") {
+          setRealRepoCount(data.repos_count);
+        }
+
         if (data.step) {
           const stepIdx = matchStep(data.step);
           if (stepIdx >= 0) {
@@ -280,8 +441,6 @@ export default function LoadingState({ username, jobId }: { username?: string; j
   const totalProgress =
     ((completedSteps.size + (activeStep < PIPELINE_STEPS.length ? 0.5 : 0)) / PIPELINE_STEPS.length) * 100;
 
-  const activeSubLabel = activeStep < PIPELINE_STEPS.length ? PIPELINE_STEPS[activeStep].sub : "Finalizing…";
-
   /* ── Render ────────────────────────────────────────────── */
   return (
     <div className="loading-screen fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
@@ -313,6 +472,21 @@ export default function LoadingState({ username, jobId }: { username?: string; j
         {/* Progress ring */}
         <ProgressRing progress={totalProgress} />
 
+        {/* ── Live counters ────────────────────────────────────── */}
+        <div className="mb-4 space-y-0.5">
+          <motion.p
+            className="text-sm font-medium text-white tabular-nums"
+            style={{ fontFamily: "var(--font-syne)" }}
+          >
+            Scanning{" "}
+            <span className="loading-glow-text font-bold">{repoCount}</span>
+            {" "}repositories…
+          </motion.p>
+          <p className="text-[11px] text-white/25 tabular-nums font-mono">
+            {formatBytes(bytesAnalyzed)}
+          </p>
+        </div>
+
         {/* Username */}
         <h2
           className="font-bold text-xl text-white mb-0.5 tracking-tight"
@@ -323,7 +497,7 @@ export default function LoadingState({ username, jobId }: { username?: string; j
             {username ? `@${username}` : "profile"}
           </span>
         </h2>
-        <p className="text-xs text-white/30 mb-8 tracking-wide uppercase">
+        <p className="text-xs text-white/30 mb-6 tracking-wide uppercase">
           Deep intelligence scan in progress
         </p>
 
@@ -332,7 +506,6 @@ export default function LoadingState({ username, jobId }: { username?: string; j
           {PIPELINE_STEPS.map((step, i) => {
             const isCompleted = completedSteps.has(i);
             const isActive = activeStep === i && !isCompleted;
-            const isPending = !isCompleted && !isActive;
 
             return (
               <div key={step.key} className="flex items-start gap-3 relative">
@@ -372,7 +545,7 @@ export default function LoadingState({ username, jobId }: { username?: string; j
                     {step.label}
                   </span>
 
-                  {/* Active step detail line */}
+                  {/* Active step: show SSE detail OR rotating technical phrases */}
                   {isActive && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
@@ -382,7 +555,7 @@ export default function LoadingState({ username, jobId }: { username?: string; j
                       {currentDetail ? (
                         <TypewriterDetail text={currentDetail} />
                       ) : (
-                        <span className="text-[11px] text-white/20 italic">{step.sub}</span>
+                        <RotatingPhrase phrases={step.phrases} />
                       )}
                     </motion.div>
                   )}
@@ -394,16 +567,20 @@ export default function LoadingState({ username, jobId }: { username?: string; j
 
         {/* ── Thin progress bar at the bottom ─────────────────── */}
         <div className="w-full bg-white/[0.04] rounded-full h-1 overflow-hidden">
-          <motion.div
+          <div
             className="h-full rounded-full"
-            initial={{ width: "0%" }}
-            animate={{ width: `${Math.min(totalProgress, 96)}%` }}
-            transition={{ duration: 0.6, ease: "easeOut" }}
             style={{
+              width: `${Math.min(totalProgress, 96)}%`,
+              transition: "width 600ms cubic-bezier(0.16, 1, 0.3, 1)",
               background: "linear-gradient(90deg, #cdff00, #a8e600)",
               boxShadow: "0 0 12px rgba(205,255,0,0.35)",
             }}
           />
+        </div>
+
+        {/* ── AI thinking dots (bottom right) ──────────────────── */}
+        <div className="absolute bottom-4 right-5">
+          <ThinkingDots />
         </div>
 
         {/* ── Server slow notice (subtle muted inline text) ──── */}

@@ -458,9 +458,13 @@ export default function Home() {
   useEffect(() => {
     getCurrentUser().then((u) => setIsLoggedIn(!!u));
     // Warm up the backend server on landing page load to counter Render cold starts
-    import("@/lib/api").then(({ warmupBackend }) => {
+    // + keep it alive every 10 minutes while anyone has the site open
+    let stopKeepAlive: (() => void) | undefined;
+    import("@/lib/api").then(({ warmupBackend, startKeepAlive }) => {
       warmupBackend();
+      stopKeepAlive = startKeepAlive();
     });
+    return () => stopKeepAlive?.();
   }, []);
 
   useEffect(() => {
