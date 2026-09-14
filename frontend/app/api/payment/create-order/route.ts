@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import Razorpay from "razorpay";
 
 function getRazorpay() {
+  const key_id = (process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "").trim();
+  const key_secret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
   return new Razorpay({
-    key_id: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!,
-    key_secret: process.env.RAZORPAY_KEY_SECRET!,
+    key_id,
+    key_secret,
   });
 }
 
@@ -22,8 +24,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
 
-    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+    const keyId = (process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "").trim();
+    const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
 
     if (!keyId || !keySecret) {
       console.error("[Payment] Missing Razorpay credentials in environment variables");

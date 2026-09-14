@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
       userId,
     } = await req.json();
 
-    if (!process.env.RAZORPAY_KEY_SECRET) {
+    const keySecret = (process.env.RAZORPAY_KEY_SECRET || "").trim();
+    if (!keySecret) {
       return NextResponse.json(
         { error: "RAZORPAY_KEY_SECRET is not configured in Vercel environment variables" },
         { status: 500 }
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
     // 1. Verify HMAC signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSig = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .createHmac("sha256", keySecret)
       .update(body)
       .digest("hex");
 
