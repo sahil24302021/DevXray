@@ -517,7 +517,7 @@ export async function warmupBackend(): Promise<void> {
 }
 
 /**
- * Keep-alive: ping the backend every 10 minutes to prevent Render free tier from sleeping.
+ * Keep-alive: ping the backend every 40 seconds to prevent Render free tier from sleeping.
  * Render sleeps after 15min of inactivity — this keeps it warm while any user has the site open.
  * Returns a cleanup function to stop the interval.
  */
@@ -532,7 +532,7 @@ export function startKeepAlive(): () => void {
     } catch {
       // Silent — keep-alive is best-effort
     }
-  }, 600000); // 10 minutes
+  }, 40000); // 40 seconds
   return () => clearInterval(interval);
 }
 

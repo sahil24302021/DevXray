@@ -2836,15 +2836,17 @@ def update_badge_cache(username: str, score: float, tier: str):
 
 import httpx as _httpx_keepalive
 
-_KEEP_ALIVE_INTERVAL = 600  # 10 minutes
+_KEEP_ALIVE_INTERVAL = 40  # 40 seconds to prevent Render free-tier sleep
 _keep_alive_task = None
 
 async def _keep_alive_loop():
-    """Background task that pings this server's own /health endpoint every 10 min."""
-    backend_url = os.environ.get("RENDER_EXTERNAL_URL", os.environ.get("BACKEND_URL", ""))
+    """Background task that pings this server's public /health endpoint every 40s to keep it alive."""
+    backend_url = os.environ.get(
+        "RENDER_EXTERNAL_URL",
+        os.environ.get("BACKEND_URL", "https://devxray-backend.onrender.com")
+    ).strip()
     if not backend_url:
-        log.info("[KeepAlive] No RENDER_EXTERNAL_URL or BACKEND_URL set — keep-alive disabled")
-        return
+        backend_url = "https://devxray-backend.onrender.com"
 
     health_url = f"{backend_url.rstrip('/')}/health"
     log.info(f"[KeepAlive] Started — pinging {health_url} every {_KEEP_ALIVE_INTERVAL}s")

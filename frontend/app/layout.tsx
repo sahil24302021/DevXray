@@ -24,6 +24,8 @@ const spaceGrotesk = Space_Grotesk({
   display: "swap",
 });
 
+import BackendKeepAlive from "@/components/BackendKeepAlive";
+
 export const metadata: Metadata = {
   title: "DevXray AI — GitHub Developer Intelligence",
   description:
@@ -37,7 +39,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${syne.variable} ${dmSans.variable} ${spaceGrotesk.variable}`} data-scroll-behavior="smooth">
-      <body>{children}</body>
+      <body>
+        <BackendKeepAlive />
+        {children}
+      </body>
     </html>
   );
 }
