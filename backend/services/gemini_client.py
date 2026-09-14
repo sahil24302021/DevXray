@@ -297,7 +297,7 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     # ── STEP 4: Gemini flash as last resort (multi-key rotation) ──────
     from google.genai import types
     gemini_keys = _get_gemini_keys()
-    models_to_try = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
+    models_to_try = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro"]
 
     for key_idx, api_key in enumerate(gemini_keys):
         key_label = f"key-{key_idx + 1}"
