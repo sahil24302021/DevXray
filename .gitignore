@@ -48,3 +48,8 @@ coverage/
 
 # Supabase local
 .supabase/
+
+# Temporary
+tmp/
+scratch/
+

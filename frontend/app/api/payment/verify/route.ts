@@ -12,10 +12,24 @@ export async function POST(req: NextRequest) {
       userId,
     } = await req.json();
 
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      return NextResponse.json(
+        { error: "RAZORPAY_KEY_SECRET is not configured in Vercel environment variables" },
+        { status: 500 }
+      );
+    }
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: "User is not logged in. Please sign in before completing payment." },
+        { status: 400 }
+      );
+    }
+
     // 1. Verify HMAC signature
     const body = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSig = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!)
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(body)
       .digest("hex");
 
@@ -27,10 +41,17 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Update user plan in Supabase (using service role key for server-side writes)
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json(
+        { error: "Supabase credentials missing on server (SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL)" },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + 1);

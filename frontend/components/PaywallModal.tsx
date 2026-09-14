@@ -52,10 +52,10 @@ export default function PaywallModal({
         return;
       }
 
-      const { orderId, amount, currency } = data;
+      const { orderId, amount, currency, keyId } = data;
 
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        key: keyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount,
         currency,
         name: "DevXray",

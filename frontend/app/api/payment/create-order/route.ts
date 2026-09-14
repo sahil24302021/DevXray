@@ -22,6 +22,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
 
+    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+    const keySecret = process.env.RAZORPAY_KEY_SECRET;
+
+    if (!keyId || !keySecret) {
+      console.error("[Payment] Missing Razorpay credentials in environment variables");
+      return NextResponse.json(
+        { error: "Razorpay environment variables are not configured in Vercel. Set NEXT_PUBLIC_RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET." },
+        { status: 500 }
+      );
+    }
+
     // Razorpay receipt has a 40-char limit — use a short hash
     const shortId = userId ? userId.slice(0, 8) : "anon";
     const receipt = `dx_${plan}_${shortId}_${Date.now().toString(36)}`;
@@ -41,6 +52,7 @@ export async function POST(req: NextRequest) {
       orderId: order.id,
       amount,
       currency: "INR",
+      keyId,
     });
   } catch (e: any) {
     // Log the full Razorpay error for debugging
