@@ -32,19 +32,22 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://dev-xray.vercel.app"
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
   title: {
-    default: "DevXray AI — #1 GitHub Analyzer, Resume Analyzer & Profile Checker",
+    default: "DevXray AI — #1 GitHub Profile Analyzer & AI Resume Checker",
     template: "%s | DevXray AI",
   },
   description:
-    "The #1 GitHub Analyzer & Resume Checker. Scan any developer's GitHub profile instantly to evaluate code quality, detect AI-generated code, verify resume claims, and uncover true engineering signal.",
+    "The #1 GitHub Profile Analyzer & AI Resume Checker. Scan any developer's GitHub profile instantly to evaluate code quality, detect AI-generated code, verify resume claims against real commits, and calculate Developer Trust Scores.",
   keywords: [
-    "github analyzer",
-    "resume analyzer",
+    "github profile analyzer",
     "github profile checker",
+    "resume analyzer",
+    "resume analyzer & profile checker",
+    "github analyzer",
     "github resume checker",
+    "ats resume checker",
+    "developer profile checker",
     "github scanning",
     "github scanner",
-    "github profile analyzer",
     "developer analyzer",
     "ai code detector github",
     "developer trust score",
@@ -77,7 +80,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: baseUrl,
     siteName: "DevXray AI",
-    title: "DevXray AI — #1 GitHub Analyzer & Resume Screening Tool",
+    title: "DevXray AI — #1 GitHub Profile Analyzer & AI Resume Checker",
     description:
       "Forensic-grade developer analysis. Deep-scan GitHub profiles, detect AI-generated code, cross-reference resume claims against actual commits, and hire with confidence.",
     images: [
@@ -85,15 +88,15 @@ export const metadata: Metadata = {
         url: `${baseUrl}/devxray-logo.png`,
         width: 1200,
         height: 630,
-        alt: "DevXray AI — GitHub Analyzer & Developer Intelligence",
+        alt: "DevXray AI — GitHub Profile Analyzer & Resume Checker",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "DevXray AI — GitHub Analyzer, Resume Checker & Profile Scanner",
+    title: "DevXray AI — #1 GitHub Profile Analyzer & AI Resume Checker",
     description:
-      "Analyze GitHub profiles instantly. Detect AI code, verify claims, and uncover developer signal in seconds.",
+      "Analyze GitHub profiles and verify resumes instantly. Detect AI code, verify claims against real commits, and uncover developer signal in seconds.",
     images: [`${baseUrl}/devxray-logo.png`],
     creator: "@DevXrayAI",
   },

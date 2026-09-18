@@ -19,6 +19,7 @@ import { hasGuestScansRemaining, incrementGuestScan } from "@/lib/scan-gate";
 import { getCurrentUser } from "@/lib/auth";
 import PaywallModal from "@/components/PaywallModal";
 import Logo from "@/components/Logo";
+import FaqSection from "@/components/FaqSection";
 
 /* ═══════════════════════════════════════════════════════════
    GRAIN OVERLAY
@@ -808,7 +809,7 @@ export default function Home() {
                 transition={{ duration: 0.6, delay: 0.2 }}
                 className="section-tag mb-6 md:mb-10"
               >
-                GitHub Intelligence Platform
+                #1 GitHub Profile Analyzer & AI Resume Checker
               </motion.div>
 
               {/* Headline */}
@@ -819,6 +820,9 @@ export default function Home() {
                 animate="show"
                 variants={stagger}
               >
+                <motion.span variants={fadeUp} className="block text-xs sm:text-sm font-[family-name:var(--font-space)] tracking-[0.25em] uppercase text-[#cdff00] mb-3 font-semibold">
+                  GitHub Profile Analyzer & Checker
+                </motion.span>
                 <motion.span variants={fadeUp} className="block">X-ray</motion.span>
                 <motion.span variants={fadeUp} className="block">developer</motion.span>
                 <motion.span variants={fadeUp} className="block" style={{ color: "#cdff00" }}>
@@ -832,8 +836,8 @@ export default function Home() {
                 transition={{ duration: 0.7, delay: 0.7 }}
                 className="text-[#888] text-base sm:text-lg md:text-xl font-light mt-6 md:mt-8 max-w-lg leading-relaxed"
               >
-                Forensic GitHub analysis + resume verification.{" "}
-                Every claim checked against real code —{" "}
+                Forensic GitHub profile analysis + AI resume verification.{" "}
+                Scan code quality, detect AI-generated commits, and verify claims against real code —{" "}
                 <span className="text-[#ccc] font-normal">in 60 seconds.</span>
               </motion.p>
 
@@ -1455,6 +1459,11 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ═══════════════════════════════════════════════
+          SEO FAQ SECTION
+          ═══════════════════════════════════════════════ */}
+      <FaqSection />
 
       {/* ═══════════════════════════════════════════════
           CTA — Split Design

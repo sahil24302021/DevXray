@@ -1,7 +1,213 @@
-# DevXray AI — GitHub Developer Intelligence Platform
+<div align="center">
 
-> Analyze GitHub profiles instantly. No resumes. No guesswork. Just signal.
+# ⚡ DevXray AI
+### The #1 GitHub Profile Analyzer & AI Resume Checker
+**Forensic-Grade Developer Intelligence, Code DNA Analysis & ATS Resume Verification**
 
-DevXray is a full-stack SaaS platform that provides **forensic-grade developer analysis** by deep-scanning GitHub profiles, detecting AI-generated code, verifying resume claims against actual code, and producing production-ready hiring intelligence reports.
-                                      
-https://dev-xray.vercel.app/
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-dev--xray.vercel.app-00dfa2?style=for-the-badge&logo=vercel&logoColor=white)](https://dev-xray.vercel.app)
+[![Next.js 14](https://img.shields.io/badge/Next.js-14.2-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Google Gemini AI](https://img.shields.io/badge/Gemini%20AI-2.5%20Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
+[![Supabase](https://img.shields.io/badge/Supabase-Auth%20%26%20DB-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+
+<br />
+
+**[🌐 Launch Live Web App](https://dev-xray.vercel.app)** • **[📖 View Sample Report](https://dev-xray.vercel.app/report/torvalds)** • **[🚀 Quickstart](#-quickstart--local-setup)** • **[💡 Key Features](#-key-features)**
+
+<br />
+
+```
+   ____             _  __                  ___    ____
+  / __ \___ _   __ | |/ /_________ ___  _ /   |  /  _/
+ / / / / _ \ | / / |   // ___/ __ `/ / / // /| |  / /  
+/ /_/ /  __/ |/ / /   |/ /  / /_/ / /_/ // ___ |_/ /   
+/_____/\___/|___//_/|_/_/   \__,_/\__, //_/  |_/___/   
+                                 /____/                
+```
+
+> **Analyze GitHub profiles and verify resumes in 60 seconds.** No guesswork. No recruiter bias. Just pure engineering signal.
+
+</div>
+
+---
+
+## 📌 What is DevXray AI?
+
+**DevXray AI** is a full-stack, forensic-grade **GitHub Profile Analyzer** and **AI Resume Checker** engineered for engineering managers, tech recruiters, and developers who care about code authenticity.
+
+Traditional hiring relies on polished resumes and vanity GitHub stats (stars, follower counts, green commit squares from cron jobs). **DevXray looks inside the code.** It parses hundreds of repositories, analyzes commit structures, detects AI-generated boilerplate (ChatGPT / Copilot), cross-references resume bullet points against actual git commits, and generates a unified **Developer Trust Score**.
+
+---
+
+## 🚀 Key Features
+
+### 1. 🔍 Deep GitHub Profile Forensics
+- **LOC-Weighted Language Profiling**: Measures actual code written, eliminating inflated stats from imported dependencies or library files.
+- **Commit Authenticity & Cadence**: Detects fake commit bursts, bulk scripted commits, and tutorial clone farms.
+- **Repository Architecture Inspection**: Evaluates modularity, testing presence, documentation, and maintainability across public repositories.
+
+### 2. 🤖 AI-Generated Code Detection (12-Pattern Scanner)
+- Flags AI-generated code from models like ChatGPT, Claude, and GitHub Copilot.
+- Identifies signature AI comments (`// Here's the complete implementation`, boilerplate docstrings, hallucinated imports).
+- Calculates an **AI Contribution Ratio** to distinguish authentic human problem solving from copy-pasted prompts.
+
+### 3. 📄 AI Resume Analyzer & ATS Score Matcher
+- **PDF Resume Ingestion**: Automatically extracts technical skills, project claims, work history, and education.
+- **Claim Verification Engine**: Cross-references claims (e.g., *"Built microservices handling 50k QPS in Go"*) against actual GitHub commits and code complexity.
+- **ATS Compatibility & Job Matching**: Scores candidate resumes against target job descriptions and highlights missing technical competencies.
+
+### 4. 🎯 Developer Trust Score & Competency Radar
+- **0–100 Trust Score**: A composite rating based on code originality, commit history, architectural maturity, and diversity of language mastery.
+- **Multi-Dimensional Radar Chart**: Visualizes proficiency across Backend, Frontend, DevOps, System Architecture, Code Quality, and Testing.
+
+### 5. 📋 Production-Ready Recruiter & Hiring Reports
+- Instant, shareable report URLs (`/report/[username]`).
+- Tailored **AI Technical Interview Questions** generated directly from the candidate’s weakest points and unique code anomalies.
+- PDF and JSON report export for Applicant Tracking Systems (ATS).
+
+---
+
+## 📊 DevXray vs. Traditional Tools
+
+| Feature | Traditional ATS | GitHub Profile (Default) | **DevXray AI** |
+| :--- | :---: | :---: | :---: |
+| **Commit Authenticity Analysis** | ❌ None | ⚠️ Vanity Squares | ✅ **Deep Forensic Inspection** |
+| **AI Code Detection (Copilot/GPT)** | ❌ None | ❌ None | ✅ **12-Pattern AI Scanner** |
+| **Resume Claim Cross-Referencing** | ⚠️ Keyword Match | ❌ None | ✅ **Verified Against Git Commits** |
+| **LOC-Weighted Language Depth** | ❌ None | ⚠️ Repo Byte Count | ✅ **Filtered for Authored Code** |
+| **Developer Trust Score (0-100)** | ❌ None | ❌ None | ✅ **Objective Multi-Metric Score** |
+| **AI Technical Interview Prep** | ❌ Generic | ❌ None | ✅ **Customized to Real Weaknesses** |
+
+---
+
+## 🛠️ Architecture & Tech Stack
+
+```mermaid
+graph TD
+    A[User / Recruiter] -->|Enters GitHub Username or PDF Resume| B(Next.js 14 Frontend)
+    B -->|REST API Request| C(FastAPI Backend)
+    C -->|Fetch Repos, Commits, PRs| D(GitHub REST & GraphQL API)
+    C -->|Forensic Analysis & Verification| E(Google Gemini 2.5 Flash)
+    C -->|Store Reports & User Analytics| F(Supabase PostgreSQL & RLS)
+    B -->|Checkout & Tier Upgrades| G(Razorpay Gateway)
+```
+
+### **Frontend**
+- **Framework**: [Next.js 14](https://nextjs.org/) (App Router, Server Components)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS, Syne + Space Grotesk typography, Glassmorphism design system
+- **Motion & UI**: Framer Motion, Lucide Icons, Canvas Constellation Particles
+- **Deployment**: Vercel (Global Edge Network)
+
+### **Backend**
+- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.11)
+- **AI Engine**: [Google Gemini 2.5 Flash](https://ai.google.dev/)
+- **Data Ingestion**: PyGithub, PDF Plumber, BeautifulSoup4, Requests
+- **Validation**: Pydantic v2
+- **Deployment**: Render / Docker container
+
+### **Database & Authentication**
+- **Provider**: [Supabase](https://supabase.com/) (PostgreSQL with Row Level Security)
+- **Auth**: Google OAuth & Email Magic Link
+- **Storage**: Supabase Storage for resume processing
+
+---
+
+## ⚡ Quickstart / Local Setup
+
+### Prerequisites
+- Node.js 18+ & npm
+- Python 3.10+
+- GitHub Personal Access Token ([Generate here](https://github.com/settings/tokens))
+- Google Gemini API Key ([Get here](https://aistudio.google.com/))
+- Supabase Project ([Create free](https://supabase.com))
+
+### 1. Clone Repository
+```bash
+git clone https://github.com/sahil24302021/DevXray.git
+cd DevXray
+```
+
+### 2. Backend Setup
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Create `backend/.env`:
+```env
+GITHUB_TOKEN=your_github_pat_token
+GEMINI_API_KEY=your_gemini_api_key
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+PORT=8000
+```
+
+Run backend:
+```bash
+uvicorn main:app --reload --port 8000
+```
+Backend will be live at `http://localhost:8000` (Docs at `http://localhost:8000/docs`).
+
+### 3. Frontend Setup
+```bash
+cd ../frontend
+npm install
+```
+
+Create `frontend/.env.local`:
+```env
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+```
+
+Run frontend:
+```bash
+npm run dev
+```
+Open `http://localhost:3000` in your browser.
+
+---
+
+## 📡 API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/analyze/{username}` | Analyzes full GitHub profile, repos, commits, and returns Trust Score |
+| `POST` | `/api/analyze-resume` | Uploads PDF resume and cross-checks claims against GitHub URL |
+| `GET` | `/api/health` | Healthcheck and active worker status |
+
+---
+
+## 🏷️ GitHub Topics & Categorization
+
+To maximize GitHub search discoverability and Google SEO ranking, this repository is categorized under:
+`github-profile-analyzer` • `resume-analyzer` • `github-analyzer` • `github-checker` • `developer-portfolio` • `ats-resume-checker` • `ai-code-detector` • `code-quality-analyzer` • `tech-recruiting` • `developer-intelligence`
+
+---
+
+## 🤝 Contributing
+
+Contributions, bug reports, and feature requests are welcome!
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+Distributed under the **MIT License**. See `LICENSE` for more information.
+
+<div align="center">
+  <sub>Engineered with precision by the <a href="https://dev-xray.vercel.app">DevXray AI Team</a>.</sub>
+</div>
