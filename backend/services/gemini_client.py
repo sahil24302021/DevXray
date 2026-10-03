@@ -9,8 +9,36 @@ log = logging.getLogger("gemini_client")
 _client = None
 _client_key = None  # Track which key the cached client uses
 
+# ── Circuit Breaker ──────────────────────────────────────────────
+# Tracks failures per provider. If a provider fails, skip it for CIRCUIT_BREAKER_COOLDOWN seconds.
+# This prevents the cascade of 20+ failed requests that was causing 44-second delays.
+_circuit_breaker: dict[str, float] = {}  # provider_key -> cooldown_until timestamp
+CIRCUIT_BREAKER_COOLDOWN = 600  # 10 minutes
+
 # Track rate limit state (cooldown timestamp) per key
 _key_cooldowns = {}
+
+
+def _is_circuit_open(provider_key: str) -> bool:
+    """Check if a provider is in circuit-breaker cooldown (should be skipped)."""
+    until = _circuit_breaker.get(provider_key, 0)
+    if time.time() < until:
+        remaining = int(until - time.time())
+        log.debug(f"[CircuitBreaker] {provider_key} is open — {remaining}s remaining, skipping")
+        return True
+    return False
+
+
+def _trip_circuit(provider_key: str, reason: str, cooldown: int = CIRCUIT_BREAKER_COOLDOWN):
+    """Open the circuit breaker for a provider after a non-transient failure."""
+    _circuit_breaker[provider_key] = time.time() + cooldown
+    log.warning(f"[CircuitBreaker] Tripped for {provider_key} ({reason}) — skipping for {cooldown}s")
+
+
+def _is_non_retryable(status_code: int) -> bool:
+    """Returns True for HTTP status codes that will never succeed on retry."""
+    # 400 = bad request, 401 = unauthorized, 403 = forbidden, 404 = not found, 422 = unprocessable
+    return status_code in (400, 401, 403, 404, 422)
 
 
 def safe_parse_json_response(response_text: str, fallback: dict = None) -> dict:
@@ -55,15 +83,17 @@ def safe_parse_json_response(response_text: str, fallback: dict = None) -> dict:
 
 
 
-def _get_gemini_keys():
-    """Return all available Gemini API keys in priority order."""
-    keys = [k for k in [
+PRIMARY_MODEL = "gemini-2.5-flash"
+
+
+def _get_gemini_keys() -> list[str]:
+    """Return all available Gemini API keys in priority order (key-1, key-2, key-3)."""
+    keys = [
         os.environ.get("GEMINI_API_KEY"),
         os.environ.get("GEMINI_API_KEY_2"),
         os.environ.get("GEMINI_API_KEY_3"),
-        os.environ.get("GEMINI_API_KEY_4"),
-    ] if k and k.strip()]
-    return [k.strip() for k in keys]
+    ]
+    return [k.strip() for k in keys if k and k.strip()]
 
 
 def sanitize_text(text) -> str:
@@ -75,7 +105,6 @@ def sanitize_text(text) -> str:
         return ""
     if not isinstance(text, str):
         text = str(text)
-    # Strip C0 control chars (except \t \n \r) and C1 control chars
     return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', ' ', text)
 
 
@@ -86,7 +115,7 @@ def _get_client(api_key: str = ""):
     if not api_key:
         api_key = os.getenv("GEMINI_API_KEY", "").strip()
     if not api_key:
-        raise RuntimeError("GEMINI_API_KEY not set in Render Environment.")
+        raise RuntimeError("GEMINI_API_KEY not set in Environment.")
     if _client is None or _client_key != api_key:
         from google import genai
         _client = genai.Client(api_key=api_key)
@@ -95,245 +124,169 @@ def _get_client(api_key: str = ""):
 
 
 async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
+    """Generate structured JSON using Gemini 2.5 Flash as the primary provider with multi-key rotation.
+
+    Active Flow:
+      1. Gemini key-1 -> gemini-2.5-flash -> Success (return immediately)
+      2. If 429/quota -> rotate to Gemini key-2 -> gemini-2.5-flash
+      3. If 429/quota -> rotate to Gemini key-3 -> gemini-2.5-flash
+
+    Error Handling:
+      - 200: Return success immediately
+      - 429/quota/rate limit: Immediately move to the next Gemini key (no delay on current key)
+      - 400/404: Do not retry; move to the next key
+      - 500/502/503: Retry at most once after 1 second, then move to the next key
+      - Timeout/network error: Retry at most once after 1 second, then move to the next key
+    """
     import asyncio as _aio
-    import httpx as _hx, json as _j, os as _os
-    import time as _time
+    from google.genai import types
 
-    global _key_cooldowns
-    last_error = None
-
-    # ── Sanitize the prompt to remove control characters that break JSON ──
+    # 1. Sanitize prompt to eliminate control characters that break JSON
     prompt = sanitize_text(prompt)
 
-    # ── STEP 1: Try Groq first (free, unlimited, fast) ──────────────
-    # Support multiple Groq keys for rotation, both as separate env variables and comma-separated
-    groq_keys = []
-    # 1. Comma-separated list
-    for k in _os.getenv("GROQ_API_KEYS", "").split(","):
-        if k.strip() and k.strip() not in groq_keys:
-            groq_keys.append(k.strip())
-    # 2. Individual key variables
-    for key_var in ["GROQ_API_KEY", "GROQ_API_KEY_2", "GROQ_API_KEY_3", "GROQ_API_KEY_4"]:
-        k = _os.getenv(key_var, "").strip()
-        if k and k not in groq_keys:
-            groq_keys.append(k)
-
-    for groq_idx, groq_key in enumerate(groq_keys):
-        groq_label = f"key-{groq_idx + 1}"
-        
-        # Skip keys in cooldown
-        cooldown_until = _key_cooldowns.get(groq_key, 0)
-        if _time.time() < cooldown_until:
-            log.info(f"[GeminiClient] Groq key-{groq_idx + 1} is in active cooldown, skipping")
-            continue
-
-        # Groq free tier: keep prompt under ~6000 chars (~1500 tokens) to avoid 413 Payload Too Large
-        GROQ_MAX_CHARS = 6000
-        groq_prompt = prompt if len(prompt) <= GROQ_MAX_CHARS else prompt[:GROQ_MAX_CHARS] + "\n\n[...truncated. Complete the JSON with ALL data above. Be thorough.]"
-        for attempt in range(2):  # Retry once on rate limit
-            try:
-                async with _hx.AsyncClient(timeout=30.0) as c:
-                    r = await c.post(
-                        "https://api.groq.com/openai/v1/chat/completions",
-                        headers={"Authorization": f"Bearer {groq_key}",
-                                 "Content-Type": "application/json"},
-                        json={
-                            "model": "llama-3.3-70b-versatile",
-                            "messages": [
-                                {"role": "system", "content": "Reply ONLY with valid JSON. No markdown. Be specific and evidence-based."},
-                                {"role": "user", "content": groq_prompt}
-                            ],
-                            "temperature": temperature,
-                            "max_tokens": 4000,
-                        }
-                    )
-                    
-                    if r.status_code == 429:
-                        _key_cooldowns[groq_key] = _time.time() + 60
-                        log.warning(f"[GeminiClient] Groq {groq_label} rate limited (429) — cooling down for 60s")
-                        break
-
-                    r.raise_for_status()
-                    raw_body = r.text.strip()
-                    if not raw_body:
-                        raise ValueError("Empty response body from Groq")
-                    response_json = _j.loads(raw_body)
-                    txt = response_json["choices"][0]["message"]["content"].strip()
-                    
-                    result = safe_parse_json_response(txt)
-                    if not result:
-                        raise ValueError("Safe JSON parsing returned empty result")
-                    log.info(f"[GeminiClient] Groq ({groq_label}) succeeded (primary)")
-                    return result
-            except Exception as groq_err:
-                last_error = groq_err
-                err_str = str(groq_err).lower()
-                # 413 = Payload Too Large — don't retry, fall through immediately
-                if "413" in err_str or "payload too large" in err_str or "too large" in err_str:
-                    log.warning(f"[GeminiClient] Groq ({groq_label}) 413 payload too large — skipping to next provider")
-                    break
-                if ("429" in err_str or "too many" in err_str or "rate" in err_str):
-                    _key_cooldowns[groq_key] = _time.time() + 60
-                    if attempt == 0:
-                        wait_time = 3
-                        log.warning(f"[GeminiClient] Groq ({groq_label}) rate limited — retrying in {wait_time}s")
-                        await _aio.sleep(wait_time)
-                        continue
-                    else:
-                        # Retry exhausted — try next Groq key
-                        log.warning(f"[GeminiClient] Groq ({groq_label}) rate limited after retry — rotating to next key")
-                        break
-                log.warning(f"[GeminiClient] Groq ({groq_label}) failed: {groq_err} — trying next provider")
-                break
-
-    # ── STEP 2: Try Together AI (free $25 credit, never expires) ────
-    together_key = _os.getenv("TOGETHER_API_KEY", "")
-    if together_key:
-        for attempt in range(2):
-            try:
-                async with _hx.AsyncClient(timeout=30.0) as c:
-                    r = await c.post(
-                        "https://api.together.xyz/v1/chat/completions",
-                        headers={"Authorization": f"Bearer {together_key}",
-                                 "Content-Type": "application/json"},
-                        json={
-                            "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-                            "messages": [
-                                {"role": "system", "content": "Reply ONLY with valid JSON. No markdown. Be thorough, specific, and evidence-based."},
-                                {"role": "user", "content": prompt}
-                            ],
-                            "temperature": temperature,
-                            "max_tokens": 8000,
-                        }
-                    )
-                    r.raise_for_status()
-                    raw_body = r.text.strip()
-                    if not raw_body:
-                        raise ValueError("Empty response body from Together AI")
-                    response_json = _j.loads(raw_body)
-                    txt = response_json["choices"][0]["message"]["content"].strip()
-                    
-                    result = safe_parse_json_response(txt)
-                    if not result:
-                        raise ValueError("Safe JSON parsing returned empty result")
-                    log.info("[GeminiClient] Together AI succeeded (secondary)")
-                    return result
-            except Exception as together_err:
-                last_error = together_err
-                err_str = str(together_err).lower()
-                if ("429" in err_str or "rate" in err_str) and attempt == 0:
-                    log.warning("[GeminiClient] Together AI rate limited — retrying in 4s")
-                    await _aio.sleep(4)
-                    continue
-                log.warning(f"[GeminiClient] Together AI failed: {together_err} — trying Gemini")
-                break
-
-    # ── STEP 3: Try OpenRouter (free tier, 100+ models) ────────
-    openrouter_key = _os.getenv("OPENROUTER_API_KEY", "")
-    if openrouter_key:
-        OR_MODELS = [
-            "meta-llama/llama-3.2-3b-instruct:free",     # Works consistently
-            "google/gemma-2-9b-it:free",                    # Google model, usually available
-            "microsoft/phi-3-mini-128k-instruct:free",      # Microsoft, reliable
-            "mistralai/mistral-small-3.2-24b-instruct:free", # Mistral free tier
-            "deepseek/deepseek-r1:free",                    # DeepSeek free
-            "qwen/qwen2.5-7b-instruct:free",               # Qwen free
-        ]
-        for or_model in OR_MODELS:
-            try:
-                async with _hx.AsyncClient(timeout=25.0) as c:
-                    r = await c.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
-                        headers={
-                            "Authorization": f"Bearer {openrouter_key}",
-                            "Content-Type": "application/json",
-                            "HTTP-Referer": "https://dev-xray.vercel.app",
-                            "X-Title": "DevXray AI",
-                        },
-                        json={
-                            "model": or_model,
-                            "messages": [
-                                {"role": "system", "content": "Reply ONLY with valid JSON. No markdown, no explanation, no code blocks."},
-                                {"role": "user", "content": prompt[:10000]}  # Trim to avoid context limits
-                            ],
-                            "temperature": temperature,
-                            "max_tokens": 2500,
-                        }
-                    )
-
-                    if r.status_code in (404, 400, 422):
-                        log.warning(f"[GeminiClient] OpenRouter model {or_model} unavailable ({r.status_code}), trying next")
-                        continue
-
-                    if r.status_code == 429:
-                        log.warning(f"[GeminiClient] OpenRouter rate limited on {or_model} — trying next model")
-                        continue
-
-                    r.raise_for_status()
-                    raw_body = r.text.strip()
-                    if not raw_body:
-                        log.warning(f"[GeminiClient] OpenRouter {or_model} returned empty body")
-                        continue
-
-                    response_data = _j.loads(raw_body)
-                    txt = response_data["choices"][0]["message"]["content"].strip()
-                    
-                    result = safe_parse_json_response(txt)
-                    if not result:
-                        continue
-                    log.info(f"[GeminiClient] OpenRouter succeeded with {or_model}")
-                    return result
-
-            except Exception as or_err:
-                last_error = or_err
-                err_str = str(or_err).lower()
-                if "429" in err_str or "rate" in err_str:
-                    log.warning(f"[GeminiClient] OpenRouter rate limited on {or_model} — trying next model")
-                    continue
-                log.warning(f"[GeminiClient] OpenRouter {or_model} failed: {or_err}")
-                continue
-        log.warning("[GeminiClient] All OpenRouter models failed — trying Gemini")
-
-    # ── STEP 4: Gemini flash as last resort (multi-key rotation) ──────
-    from google.genai import types
     gemini_keys = _get_gemini_keys()
-    models_to_try = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro"]
+    if not gemini_keys:
+        log.error("[AI] No Gemini API keys configured (GEMINI_API_KEY missing)")
+        raise RuntimeError("No Gemini API keys configured")
+
+    last_error = None
 
     for key_idx, api_key in enumerate(gemini_keys):
         key_label = f"key-{key_idx + 1}"
-        for model_name in models_to_try:
+        next_key_label = f"key-{key_idx + 2}" if (key_idx + 1 < len(gemini_keys)) else None
+
+        # Max 2 attempts for transient errors (500/502/503/timeout), exactly 1 attempt for 400/404/429
+        for attempt in range(2):
+            log.info(f"[AI] Gemini {key_label} → {PRIMARY_MODEL}")
+
             try:
                 client = _get_client(api_key)
-                response = client.models.generate_content(
-                    model=model_name,
+
+                # Run synchronous SDK call in thread pool to avoid blocking the event loop
+                response = await _aio.to_thread(
+                    client.models.generate_content,
+                    model=PRIMARY_MODEL,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         response_mime_type="application/json",
                         temperature=temperature,
                     ),
                 )
+
                 content = response.text
                 if not content:
-                    continue
-                
+                    raise ValueError(f"Gemini {PRIMARY_MODEL} returned empty text")
+
                 result = safe_parse_json_response(content)
                 if not result:
                     raise ValueError("Gemini safe JSON parsing returned empty result")
-                log.info(f"[GeminiClient] Gemini {model_name} ({key_label}) succeeded (fallback)")
+
+                log.info("[AI] Gemini success")
                 return result
+
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
-                is_quota = "429" in err_str or "quota" in err_str or "resource" in err_str or "rate" in err_str
-                if is_quota and key_idx < len(gemini_keys) - 1:
-                    log.warning(f"[GeminiClient] Gemini {model_name} ({key_label}) hit quota — rotating to next key")
-                    break  # Break inner model loop → try next key
-                log.warning(f"[GeminiClient] Gemini {model_name} ({key_label}) failed: {e}")
-                continue
 
-    # All retries exhausted — raise generic message (never surface quota details)
-    log.error(f"All AI providers failed. Last error: {last_error}")
+                # 1. 429 / Rate limit / Quota -> immediately move to next Gemini key (no delay on same key)
+                is_quota = any(term in err_str for term in ["429", "quota", "resource_exhausted", "rate_limit", "rate limit"])
+                if is_quota:
+                    if next_key_label:
+                        log.warning(f"[AI] Gemini {key_label} rate limited → trying {next_key_label}")
+                    else:
+                        log.warning(f"[AI] Gemini {key_label} rate limited → no more Gemini keys")
+                    break  # Move immediately to next key
+
+                # 2. 400 (Bad Request) or 404 (Not Found / Model Not Found) -> do not retry, move to next key
+                is_client_error = any(term in err_str for term in ["400", "404", "invalid_argument", "not_found", "not found", "no longer available"])
+                if is_client_error:
+                    log.warning(f"[AI] Gemini {key_label} client error ({e}) — not retrying, moving to next key")
+                    break
+
+                # 3. 500 / 502 / 503 (Server / Unavailable) or Timeout / Network -> retry at most once after 1s
+                is_transient = any(term in err_str for term in ["500", "502", "503", "unavailable", "internal", "timeout", "timed out", "connection", "network"])
+                if is_transient and attempt == 0:
+                    log.warning(f"[AI] Gemini {key_label} transient error ({e}) — retrying once in 1s")
+                    await _aio.sleep(1.0)
+                    continue
+
+                log.warning(f"[AI] Gemini {key_label} failed ({e}) — moving to next key")
+                break
+
+    # All Gemini keys exhausted
+    log.error(f"[AI] All Gemini keys exhausted. Last error: {last_error}")
     raise RuntimeError("AI generation temporarily unavailable")
+
+
+# ═════════════════════════════════════════════════════════════════════
+# DORMANT PROVIDERS (Preserved for future use; not called in active path)
+# ═════════════════════════════════════════════════════════════════════
+
+async def _dormant_groq_call(prompt: str, temperature: float = 0.0) -> dict:
+    """Legacy Groq implementation preserved for future reference."""
+    import httpx as _hx
+    groq_keys = [k for k in [
+        os.environ.get("GROQ_API_KEY"),
+        os.environ.get("GROQ_API_KEY_2"),
+        os.environ.get("GROQ_API_KEY_3"),
+    ] if k and k.strip()]
+    if not groq_keys:
+        return {}
+    async with _hx.AsyncClient(timeout=30.0) as c:
+        r = await c.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {groq_keys[0]}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt[:6000]}],
+                "temperature": temperature,
+            }
+        )
+        if r.status_code == 200:
+            return safe_parse_json_response(r.json()["choices"][0]["message"]["content"])
+    return {}
+
+
+async def _dormant_together_call(prompt: str, temperature: float = 0.0) -> dict:
+    """Legacy Together AI implementation preserved for future reference."""
+    import httpx as _hx
+    together_key = os.environ.get("TOGETHER_API_KEY", "").strip()
+    if not together_key:
+        return {}
+    async with _hx.AsyncClient(timeout=30.0) as c:
+        r = await c.post(
+            "https://api.together.xyz/v1/chat/completions",
+            headers={"Authorization": f"Bearer {together_key}", "Content-Type": "application/json"},
+            json={
+                "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": temperature,
+            }
+        )
+        if r.status_code == 200:
+            return safe_parse_json_response(r.json()["choices"][0]["message"]["content"])
+    return {}
+
+
+async def _dormant_openrouter_call(prompt: str, temperature: float = 0.0) -> dict:
+    """Legacy OpenRouter implementation preserved for future reference."""
+    import httpx as _hx
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not openrouter_key:
+        return {}
+    async with _hx.AsyncClient(timeout=25.0) as c:
+        r = await c.post(
+            "https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {openrouter_key}", "Content-Type": "application/json"},
+            json={
+                "model": "meta-llama/llama-3.2-3b-instruct:free",
+                "messages": [{"role": "user", "content": prompt[:10000]}],
+                "temperature": temperature,
+            }
+        )
+        if r.status_code == 200:
+            return safe_parse_json_response(r.json()["choices"][0]["message"]["content"])
+    return {}
 
 
 def _clean_json(content: str) -> str:
