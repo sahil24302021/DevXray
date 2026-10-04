@@ -458,14 +458,6 @@ export default function Home() {
 
   useEffect(() => {
     getCurrentUser().then((u) => setIsLoggedIn(!!u));
-    // Warm up the backend server on landing page load to counter Render cold starts
-    // + keep it alive every 10 minutes while anyone has the site open
-    let stopKeepAlive: (() => void) | undefined;
-    import("@/lib/api").then(({ warmupBackend, startKeepAlive }) => {
-      warmupBackend();
-      stopKeepAlive = startKeepAlive();
-    });
-    return () => stopKeepAlive?.();
   }, []);
 
   useEffect(() => {
@@ -1529,7 +1521,7 @@ export default function Home() {
                     </svg>
                   </MagneticButton>
                 )}
-                <Link href="/report/torvalds" className="btn-ghost">
+                <Link href="/report/torvalds" prefetch={false} className="btn-ghost">
                   View Demo
                 </Link>
               </div>

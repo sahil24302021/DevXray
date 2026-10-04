@@ -369,77 +369,123 @@ export default function LoadingState({ username, jobId }: { username?: string; j
     return -1;
   }, []);
 
-  /* ── SSE / polling + fallback progression ──────────────── */
+  /* ── Maximum step index the simulated fallback can reach ──────── */
+  // Index 6 corresponds to "Generating AI summary" (7th step out of 8).
+  // Simulated fallback caps here (~81-85%) and NEVER reaches 100%.
+  // Step 7 ("Building report" / 100%) is ONLY reached on actual completion.
+  const MAX_FALLBACK_STEP = 6;
+  const sseActiveRef = useRef(false);
+  const lastSseEventTimeRef = useRef(0);
+
+  /* ── SSE connection + resilient fallback progression ─────────── */
   useEffect(() => {
-    if (!jobId) {
-      // Fallback: auto-advance for demo / no-SSE mode
-      const timer = setInterval(() => {
-        setActiveStep((prev) => {
-          if (prev < PIPELINE_STEPS.length - 1) {
-            setCompletedSteps((s) => new Set([...s, prev]));
+    let sse: EventSource | null = null;
+
+    if (jobId) {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        sse = new EventSource(`${apiUrl}/api/progress/${jobId}`);
+
+        sse.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.heartbeat) {
+              markProgressReceived();
+              return;
+            }
+
+            // Real progress event received — prioritize real SSE
+            sseActiveRef.current = true;
+            lastSseEventTimeRef.current = Date.now();
             markProgressReceived();
-            return prev + 1;
+
+            // Extract real repo count from SSE data if available
+            if (data.repos_count && typeof data.repos_count === "number") {
+              setRealRepoCount(data.repos_count);
+            }
+
+            if (data.step) {
+              const stepIdx = matchStep(data.step);
+              if (stepIdx >= 0) {
+                setCompletedSteps((prev) => {
+                  const next = new Set(prev);
+                  for (let i = 0; i < stepIdx; i++) next.add(i);
+                  return next;
+                });
+                setActiveStep(stepIdx);
+              }
+              if (data.detail) {
+                setCurrentDetail(data.detail);
+              }
+            }
+
+            if (data.done) {
+              setCompletedSteps(new Set(PIPELINE_STEPS.map((_, i) => i)));
+              setActiveStep(PIPELINE_STEPS.length);
+              sse?.close();
+            }
+          } catch {
+            // ignore parse errors
           }
-          return prev;
-        });
-      }, 3000);
-      return () => clearInterval(timer);
+        };
+
+        sse.onerror = () => {
+          // If SSE connection fails or gets buffered/blocked by proxy,
+          // close it gracefully. The fallback timer will drive the progress UX.
+          try {
+            sse?.close();
+          } catch {}
+        };
+      } catch {
+        // Fallback gracefully if EventSource is not supported
+      }
     }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    const sse = new EventSource(`${apiUrl}/api/progress/${jobId}`);
+    // Fallback timer: smoothly advances the visual pipeline through technical stages
+    // whenever SSE events are unavailable, buffered, or absent.
+    // If real SSE events are actively arriving, fallback yields priority.
+    // Progression: 6% → 18% → 30% → 45% → 60% → 75% → 85% (capped at MAX_FALLBACK_STEP).
+    const fallbackTimer = setInterval(() => {
+      const now = Date.now();
+      const isSseActivelyReporting =
+        sseActiveRef.current && now - lastSseEventTimeRef.current < 10000;
 
-    sse.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.heartbeat) return;
-
-        // Any real data → mark progress received
-        markProgressReceived();
-
-        // Extract real repo count from SSE data if available
-        if (data.repos_count && typeof data.repos_count === "number") {
-          setRealRepoCount(data.repos_count);
-        }
-
-        if (data.step) {
-          const stepIdx = matchStep(data.step);
-          if (stepIdx >= 0) {
-            setCompletedSteps((prev) => {
-              const next = new Set(prev);
-              for (let i = 0; i < stepIdx; i++) next.add(i);
-              return next;
-            });
-            setActiveStep(stepIdx);
-          }
-          if (data.detail) {
-            setCurrentDetail(data.detail);
-          }
-        }
-        if (data.done) {
-          setCompletedSteps(new Set(PIPELINE_STEPS.map((_, i) => i)));
-          setActiveStep(PIPELINE_STEPS.length);
-          sse.close();
-        }
-      } catch {
-        // ignore parse errors
+      if (isSseActivelyReporting) {
+        return; // Real SSE has full priority
       }
-    };
 
-    // Keep-alive fallback (no real advancement, just keeps connection context)
-    const timer = setInterval(() => {
-      setActiveStep((prev) => prev);
-    }, 5000);
+      setActiveStep((prev) => {
+        if (prev < MAX_FALLBACK_STEP) {
+          const next = prev + 1;
+          setCompletedSteps((s) => {
+            const updated = new Set(s);
+            for (let i = 0; i < next; i++) updated.add(i);
+            return updated;
+          });
+          markProgressReceived();
+          return next;
+        }
+        return prev;
+      });
+    }, 4500);
 
     return () => {
-      sse.close();
-      clearInterval(timer);
+      try {
+        sse?.close();
+      } catch {}
+      clearInterval(fallbackTimer);
     };
   }, [jobId, matchStep, markProgressReceived]);
 
   /* ── Derived values ────────────────────────────────────── */
-  const totalProgress =
+  // Raw progress based on completed steps plus half weight for active step
+  const rawProgress =
     ((completedSteps.size + (activeStep < PIPELINE_STEPS.length ? 0.5 : 0)) / PIPELINE_STEPS.length) * 100;
+
+  // Real completion occurs when activeStep reaches or exceeds PIPELINE_STEPS.length (e.g. data.done: true).
+  // Otherwise, fallback progress is strictly capped around 85% and never shows 100% prematurely.
+  const isRealDone = activeStep >= PIPELINE_STEPS.length || completedSteps.size >= PIPELINE_STEPS.length;
+  const totalProgress = isRealDone ? 100 : Math.min(rawProgress, 85);
 
   /* ── Render ────────────────────────────────────────────── */
   return (
