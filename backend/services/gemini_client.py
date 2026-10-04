@@ -83,7 +83,7 @@ def safe_parse_json_response(response_text: str, fallback: dict = None) -> dict:
 
 
 
-PRIMARY_MODEL = "gemini-2.5-flash"
+PRIMARY_MODEL = "gemini-3.8-flash"
 
 
 def _get_gemini_keys() -> list[str]:
@@ -124,12 +124,12 @@ def _get_client(api_key: str = ""):
 
 
 async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
-    """Generate structured JSON using Gemini 2.5 Flash as the primary provider with multi-key rotation.
+    """Generate structured JSON using Gemini 3.8 Flash as the primary provider with multi-key rotation.
 
     Active Flow:
-      1. Gemini key-1 -> gemini-2.5-flash -> Success (return immediately)
-      2. If 429/quota -> rotate to Gemini key-2 -> gemini-2.5-flash
-      3. If 429/quota -> rotate to Gemini key-3 -> gemini-2.5-flash
+      1. Gemini key-1 -> gemini-3.8-flash -> Success (return immediately)
+      2. If 429/quota -> rotate to Gemini key-2 -> gemini-3.8-flash
+      3. If 429/quota -> rotate to Gemini key-3 -> gemini-3.8-flash
 
     Error Handling:
       - 200: Return success immediately
