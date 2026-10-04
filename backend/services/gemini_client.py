@@ -123,6 +123,9 @@ def _get_client(api_key: str = ""):
     return _client
 
 
+TRANSIENT_BACKOFF_DELAYS = [2.0, 5.0, 10.0]
+
+
 async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
     """Generate structured JSON using Gemini 3.8 Flash as the primary provider with multi-key rotation.
 
@@ -135,8 +138,8 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
       - 200: Return success immediately
       - 429/quota/rate limit: Immediately move to the next Gemini key (no delay on current key)
       - 400/404: Do not retry; move to the next key
-      - 500/502/503: Retry at most once after 1 second, then move to the next key
-      - Timeout/network error: Retry at most once after 1 second, then move to the next key
+      - 500/502/503/transient: Resilient retry with backoff (2s, 5s, 10s) before rotating key
+      - Timeout/network error: Resilient retry with backoff (2s, 5s, 10s) before rotating key
     """
     import asyncio as _aio
     from google.genai import types
@@ -155,8 +158,9 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
         key_label = f"key-{key_idx + 1}"
         next_key_label = f"key-{key_idx + 2}" if (key_idx + 1 < len(gemini_keys)) else None
 
-        # Max 2 attempts for transient errors (500/502/503/timeout), exactly 1 attempt for 400/404/429
-        for attempt in range(2):
+        # Up to 1 initial + len(TRANSIENT_BACKOFF_DELAYS) attempts for transient errors (500/502/503/timeout)
+        # Exactly 1 attempt for 429/quota or 400/404 client errors
+        for attempt in range(len(TRANSIENT_BACKOFF_DELAYS) + 1):
             log.info(f"[AI] Gemini {key_label} → {PRIMARY_MODEL}")
 
             try:
@@ -203,11 +207,15 @@ async def generate_json(prompt: str, temperature: float = 0.0) -> dict:
                     log.warning(f"[AI] Gemini {key_label} client error ({e}) — not retrying, moving to next key")
                     break
 
-                # 3. 500 / 502 / 503 (Server / Unavailable) or Timeout / Network -> retry at most once after 1s
+                # 3. 500 / 502 / 503 (Server / Unavailable / High Demand) or Timeout / Network -> backoff delays: 2s, 5s, 10s
                 is_transient = any(term in err_str for term in ["500", "502", "503", "unavailable", "internal", "timeout", "timed out", "connection", "network"])
-                if is_transient and attempt == 0:
-                    log.warning(f"[AI] Gemini {key_label} transient error ({e}) — retrying once in 1s")
-                    await _aio.sleep(1.0)
+                if is_transient and attempt < len(TRANSIENT_BACKOFF_DELAYS):
+                    delay = TRANSIENT_BACKOFF_DELAYS[attempt]
+                    log.warning(
+                        f"[AI] Gemini {key_label} transient error ({e}) — "
+                        f"retrying ({attempt + 1}/{len(TRANSIENT_BACKOFF_DELAYS)}) in {delay}s"
+                    )
+                    await _aio.sleep(delay)
                     continue
 
                 log.warning(f"[AI] Gemini {key_label} failed ({e}) — moving to next key")
